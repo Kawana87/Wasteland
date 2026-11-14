@@ -11,6 +11,8 @@ from mathutils import Vector
 import kit, props as P
 
 WALL_HALF = kit.WALL_T * 0.5
+NATURE = {"tree", "joshua_tree", "cactus", "shrub", "deadbush", "rock", "grass_tuft", "tumbleweed_", "pebbles_"}
+CANOPY = {"tree": 0.45, "joshua_tree": 0.45, "cactus": 0.2, "shrub": 0.15}      # extra clearance from walls
 
 
 def _groups():
@@ -68,6 +70,19 @@ def _nudge(b, solids, others, step=0.15, reach=1.5):
     return None
 
 
+def _base_xy(g):
+    """Where a prop meets the ground: centre of its lowest parts (a tree's trunk, not its canopy)."""
+    zmin = g["bb"][2]
+    pts = []
+    for o in g["obs"]:
+        bb = _obj_bb(o)
+        if bb[2] < zmin + 0.1:
+            pts.append(((bb[0] + bb[3]) / 2, (bb[1] + bb[4]) / 2))
+    if not pts:
+        return ((g["bb"][0] + g["bb"][3]) / 2, (g["bb"][1] + g["bb"][4]) / 2)
+    return (sum(p[0] for p in pts) / len(pts), sum(p[1] for p in pts) / len(pts))
+
+
 def _remove(g):
     for o in g["obs"]:
         bpy.data.objects.remove(o, do_unlink=True)
@@ -77,7 +92,7 @@ def _remove(g):
 def run(scene_name=""):
     G = _groups()
     solids = kit.SOLIDS
-    log = {"in_building": [], "roof": [], "overlap": [], "placed_clash": [], "grounded": 0, "decal_bits": 0, "nudged": []}
+    log = {"in_building": [], "roof": [], "overlap": [], "placed_clash": [], "grounded": 0, "decal_bits": 0, "nudged": [], "on_pavement": []}
     order = sorted(G.items())
     # 1 + 2: buildings and roofs
     for gid, g in order:
@@ -102,7 +117,11 @@ def run(scene_name=""):
             g["obs"] = keep
             if not keep: g["dead"] = True
             continue
-        hit = [s for s in solids if _hits_solid(b, s, WALL_HALF)]
+        if g["name"] in NATURE:
+            cx, cy = _base_xy(g)
+            if any(p[0] <= cx <= p[2] and p[1] <= cy <= p[3] for p in kit.PAVED):
+                log["on_pavement"].append(g["name"]); _remove(g); continue
+        hit = [s for s in solids if _hits_solid(b, s, WALL_HALF + CANOPY.get(g["name"], 0.0))]
         if hit and g["prio"] == 2:
             mv = _nudge(b, solids, [h for _, h in order if h is not g and not h.get("dead") and h["zone"] != "roof"])
             if mv:
@@ -164,6 +183,10 @@ def run(scene_name=""):
     print("[validate %s] groups=%d removed: in-building %d %s | roof %d %s | overlap %d %s | decal bits %d | grounded %d"
           % (scene_name, len(G), len(log["in_building"]), dict(Counter(log["in_building"])), len(log["roof"]), dict(Counter(log["roof"])),
              len(log["overlap"]), dict(Counter(log["overlap"])), log["decal_bits"], log["grounded"]))
+    if log["on_pavement"]:
+        print("  off pavement:", dict(Counter(log["on_pavement"])))
+    if kit.DOOR_FIXES:
+        print("  doors moved to a real outside wall:", len(kit.DOOR_FIXES)); kit.DOOR_FIXES.clear()
     if log["nudged"]:
         print("  nudged clear:", ", ".join(log["nudged"]))
     for c in log["placed_clash"]:

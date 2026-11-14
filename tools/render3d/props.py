@@ -1293,6 +1293,13 @@ def _scatter(x0, y0, x1, y1, density, style, rng, avoid):
         x, y = rng.uniform(x0, x1), rng.uniform(y0, y1)
         if any(a0 - .3 < x < a1 + .3 and b0 - .3 < y < b1 + .3 for (a0, b0, a1, b1) in avoid):
             continue
+        if style == "city":
+            import kit as _k
+            anchors = [s_[:4] for s_ in _k.SOLIDS] + list(_k.PAVED)
+            if anchors:
+                d = min(math.hypot(max(a0 - x, 0, x - a1), max(b0 - y, 0, y - b1)) for (a0, b0, a1, b1) in anchors)
+                if rng.random() > math.exp(-d / 2.5):
+                    continue          # junk thins out away from streets and buildings
         r = rng.uniform(0, tot)
         for fn, w, kw in pool:
             r -= w

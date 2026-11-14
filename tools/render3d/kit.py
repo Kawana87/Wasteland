@@ -302,6 +302,7 @@ _door_fn = door
 
 
 # ------------------------------------------------------------------ roofs
+PAVED = []       # roads, sidewalks, lots: nature props never grow out of these
 SOLIDS = []      # building volumes [(x0, y0, x1, y1, ztop, kind)] for validate.py
 
 
@@ -400,6 +401,37 @@ def outer_runs(cells):
     return runs
 
 
+DOOR_FIXES = []
+
+
+def _fix_door(cells, ox, oy, door):
+    """Make sure the front door lands on a real outside wall (an attached wing can cover the side it asked for).
+    If it doesn't, move it to the middle of the longest visible (south, then east) outside run."""
+    side, dfix, dpos, state = door
+    runs = outer_runs(cells)
+    def ok(sd, fx, ps):
+        for (a, b, rs) in runs:
+            if rs != sd: continue
+            horiz = sd in ("n", "s")
+            fixed = a[1] if horiz else a[0]
+            lo = min(a[0], b[0]) if horiz else min(a[1], b[1]); L = abs(b[0] - a[0]) if horiz else abs(b[1] - a[1])
+            if abs(fixed - (fx + (oy if horiz else ox))) < 0.01 and lo + 0.5 < ps + (ox if horiz else oy) < lo + L - 0.5:
+                return True
+        return False
+    if ok(side, dfix, dpos):
+        return door
+    for want in ("s", "e"):
+        cands = [(abs(b[0] - a[0]) + abs(b[1] - a[1]), a, b) for (a, b, rs) in runs if rs == want]
+        if cands:
+            L, a, b = max(cands)
+            if L >= 2:
+                horiz = want == "s"
+                nd = (want, (a[1] - oy) if horiz else (a[0] - ox), ((a[0] + b[0]) / 2 - ox) if horiz else ((a[1] + b[1]) / 2 - oy), state)
+                DOOR_FIXES.append((door, nd))
+                return nd
+    return door
+
+
 def house(M, ox, oy, parts, wall_mat, roof="gable", roof_mat="sh_brown", door=None, door_state="closed",
           shutters=None, chimney=None, porch=None, win_state="glass", ruined=False, extra_doors=()):
     """parts: [(x, y, w, h, storeys)] relative to (ox, oy).
@@ -410,6 +442,8 @@ def house(M, ox, oy, parts, wall_mat, roof="gable", roof_mat="sh_brown", door=No
             for x in range(px, px + w):
                 cells[(ox + x, oy + y)] = max(st, cells.get((ox + x, oy + y), 0))
     maxst = max(cells.values())
+    if door:
+        door = _fix_door(set(cells), ox, oy, door)
     doors = [door] + list(extra_doors) if door else list(extra_doors)
     for s_ in range(maxst):
         level = {c for c, st in cells.items() if st > s_}
@@ -685,6 +719,7 @@ def mat_road(name, L, hw, ends=(False, False), axis='x'):
 
 
 def road(x0, y0, x1, y1, ends=(False, False), z=0.008, name="road"):
+    PAVED.append((x0, y0, x1, y1))
     axis = 'x' if (x1 - x0) >= (y1 - y0) else 'y'
     L = (x1 - x0) if axis == 'x' else (y1 - y0)
     hw = ((y1 - y0) if axis == 'x' else (x1 - x0)) / 2

@@ -330,7 +330,7 @@ def ranch(M, ox, oy, rng, door_side="s"):
 
 def scene_suburb():
     reset()
-    P._MC.clear(); kit._FP.clear(); kit.SOLIDS.clear()
+    P._MC.clear(); kit._FP.clear(); kit.SOLIDS.clear(); kit.PAVED.clear()
     M = kit.materials()
     rng = random.Random(31)
     main_road = (-14, 8.0, 22, 10.4)           # runs east and crumbles into the dirt (dead end)
@@ -367,7 +367,7 @@ def scene_suburb():
 
 def scene_city2():
     reset()
-    P._MC.clear(); kit._FP.clear(); kit.SOLIDS.clear()
+    P._MC.clear(); kit._FP.clear(); kit.SOLIDS.clear(); kit.PAVED.clear()
     M = kit.materials()
     import landmarks as LM
     LM.GRAF_DIR = os.path.join(OUT, "graf"); os.makedirs(LM.GRAF_DIR, exist_ok=True)

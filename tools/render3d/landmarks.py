@@ -261,6 +261,7 @@ def mall(M, x0, y0, rng, lot_rows=2):
     # parking lot: asphalt, painted bays, light poles, wrecks and carts
     lot_y0, lot_y1 = y0 + h + 1.8, y0 + h + 1.8 + 3.2 * lot_rows
     box(x0 - 1, lot_y0, 0.0, x0 + w + 1, lot_y1, 0.007, M["asphalt"])
+    kit.PAVED.append((x0 - 1, lot_y0, x0 + w + 1, lot_y1))
     paint = MAT("flat:#c8c0a0:0.8")
     for r in range(lot_rows):
         yy = lot_y0 + 0.3 + r * 3.2
@@ -268,10 +269,11 @@ def mall(M, x0, y0, rng, lot_rows=2):
             box(x0 + k * 1.2, yy, 0.007, x0 + k * 1.2 + 0.05, yy + 1.9, 0.009, paint)
     for k in range(int(w / 4.5) + 1):
         P.lamp_post(x0 + 1 + k * 4.5, lot_y0 + 2.6, 0, rng)
-    for k in range(5):
-        P.car_wreck(x0 + rng.uniform(0.5, w - 0.5), lot_y0 + 1.25 + 3.2 * rng.randint(0, lot_rows - 1), 90 + rng.uniform(-8, 8), rng)
-    for k in range(4):
-        P.shopping_cart(x0 + rng.uniform(0, w), rng.uniform(lot_y0, lot_y1), rng.uniform(0, 360), rng)
+    with P.zone(prio=1):
+        for k in range(5):
+            P.car_wreck(x0 + rng.uniform(0.5, w - 0.5), lot_y0 + 1.25 + 3.2 * rng.randint(0, lot_rows - 1), 90 + rng.uniform(-8, 8), rng)
+        for k in range(4):
+            P.shopping_cart(x0 + rng.uniform(0, w), rng.uniform(lot_y0, lot_y1), rng.uniform(0, 360), rng)
     P.litter(x0 + w / 2, (lot_y0 + lot_y1) / 2, 0, rng, n=30, r=6)
     return lot_y1
 
@@ -406,7 +408,7 @@ def ruin_building(M, x0, y0, w, h, rng, style="burnt", base='#8a8276', storeys=1
             if horiz:
                 o = box(a[0] + s0 - (t_ if k == 0 else 0), a[1] - t_, 0, a[0] + s1 + (t_ if k == n - 1 else 0), a[1] + t_, hcur, wall)
             else:
-                o = box(a[0] - t_, a[1] + s0 - (t_ if k == 0 else 0), 0, a[0] + t_, a[1] + s1 + (t_ if k == n - 1 else 0), hcur, wall)
+                o = box(a[0] - t_, a[1] + s0 + (t_ if k == 0 else 0), 0, a[0] + t_, a[1] + s1 - (t_ if k == n - 1 else 0), hcur, wall)
             # broken top edge: a small tilted chunk
             if rng.random() < 0.35:
                 c = box(px - 0.08, py - 0.08, hcur, px + 0.08, py + 0.08, hcur + 0.08, wall)
@@ -420,10 +422,16 @@ def ruin_building(M, x0, y0, w, h, rng, style="burnt", base='#8a8276', storeys=1
              [(0, 1, 2, 3)], MAT("conc:#5a5650"), "slab", solidify=0.1)
     char = MAT("flat:#1a1614:0.95")
     for k in range(rng.randint(4, 9)):
-        bx, by = x0 + rng.uniform(0.3, w - 0.3), y0 + rng.uniform(0.3, h - 0.3)
-        o = box(bx - 0.06, by - rng.uniform(0.6, 1.4), 0.05, bx + 0.06, by + rng.uniform(0.6, 1.4), 0.17, char)
-        o.rotation_euler = (rng.uniform(-0.6, 0.6), rng.uniform(-0.3, 0.3), rng.uniform(0, 3.14))
-        o.location.z += rng.uniform(0, 0.6)
+        # charred beam: endpoints chosen inside the shell, so it can never poke out through a wall
+        m_ = 0.3
+        ax, ay = x0 + rng.uniform(m_, w - m_), y0 + rng.uniform(m_, h - m_)
+        bx, by = x0 + rng.uniform(m_, w - m_), y0 + rng.uniform(m_, h - m_)
+        L = math.hypot(bx - ax, by - ay)
+        if L < 0.6: continue
+        za, zb = rng.uniform(0.05, 0.3), rng.uniform(0.05, min(H * 0.8, 1.2))
+        mx, my = (ax + bx) / 2, (ay + by) / 2
+        o = box(mx - L / 2, my - 0.06, (za + zb) / 2 - 0.06, mx + L / 2, my + 0.06, (za + zb) / 2 + 0.06, char)
+        o.rotation_euler = (0, -math.atan2(zb - za, L), -math.atan2(by - ay, bx - ax))
     for k in range(rng.randint(2, 4)):
         P.rubble_pile(x0 + rng.uniform(0.6, w - 0.6), y0 + rng.uniform(0.6, h - 0.6), 0, rng, size=rng.uniform(0.7, 1.4),
                       mats=[wall, MAT("conc:#6a6660"), char])

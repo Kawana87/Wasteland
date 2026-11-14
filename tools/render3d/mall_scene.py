@@ -34,7 +34,7 @@ def render(name, cx, cy, W=1600, H=900, cz=0.5, samples=56):
 
 def fresh():
     reset()
-    P._MC.clear(); kit._FP.clear(); kit.SOLIDS.clear()
+    P._MC.clear(); kit._FP.clear(); kit.SOLIDS.clear(); kit.PAVED.clear()
     return kit.materials()
 
 
