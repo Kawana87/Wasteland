@@ -118,19 +118,59 @@ def _new_since(before):
     return [o for o in bpy.data.objects if o.name not in before]
 
 
+# Placement context read by validate.py: every prop instance becomes one tagged group.
+ZONE = "ext"          # ext | int (inside a building) | roof
+PRIO = 2              # 2 placed by hand, 1 random placement inside a builder, 0 scatter
+_DEPTH = [0]
+_GID = [0]
+DECALS = {"stain", "litter", "pebbles", "grass_tuft", "pothole", "weeds_line"}
+
+
+class zone:
+    """with zone("int"): ... / with zone(prio=1): ... — sets placement context for the props made inside."""
+    def __init__(self, z=None, prio=None):
+        self.z, self.p = z, prio
+    def __enter__(self):
+        global ZONE, PRIO
+        self.old = (ZONE, PRIO)
+        if self.z is not None: ZONE = self.z
+        if self.p is not None: PRIO = self.p
+    def __exit__(self, *a):
+        global ZONE, PRIO
+        ZONE, PRIO = self.old
+
+
 def prop(fn):
     """Decorator: collects the objects a builder makes and rotates them around (x, y)."""
     def wrap(x, y, rot=0.0, rng=None, **kw):
         rng = rng or random.Random()
         before = {o.name for o in bpy.data.objects}
-        fn(x, y, rng, **kw)
+        _DEPTH[0] += 1
+        try:
+            fn(x, y, rng, **kw)
+        finally:
+            _DEPTH[0] -= 1
         obs = _new_since(before)
         if rot:
             for o in obs:
                 rot_z(o, rot, (x, y))
+        if _DEPTH[0] == 0:
+            _GID[0] += 1
+            for o in obs:
+                o["grp"] = _GID[0]; o["pname"] = fn.__name__; o["zone"] = ZONE; o["prio"] = PRIO
         return obs
     wrap.__name__ = fn.__name__
     return wrap
+
+
+def tip(obs, pivot, deg, axis='X'):
+    """Tip a whole assembly over as one rigid body, around a horizontal axis through pivot at ground level."""
+    from mathutils import Matrix
+    p = g2b(pivot[0], pivot[1], 0)
+    T = Matrix.Translation(p) @ Matrix.Rotation(math.radians(deg), 4, axis) @ Matrix.Translation(-p)
+    bpy.context.view_layer.update()
+    for o in obs:
+        o.matrix_world = T @ o.matrix_world
 
 
 def B(x0, y0, z0, x1, y1, z1, m, bev=0.0):
@@ -827,8 +867,7 @@ def shopping_cart(x, y, rng):
         obs.append(B(x + a - .01, y + b - .01, 0.05, x + a + .01, y + b + .01, 0.35, m))
         obs.append(cyl(x + a, y + b, 0, 0.06, 0.04, MAT("flat:#1e1e1e"), 8))
     if tipped:
-        for o in obs:
-            o.rotation_euler.y += math.radians(80)
+        tip(obs, (x, y + 0.26), 82)
 
 
 @prop
@@ -1174,6 +1213,45 @@ def stain(x, y, rng, col=None, r=None):
         o.rotation_euler.z = rng.uniform(0, 6.3)
 
 
+def roof_units(x0, y0, x1, y1, z, rng, n=None, margin=0.25):
+    """Rooftop AC units + vent pipes inside a roof rectangle (inside the parapet), never overlapping.
+    Small roofs get one unit; big ones two or three."""
+    with zone("roof"):
+        _roof_units(x0, y0, x1, y1, z, rng, n, margin)
+
+
+def _roof_units(x0, y0, x1, y1, z, rng, n, margin):
+    area = (x1 - x0) * (y1 - y0)
+    if n is None:
+        n = 1 if area < 40 else (2 if area < 90 else 3)
+    placed = []
+    def fits(cx, cy, hw, hd):
+        if cx - hw < x0 + margin or cx + hw > x1 - margin or cy - hd < y0 + margin or cy + hd > y1 - margin:
+            return False
+        return all(abs(cx - a) > hw + aw + 0.3 or abs(cy - b) > hd + ad + 0.3 for (a, b, aw, ad) in placed)
+    for k in range(n):
+        for t in range(30):
+            cx, cy = rng.uniform(x0, x1), rng.uniform(y0, y1)
+            if fits(cx, cy, 0.35, 0.25):
+                _ac_unit(cx, cy, 0, rng, z=z); placed.append((cx, cy, 0.35, 0.25)); break
+    for k in range(rng.randint(0, 2)):
+        for t in range(20):
+            cx, cy = rng.uniform(x0, x1), rng.uniform(y0, y1)
+            if fits(cx, cy, 0.06, 0.06):
+                _vent(cx, cy, 0, rng, z=z); placed.append((cx, cy, 0.06, 0.06)); break
+
+
+@prop
+def _ac_unit(x, y, rng, z=2.0):
+    B(x - .35, y - .25, z, x + .35, y + .25, z + 0.45, MAT("paint:#8a8a84:0.4"), 0.02)
+    cyl(x, y, z + 0.45, z + 0.47, 0.18, MAT("flat:#2a2a28"), 12)
+
+
+@prop
+def _vent(x, y, rng, z=2.0):
+    cyl(x, y, z, z + rng.uniform(0.2, 0.35), 0.06, MAT("metal:#7a7a74"), 8)
+
+
 @prop
 def roof_clutter(x, y, rng, z=2.0):
     for k in range(rng.randint(1, 3)):
@@ -1199,6 +1277,15 @@ DEBRIS = {
 
 def scatter(x0, y0, x1, y1, density, style, rng, avoid=()):
     """Scatter debris over a rectangle. density = items per 10 square tiles. avoid: rects to keep clear."""
+    global PRIO
+    old = PRIO; PRIO = 0
+    try:
+        _scatter(x0, y0, x1, y1, density, style, rng, avoid)
+    finally:
+        PRIO = old
+
+
+def _scatter(x0, y0, x1, y1, density, style, rng, avoid):
     pool = DEBRIS[style]
     tot = sum(w for _, w, _ in pool)
     n = int((x1 - x0) * (y1 - y0) * density / 10.0)
@@ -1270,3 +1357,184 @@ def coat_rack(x, y, rng):
         rot_z(o, math.degrees(a), (x, y))
     if rng.random() < 0.6:
         B(x - .1, y + .02, 0.9, x + .1, y + .1, 1.45, fabric(rng))
+
+
+# ------------------------------------------------------------------ mall / retail
+@prop
+def clothing_rack(x, y, rng, kind=None):
+    """Chrome rack: straight rail or round, with faded garments (some fallen on the floor)."""
+    kind = kind or rng.choice(["rail", "round"])
+    chrome = MAT("metal:#a8a8a0")
+    cols = ["#8a4a3a", "#4a5a7a", "#7a7a5a", "#a88a5a", "#5a6a4a", "#9a8a7a", "#6a4a5a"]
+    if kind == "rail":
+        for a in (-.55, .55):
+            B(x + a - .015, y - .015, 0, x + a + .015, y + .015, 1.25, chrome)
+            B(x + a - .02, y - .2, 0, x + a + .02, y + .2, 0.03, chrome)
+        B(x - .58, y - .012, 1.22, x + .58, y + .012, 1.25, chrome)
+        t = -0.5
+        while t < 0.5:
+            if rng.random() < 0.7:
+                B(x + t, y - .2, rng.uniform(0.45, 0.75), x + t + 0.05, y + .2, 1.2, MAT("fab:%s" % rng.choice(cols)))
+            t += rng.uniform(0.06, 0.12)
+    else:
+        cyl(x, y, 0, 0.03, 0.3, chrome, 12); cyl(x, y, 0, 1.15, 0.015, chrome, 6)
+        cyl(x, y, 1.12, 1.15, 0.45, chrome, 20)
+        for k in range(rng.randint(5, 12)):
+            a = rng.uniform(0, 6.28)
+            o = B(x + math.cos(a) * .45 - .03, y + math.sin(a) * .45 - .18, rng.uniform(0.5, 0.75), x + math.cos(a) * .45 + .03, y + math.sin(a) * .45 + .18, 1.1, MAT("fab:%s" % rng.choice(cols)))
+            rot_z(o, math.degrees(a) + 90, (x + math.cos(a) * .45, y + math.sin(a) * .45))
+    for k in range(rng.randint(0, 3)):
+        o = B(x + rng.uniform(-.6, .6) - .2, y + rng.uniform(.2, .5) - .15, 0, x + rng.uniform(-.6, .6) + .2, y + rng.uniform(.2, .5) + .15, 0.03, MAT("fab:%s" % rng.choice(cols)))
+        o.rotation_euler.z = rng.uniform(0, 3)
+
+
+@prop
+def mannequin(x, y, rng, fallen=None):
+    import kit
+    plastic = MAT("paint:%s:0.15" % rng.choice(["#e0d8c8", "#d0c8b8", "#c8bca8"]))
+    obs = []
+    obs.append(cyl(x, y, 0, 0.03, 0.18, MAT("metal:#5a5a54"), 12)); obs.append(cyl(x, y, 0, 0.55, 0.012, MAT("metal:#5a5a54"), 6))
+    body, head, wr = kit.humanoid(plastic, 0.95)
+    body.location += g2b(x, y, 0.0); obs.append(body)
+    if rng.random() < 0.7:
+        obs.append(sphere(x, y, head[2] * 1.0 + 0.1, 0.1, plastic))
+    if rng.random() < 0.6:
+        obs.append(B(x - .17, y - .1, 0.95, x + .17, y + .1, 1.4, MAT("fab:%s" % rng.choice(["#8a3a3a", "#3a5a8a", "#c8a050", "#5a7a5a"]))))
+    if fallen if fallen is not None else rng.random() < 0.35:
+        tip(obs, (x, y + 0.15), 86)
+
+
+@prop
+def gondola(x, y, rng, w=2.0, stock=None):
+    """Double-sided store shelving unit (along x), stock from full to looted."""
+    stock = stock if stock is not None else rng.uniform(0.1, 0.8)
+    m = MAT("paint:%s:0.4" % rng.choice(["#d8d0c0", "#a8b0a8", "#c8c0a8"]))
+    B(x - w / 2, y - .04, 0, x + w / 2, y + .04, 1.5, m)
+    B(x - w / 2, y - .3, 0, x + w / 2, y + .3, 0.12, m)
+    for z in (0.5, 0.9, 1.3):
+        for sgn in (-1, 1):
+            B(x - w / 2, y + sgn * .04 if sgn > 0 else y - .3, z, x + w / 2, y + .3 if sgn > 0 else y - .04, z + 0.02, m)
+    goods = ["#b83a2a", "#c8a040", "#4a6a8a", "#5a7a4a", "#a08058", "#d8c8a0", "#7a4a6a"]
+    for z in (0.12, 0.52, 0.92, 1.32):
+        for sgn in (-1, 1):
+            t = -w / 2 + 0.05
+            while t < w / 2 - 0.1:
+                if rng.random() < stock:
+                    h = rng.uniform(0.1, 0.25)
+                    B(x + t, y + sgn * 0.08 if sgn > 0 else y - 0.27, z + 0.02, x + t + rng.uniform(0.06, 0.12), y + 0.27 if sgn > 0 else y - 0.08, z + 0.02 + h,
+                      MAT("flat:%s:0.6" % rng.choice(goods)))
+                t += rng.uniform(0.1, 0.18)
+    for k in range(int((1 - stock) * 6)):
+        cx, cy = x + rng.uniform(-w / 2, w / 2), y + rng.choice([-1, 1]) * rng.uniform(0.4, 0.8)
+        o = B(cx - .05, cy - .05, 0, cx + .05, cy + .05, 0.12, MAT("flat:%s:0.6" % rng.choice(goods)))
+        o.rotation_euler = (rng.uniform(0, 1.6), 0, rng.uniform(0, 3))
+
+
+@prop
+def checkout(x, y, rng):
+    """Checkout lane: belt counter, register, candy rack, lane light pole."""
+    m = MAT("paint:%s:0.35" % rng.choice(["#b8b0a0", "#8a9a8a", "#a89070"]))
+    B(x - .9, y - .25, 0, x + .9, y + .25, 0.85, m, 0.02)
+    B(x - .85, y - .2, 0.85, x + .4, y + .2, 0.87, MAT("flat:#2a2a28:0.7"))
+    B(x + .5, y - .18, 0.87, x + .85, y + .18, 1.07, MAT("paint:#4a4a44:0.4"), 0.01)
+    B(x + .55, y - .15, 1.07, x + .8, y - .05, 1.25, MAT("flat:#2a3a3a:0.2"))
+    cyl(x + .85, y - .25, 0.85, 2.0, 0.025, MAT("metal:#8a8a84"), 6)
+    B(x + .7, y - .32, 1.9, x + 1.0, y - .18, 2.1, MAT("paint:%s:0.3" % rng.choice(["#c84a3a", "#3a6a9a"])))
+    B(x - .9, y + .25, 0, x - .4, y + .45, 1.1, MAT("metal:#7a7a74"))
+
+
+@prop
+def cart_corral(x, y, rng, n=None):
+    """Pipe-rail cart corral (along x) with a few carts nested inside, some missing."""
+    m = MAT("paint:#7a8a6a:0.5")
+    L = 2.6
+    for sy in (-.35, .35):
+        B(x - L / 2, y + sy - .02, 0.85, x + L / 2, y + sy + .02, 0.9, m)
+        for t in (-L / 2, 0, L / 2):
+            B(x + t - .025, y + sy - .025, 0, x + t + .025, y + sy + .025, 0.9, m)
+    B(x + L / 2 - .02, y - .35, 0.85, x + L / 2 + .02, y + .35, 0.9, m)
+    for k in range(n if n is not None else rng.randint(0, 3)):
+        _cart_parts(x - L / 2 + 0.55 + k * 0.42, y, MAT("metal:#9a9a94"))
+
+
+def _cart_parts(x, y, m):
+    for kk in range(5):
+        B(x - .35 + kk * .16, y - .22, 0.35, x - .34 + kk * .16, y + .22, 0.78, m)
+    B(x - .35, y - .23, 0.33, x + .35, y + .23, 0.35, m)
+    B(x - .35, y - .23, 0.77, x + .35, y + .23, 0.79, m)
+    B(x + .35, y - .24, 0.78, x + .46, y + .24, 0.82, MAT("paint:#c84a2a:0.4"))
+    for (a, b) in ((-.3, -.18), (.3, -.18), (-.3, .18), (.3, .18)):
+        cyl(x + a, y + b, 0, 0.06, 0.035, MAT("flat:#1e1e1e"), 8)
+
+
+@prop
+def pylon_sign(x, y, rng):
+    """Tall roadside mall sign on twin posts, panels faded and a few knocked out."""
+    m = MAT("paint:#6a6a64:0.5")
+    for a in (-.6, .6):
+        B(x + a - .1, y - .1, 0, x + a + .1, y + .1, 4.2, m)
+    B(x - 1.3, y - .18, 4.2, x + 1.3, y + .18, 5.4, MAT("paint:#b84a3a:0.5"))
+    for k in range(3):
+        if rng.random() < 0.8:
+            B(x - 1.1 + k * 0.75, y + .18, 4.4, x - 0.5 + k * 0.75, y + .19, 5.2, MAT("flat:#e8e0c8:0.6"))
+    for k in range(3):
+        z = 3.0 - k * 0.7
+        c = rng.choice(["#3a5a8a", "#c8a040", "#5a7a5a", "#7a4a6a"])
+        if rng.random() < 0.75:
+            B(x - 1.0, y - .12, z, x + 1.0, y + .12, z + 0.55, MAT("paint:%s:0.5" % c))
+            B(x - 0.8, y + .12, z + 0.15, x + rng.uniform(-0.2, 0.7), y + .13, z + 0.4, MAT("flat:#e8e0c8:0.6"))
+
+
+@prop
+def planter(x, y, rng, r=0.9, tree_kind="dead"):
+    """Concrete planter with dried soil, a dead tree and weeds."""
+    c = MAT("conc:#9a968a")
+    B(x - r, y - r, 0, x + r, y + r, 0.45, c, 0.02)
+    B(x - r + .1, y - r + .1, 0.45, x + r - .1, y + r - .1, 0.4501, MAT("flat:#4a3e30:1.0"))
+    tree(x, y, 0, random.Random(rng.random()), kind=tree_kind)
+    for k in range(rng.randint(1, 3)):
+        grass_tuft(x + rng.uniform(-r + .2, r - .2), y + rng.uniform(-r + .2, r - .2), 0, rng)
+    bpy.context.view_layer.update()
+
+
+@prop
+def kiosk(x, y, rng):
+    """Mall concourse kiosk: counter ring with a canopy on posts."""
+    m = MAT("paint:%s:0.4" % rng.choice(["#3e7a6a", "#b03a26", "#c8a040"]))
+    B(x - .8, y - .5, 0, x + .8, y + .5, 0.95, m, 0.02)
+    B(x - .85, y - .55, 0.95, x + .85, y + .55, 1.0, MAT("paint:#d8d0bc:0.3"))
+    for (a, b) in ((-.75, -.45), (.75, -.45), (-.75, .45), (.75, .45)):
+        B(x + a - .02, y + b - .02, 1.0, x + a + .02, y + b + .02, 2.0, MAT("metal:#8a8a84"))
+    B(x - .9, y - .6, 2.0, x + .9, y + .6, 2.1, m)
+    clutter_top(x, y, 1.0, rng, 0.5)
+
+
+@prop
+def bus_stop(x, y, rng):
+    m = MAT("metal:#6a7a7a")
+    for a in (-.9, .9):
+        B(x + a - .03, y - .4, 0, x + a + .03, y - .34, 2.1, m)
+        B(x + a - .03, y + .34, 0, x + a + .03, y + .4, 2.1, m)
+    B(x - 1.0, y - .45, 2.1, x + 1.0, y + .45, 2.16, MAT("paint:#b84a3a:0.5"))
+    B(x - .9, y - .4, 0.6, x + .9, y - .37, 2.0, MAT("glass:#2a3a40") if False else MAT("flat:#3a4a50:0.2"))
+    B(x - .8, y - .25, 0.42, x + .8, y + .05, 0.47, MAT("wood:#6a5034:#5a4028"))
+
+
+@prop
+def pothole(x, y, rng, r=None):
+    r = r or rng.uniform(0.25, 0.55)
+    for k in range(rng.randint(2, 3)):
+        o = cyl(x + rng.uniform(-r, r) * .4, y + rng.uniform(-r, r) * .4, 0.0, 0.0105 + k * 0.0003, r * rng.uniform(0.5, 0.9),
+                MAT("flat:%s:1.0" % rng.choice(["#2a2622", "#3a342c", "#4a4034"])), 10)
+        o.scale = (1, rng.uniform(0.5, 0.9), 1); o.rotation_euler.z = rng.uniform(0, 6)
+    if rng.random() < 0.5:
+        pebbles(x, y, 0, rng, n=5, r=r)
+
+
+@prop
+def weeds_line(x, y, rng, L=2.0, axis="x"):
+    """Weeds pushing up through a crack or a painted line."""
+    for k in range(int(L / 0.3)):
+        t = -L / 2 + k * 0.3 + rng.uniform(-.1, .1)
+        if rng.random() < 0.6:
+            grass_tuft(x + (t if axis == "x" else rng.uniform(-.06, .06)), y + (t if axis == "y" else rng.uniform(-.06, .06)), 0, rng, n=rng.randint(2, 5))

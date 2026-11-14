@@ -101,6 +101,7 @@ def _flat_box_building(M, x0, y0, w, h, wall, storeys=1, openings_s=(), openings
     wall_run(M, (x0, y1), (x1, y1), H, gw(True), list(openings_s), cap=False)
     wall_run(M, (x1, y0), (x1, y1), H, gw(False), list(openings_e), cap=False)
     box(x0 - 0.12, y0 - 0.12, H - 0.02, x1 + 0.12, y1 + 0.12, H + 0.06, roof_mat or M["conc"])
+    kit.solid(x0, y0, x1, y1, H + 0.3)
     if parapet:
         for (a, b, c, d) in ((x0 - .14, y0 - .14, x1 + .14, y0 + .02), (x0 - .14, y1 - .02, x1 + .14, y1 + .14),
                              (x0 - .14, y0 - .14, x0 + .02, y1 + .14), (x1 - .02, y0 - .14, x1 + .14, y1 + .14)):
@@ -181,7 +182,7 @@ def storefront_row(M, x0, y0, n, rng):
             awning(x + 0.1, x + w - 0.1, y0 + h + 0.12, 1.95, rng.choice(cols), rng)
         sign_board(x + 0.2, x + w - 0.2, y0 + h, 2.0 if st == 1 else 2.0, rng.choice(cols), rng)
         if rng.random() < 0.5:
-            P.roof_clutter(x + w / 2, y0 + h / 2, 0, rng, z=H + 0.06)
+            P.roof_units(x, y0, x + w, y0 + h, H + 0.06, rng, n=1)
         if GRAF_DIR and rng.random() < 0.7:
             graffiti_on(GRAF_DIR, x + 0.1, y0 + h + kit.WALL_T + 0.03, w - 0.2, rng, "s", zmax=1.7)
         x += w
@@ -256,7 +257,7 @@ def mall(M, x0, y0, rng, lot_rows=2):
     box(x0 + 3.0, y0 + h + 0.12, 2.8, x0 + 11.0, y0 + h + 0.2, 3.7, MAT("paint:#b84a3a:0.55"))
     for k in range(5):
         box(x0 + 3.6 + k * 1.5, y0 + h + 0.2, 3.0, x0 + 4.6 + k * 1.5, y0 + h + 0.21, 3.5, MAT("flat:#e8e0c8:0.6"))
-    P.roof_clutter(x0 + 4, y0 + 3, 0, rng, z=H + 0.06); P.roof_clutter(x0 + 10, y0 + 3.5, 0, rng, z=H + 0.06)
+    P.roof_units(x0, y0, x0 + w, y0 + h, H + 0.06, rng)
     # parking lot: asphalt, painted bays, light poles, wrecks and carts
     lot_y0, lot_y1 = y0 + h + 1.8, y0 + h + 1.8 + 3.2 * lot_rows
     box(x0 - 1, lot_y0, 0.0, x0 + w + 1, lot_y1, 0.007, M["asphalt"])
@@ -388,6 +389,8 @@ def ruin_building(M, x0, y0, w, h, rng, style="burnt", base='#8a8276', storeys=1
     tall_corner = rng.choice([(x0, y0), (x0 + w, y0), (x0, y0 + h)])
     runs = [((x0, y0), (x0 + w, y0), True), ((x0, y0 + h), (x0 + w, y0 + h), True), ((x0, y0), (x0, y0 + h), False), ((x0 + w, y0), (x0 + w, y0 + h), False)]
     t_ = kit.WALL_T
+    kit.solid(x0, y0, x0 + w, y0 + h, H, "ruin")
+    _z = P.zone("int"); _z.__enter__()      # the ruin's own rubble and scorch belong inside it
     for (a, b, horiz) in runs:
         L = abs(b[0] - a[0]) if horiz else abs(b[1] - a[1])
         n = int(L / 0.25)
@@ -427,6 +430,7 @@ def ruin_building(M, x0, y0, w, h, rng, style="burnt", base='#8a8276', storeys=1
     # scorch around the building
     for k in range(rng.randint(4, 8)):
         P.stain(x0 + rng.uniform(-1, w + 1), y0 + rng.uniform(-1, h + 1), 0, rng, col="#1e1a16", r=rng.uniform(0.5, 1.0))
+    _z.__exit__()
     if style == "bombed":
         cx, cy = x0 + w * rng.uniform(0.6, 1.1), y0 + h + rng.uniform(0.6, 1.6)
         crater(cx, cy, rng.uniform(1.0, 1.5), rng)

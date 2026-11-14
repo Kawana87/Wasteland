@@ -206,7 +206,14 @@ def wall_run(M, a, b, h, mat, openings=(), cap=True, z0=0.0, frames=True):
         t = o1
     slab(t, L + E, 0, h)
     if cap:
-        slab(-E, L + E, h, h + 0.03 + jit, M["cap"], WALL_T + 0.005 + jit, "cap")
+        # thin top course in the wall's own material, broken at any opening that reaches the top
+        # (doorways through cut-away walls): it never bridges a threshold
+        t = -E
+        for (o0, o1, oz0, oz1, kind) in sorted(openings):
+            if oz1 >= h - 1e-3:
+                slab(t, o0, h, h + 0.02, mat, WALL_T + 0.004 + jit, "cap")
+                t = o1
+        slab(t, L + E, h, h + 0.02, mat, WALL_T + 0.004 + jit, "cap")
 
 
 def edge_point(a, b, t, out_n, off=0.0):
@@ -295,14 +302,23 @@ _door_fn = door
 
 
 # ------------------------------------------------------------------ roofs
+SOLIDS = []      # building volumes [(x0, y0, x1, y1, ztop, kind)] for validate.py
+
+
+def solid(x0, y0, x1, y1, ztop, kind="bld"):
+    SOLIDS.append((min(x0, x1), min(y0, y1), max(x0, x1), max(y0, y1), ztop, kind))
+
+
 def roof_gable(M, x0, y0, x1, y1, z, rise, roof_mat, gable_mat, axis=None, over=0.22, hip=False):
     if axis is None:
         axis = 'x' if (x1 - x0) >= (y1 - y0) else 'y'
     o = over
     if axis == 'x':
         ym = (y0 + y1) / 2
-        ins = (y1 - y0) / 2 if hip else 0.0
-        e = [(x0 - o, y0 - o, z), (x1 + o, y0 - o, z), (x1 + o, y1 + o, z), (x0 - o, y1 + o, z)]
+        half = (y1 - y0) / 2
+        ins = half + o if hip else 0.0
+        ze = z - rise * o / half          # eaves drop below the wall top so the slope rests on the walls
+        e = [(x0 - o, y0 - o, ze), (x1 + o, y0 - o, ze), (x1 + o, y1 + o, ze), (x0 - o, y1 + o, ze)]
         r = [(x0 - o + ins, ym, z + rise), (x1 + o - ins, ym, z + rise)]
         faces = [(0, 1, 5, 4), (4, 5, 2, 3)]
         if hip:
@@ -310,11 +326,13 @@ def roof_gable(M, x0, y0, x1, y1, z, rise, roof_mat, gable_mat, axis=None, over=
         ob = mesh(e + r, faces, roof_mat, "roof", solidify=0.06)
         if not hip:
             for xx in (x0, x1):
-                mesh([(xx, y0, z), (xx, y1, z), (xx, ym, z + rise)], [(0, 1, 2)], gable_mat, "gable")
+                mesh([(xx, y0 - 0.04, z - 0.02), (xx, y1 + 0.04, z - 0.02), (xx, ym, z + rise - 0.03)], [(0, 1, 2)], gable_mat, "gable", solidify=WALL_T)
     else:
         xm = (x0 + x1) / 2
-        ins = (x1 - x0) / 2 if hip else 0.0
-        e = [(x0 - o, y0 - o, z), (x1 + o, y0 - o, z), (x1 + o, y1 + o, z), (x0 - o, y1 + o, z)]
+        half = (x1 - x0) / 2
+        ins = half + o if hip else 0.0
+        ze = z - rise * o / half
+        e = [(x0 - o, y0 - o, ze), (x1 + o, y0 - o, ze), (x1 + o, y1 + o, ze), (x0 - o, y1 + o, ze)]
         r = [(xm, y0 - o + ins, z + rise), (xm, y1 + o - ins, z + rise)]
         faces = [(0, 4, 5, 3), (4, 1, 2, 5)]
         if hip:
@@ -322,7 +340,7 @@ def roof_gable(M, x0, y0, x1, y1, z, rise, roof_mat, gable_mat, axis=None, over=
         ob = mesh(e + r, faces, roof_mat, "roof", solidify=0.06)
         if not hip:
             for yy in (y0, y1):
-                mesh([(x0, yy, z), (x1, yy, z), (xm, yy, z + rise)], [(0, 1, 2)], gable_mat, "gable")
+                mesh([(x0 - 0.04, yy, z - 0.02), (x1 + 0.04, yy, z - 0.02), (xm, yy, z + rise - 0.03)], [(0, 1, 2)], gable_mat, "gable", solidify=WALL_T)
     # fascia boards along the eaves
     return ob
 
@@ -438,6 +456,7 @@ def house(M, ox, oy, parts, wall_mat, roof="gable", roof_mat="sh_brown", door=No
     for (px, py, w, h, st) in parts:
         x0, y0, x1, y1 = ox + px, oy + py, ox + px + w, oy + py + h
         z = STOREY * st
+        solid(x0, y0, x1, y1, z + (min(w, h) * 0.42 if roof in ("gable", "hip") else 0.1))
         rm = roof_mat
         if roof in ("gable", "hip"):
             axis = 'x' if w >= h else 'y'

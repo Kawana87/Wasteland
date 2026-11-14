@@ -20,6 +20,10 @@ CUT = 0.85
 
 def render(name, cx, cy, W=1152, H=648, cz=0.5, samples=64):
     sc = bpy.context.scene
+    import validate
+    validate.run(name)
+    if os.environ.get("DRY"):
+        return
     lights()
     camera(cx, cy, W, H, cz)
     sc.cycles.samples = samples
@@ -63,7 +67,12 @@ def _hit(r, rects):
     return any(r[0] < q[2] and q[0] < r[2] and r[1] < q[3] and q[1] < r[3] for q in rects)
 
 
-def furnish_room(x0, y0, x1, y1, kind, rng, keepout=(), windows=()):
+def furnish_room(*a, **k):
+    with P.zone("int"):
+        return _furnish_room(*a, **k)
+
+
+def _furnish_room(x0, y0, x1, y1, kind, rng, keepout=(), windows=()):
     """Places items along the north and west walls, never in front of a doorway, nothing tall in front
     of a window, and leaves floor space: how full a room gets varies per room."""
     w, h = x1 - x0, y1 - y0
@@ -249,7 +258,7 @@ def scene_city():
     P.rubble_pile(9.5, 14.5, 0, rng, size=1.3); P.rubble_pile(24.5, 4.0, 0, rng, size=0.9)
     P.tire_stack(17.6, 3.2, 0, rng); P.barrel(17.3, 1.5, 0, rng, kind="toxic"); P.barrel(17.9, 1.8, 0, rng)
     P.chainlink(17.0, 12.6, 0, rng, n=3)
-    P.roof_clutter(6, 2.5, 0, rng, z=4.05); P.roof_clutter(21, 2.0, 0, rng, z=2.05); P.roof_clutter(5, 15, 0, rng, z=2.05)
+    P.roof_units(2, 0, 10, 5, 4.05, rng); P.roof_units(18, 0, 26, 5, 2.05, rng); P.roof_units(2, 13, 8, 17, 2.05, rng)
     houses = [(1.8, -0.2, 10.2, 5.2), (17.8, -0.2, 26.2, 5.2), (1.8, 12.8, 8.2, 17.2)]
     # heavy downtown debris: on lots, sidewalks and in the street
     P.scatter(-4, -4, 12.2, 7.2, 9, "city", rng, avoid=houses + [(10.0, 1.8, 12.0, 6.0)])
@@ -321,7 +330,7 @@ def ranch(M, ox, oy, rng, door_side="s"):
 
 def scene_suburb():
     reset()
-    P._MC.clear(); kit._FP.clear()
+    P._MC.clear(); kit._FP.clear(); kit.SOLIDS.clear()
     M = kit.materials()
     rng = random.Random(31)
     main_road = (-14, 8.0, 22, 10.4)           # runs east and crumbles into the dirt (dead end)
@@ -358,7 +367,7 @@ def scene_suburb():
 
 def scene_city2():
     reset()
-    P._MC.clear(); kit._FP.clear()
+    P._MC.clear(); kit._FP.clear(); kit.SOLIDS.clear()
     M = kit.materials()
     import landmarks as LM
     LM.GRAF_DIR = os.path.join(OUT, "graf"); os.makedirs(LM.GRAF_DIR, exist_ok=True)
