@@ -16,6 +16,7 @@ static func build(w: World) -> Dictionary:
 	var side := Image.create(size, size, false, Image.FORMAT_L8)
 	var dirt := Image.create(size, size, false, Image.FORMAT_L8)
 	var shade := Image.create(size, size, false, Image.FORMAT_L8)
+	var trail := Image.create(size, size, false, Image.FORMAT_L8)
 	for pth in w.paths:
 		var pts: PackedVector2Array = pth.pts
 		var wd: float = pth.w
@@ -35,6 +36,7 @@ static func build(w: World) -> Dictionary:
 				if (i / 2) % 2 == 0:
 					var p := pts[i]
 					road.fill_rect(Rect2i(int(p.x * R), int(p.y * R), 1, 1), Color8(255, 255, 255))
+	_footpaths(w, trail)
 	# keep building floors clean
 	for b in w.buildings:
 		for c in b.cells:
@@ -42,12 +44,14 @@ static func build(w: World) -> Dictionary:
 			road.fill_rect(r, Color.BLACK)
 			side.fill_rect(r, Color.BLACK)
 			dirt.fill_rect(r, Color.BLACK)
+			trail.fill_rect(r, Color.BLACK)
 	_shadows(w, shade)
 	return {
 		"road": ImageTexture.create_from_image(road),
 		"side": ImageTexture.create_from_image(side),
 		"dirt": ImageTexture.create_from_image(dirt),
 		"shade": ImageTexture.create_from_image(shade),
+		"path": ImageTexture.create_from_image(trail),
 	}
 
 static func _disc(img: Image, p: Vector2, rad: float, v: int) -> void:
@@ -65,6 +69,43 @@ static func _disc(img: Image, p: Vector2, rad: float, v: int) -> void:
 			var rect := Rect2i(x0, y, x1 - x0, 1).intersection(Rect2i(0, 0, img.get_width(), img.get_height()))
 			if rect.size.x > 0 and rect.size.y > 0:
 				img.fill_rect(rect, col)
+
+## Worn foot trails: from each enterable building's door to the nearest road, and from settlement
+## shacks to their campfire. A wobbly line of small discs; the shader roughens the edges.
+static func _footpaths(w: World, img: Image) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7
+	var road_pts := PackedVector2Array()
+	for pth in w.paths:
+		var pts: PackedVector2Array = pth.pts
+		for i in range(0, pts.size(), 3):
+			road_pts.append(pts[i])
+	for b in w.buildings:
+		if b.sealed or b.open or b.door_seg == null: continue
+		var start := Vector2(b.out) + Vector2(0.5, 0.5)
+		var goal := Vector2(-1, -1)
+		if b.settlement >= 0:
+			goal = w.settlements[b.settlement].pos
+		else:
+			var bd := 14.0
+			for q in road_pts:
+				var d := start.distance_to(q)
+				if d < bd: bd = d; goal = q
+		if goal.x < 0 or start.distance_to(goal) < 1.2: continue
+		_trail(w, img, start, goal, rng)
+
+static func _trail(w: World, img: Image, a: Vector2, b: Vector2, rng: RandomNumberGenerator) -> void:
+	var L := a.distance_to(b)
+	var dir := (b - a).normalized()
+	var side := dir.orthogonal()
+	var off := 0.0
+	var steps := int(L / 0.2)
+	for i in steps + 1:
+		var t := float(i) / steps
+		off = clampf(off * 0.9 + rng.randf_range(-0.12, 0.12), -0.6, 0.6)
+		var p := a.lerp(b, t) + side * off * sin(t * PI)
+		if w.building_at(p.x, p.y) != 0: continue
+		_disc(img, p, 0.26 * (0.6 + 0.4 * sin(t * PI)), 255)
 
 static func _stamp_sweep(img: Image, rect_tiles: Rect2, length: float, v: int) -> void:
 	var steps := int(ceil(length / 0.125))

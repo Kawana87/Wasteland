@@ -180,14 +180,16 @@ def wall_run(M, a, b, h, mat, openings=(), cap=True, z0=0.0, frames=True):
     L = abs(b[0] - a[0]) if horiz else abs(b[1] - a[1])
     lo = min(a[0], b[0]) if horiz else min(a[1], b[1])
     fixed = a[1] if horiz else a[0]
+    jit = R.uniform(-0.003, 0.003)      # tiny thickness offset so overlapping corners never z-fight
+    E = WALL_T                          # walls run past their ends into the corner column
 
-    def slab(t0, t1, za, zb, m=mat, th=WALL_T, name="wall"):
+    def slab(t0, t1, za, zb, m=mat, th=WALL_T + jit, name="wall"):
         if t1 - t0 < 1e-4 or zb - za < 1e-4:
             return None
         if horiz:
             return box(lo + t0, fixed - th, z0 + za, lo + t1, fixed + th, z0 + zb, m, name=name)
         return box(fixed - th, lo + t0, z0 + za, fixed + th, lo + t1, z0 + zb, m, name=name)
-    t = 0.0
+    t = -E
     for (o0, o1, oz0, oz1, kind) in sorted(openings):
         slab(t, o0, 0, h)
         slab(o0, o1, 0, min(oz0, h))
@@ -202,9 +204,9 @@ def wall_run(M, a, b, h, mat, openings=(), cap=True, z0=0.0, frames=True):
         if oz0 > 0.05:
             slab(o0 - fr, o1 + fr, oz0 - fr, oz0, M["trim"], WALL_T + 0.05, "sill")
         t = o1
-    slab(t, L, 0, h)
+    slab(t, L + E, 0, h)
     if cap:
-        slab(-WALL_T, L + WALL_T, h, h + 0.03, M["cap"], WALL_T + 0.005, "cap")
+        slab(-E, L + E, h, h + 0.03 + jit, M["cap"], WALL_T + 0.005 + jit, "cap")
 
 
 def edge_point(a, b, t, out_n, off=0.0):
@@ -531,6 +533,7 @@ def mat_terrain(name="terrain"):
 def terrain(x0, y0, x1, y1, mat, amp=0.25, scale=0.6, res=3, flat=()):
     """Displaced ground grid (game coords). flat: list of (x0,y0,x1,y1) rects pushed back to z=0 (roads, lots)."""
     import bmesh as _bm
+    TERRAIN.update({"amp": amp, "scale": scale, "flat": list(flat)})
     nx, ny = int((x1 - x0) * res), int((y1 - y0) * res)
     me = bpy.data.meshes.new("terrain")
     bm = _bm.new()
@@ -557,3 +560,222 @@ def terrain(x0, y0, x1, y1, mat, amp=0.25, scale=0.6, res=3, flat=()):
     me.materials.append(mat)
     for p in me.polygons: p.use_smooth = True
     return ob
+
+
+# ------------------------------------------------------------------ node maths helpers
+def _math(nt, op, a, b=None):
+    n = nt.nodes.new("ShaderNodeMath"); n.operation = op
+    for i, v in enumerate((a, b)):
+        if v is None: continue
+        if isinstance(v, (int, float)): n.inputs[i].default_value = v
+        else: nt.links.new(v, n.inputs[i])
+    return n.outputs[0]
+
+
+def _sep(nt, vec):
+    s = nt.nodes.new("ShaderNodeSeparateXYZ"); nt.links.new(vec, s.inputs[0])
+    return s.outputs
+
+
+def _alpha_out(m, nt, bs, alpha):
+    """Replace the material output with Mix(Transparent, BSDF) driven by alpha."""
+    out = [n for n in nt.nodes if n.bl_idname == "ShaderNodeOutputMaterial"][0]
+    tr = nt.nodes.new("ShaderNodeBsdfTransparent")
+    mx = nt.nodes.new("ShaderNodeMixShader")
+    nt.links.new(alpha, mx.inputs[0]); nt.links.new(tr.outputs[0], mx.inputs[1]); nt.links.new(bs.outputs[0], mx.inputs[2])
+    nt.links.new(mx.outputs[0], out.inputs[0])
+    try:
+        m.blend_method = 'HASHED'
+    except Exception:
+        pass
+
+
+def mat_road(name, L, hw, ends=(False, False), axis='x'):
+    """Asphalt with ragged, dusty edges, drifted dirt, cracks and patch repairs.
+    ends: erode the road into broken chunks at its -/+ end (a dead end into the dirt)."""
+    m, nt, bs = _nodes(name)
+    tc = nt.nodes.new("ShaderNodeTexCoord")
+    co = tc.outputs["Object"]
+    xyz = _sep(nt, co)
+    along = xyz[0] if axis == 'x' else xyz[1]
+    across = xyz[1] if axis == 'x' else xyz[0]
+    n1 = _noise(nt, co, 2.2, 6.0, 0.7).outputs[0]
+    n2 = _noise(nt, co, 9.0, 4.0, 0.6).outputs[0]
+    # edge metric: 0 on the centre line, ~1 at the edge, made ragged by noise
+    e = _math(nt, 'DIVIDE', _math(nt, 'ABSOLUTE', across), hw)
+    e = _math(nt, 'ADD', e, _math(nt, 'MULTIPLY', _math(nt, 'SUBTRACT', n1, 0.5), 0.45))
+    e = _math(nt, 'ADD', e, _math(nt, 'MULTIPLY', _math(nt, 'SUBTRACT', n2, 0.5), 0.18))
+    for k, flag in enumerate(ends):
+        if not flag: continue
+        # distance from this end, in tiles; crumble over the last ~3 tiles
+        d = _math(nt, 'SUBTRACT', L / 2, along) if k == 1 else _math(nt, 'ADD', along, L / 2)
+        ef = _math(nt, 'SUBTRACT', 1.15, _math(nt, 'DIVIDE', d, 3.0))
+        ef = _math(nt, 'ADD', ef, _math(nt, 'MULTIPLY', _math(nt, 'SUBTRACT', n1, 0.5), 1.2))
+        ef = _math(nt, 'ADD', ef, _math(nt, 'MULTIPLY', _math(nt, 'SUBTRACT', n2, 0.5), 0.6))
+        e = _math(nt, 'MAXIMUM', e, ef)
+    alpha = _ramp(nt, e, [(0.86, '#ffffff'), (0.9, '#000000')])
+    # asphalt colour + cracks + repair patches
+    a = _noise(nt, co, 25.0, 10.0, 0.8)
+    col = _ramp(nt, a.outputs[0], [(0.3, '#3a3836'), (0.55, '#4c4844'), (0.75, '#625c56')])
+    col, crk = cracks(nt, col, co, 1.3, 0.014, '#121010')
+    col, _ = cracks(nt, col, co, 3.7, 0.01, '#1a1816')
+    col, _ = cracks(nt, col, co, 0.7, 0.008, '#0e0c0a')
+    br = nt.nodes.new("ShaderNodeTexBrick")
+    br.inputs["Scale"].default_value = 0.6
+    br.inputs["Color1"].default_value = _hex('#000000'); br.inputs["Color2"].default_value = _hex('#ffffff')
+    br.inputs["Mortar Size"].default_value = 0.0
+    br.inputs["Brick Width"].default_value = 1.3; br.inputs["Row Height"].default_value = 0.7
+    nt.links.new(co, br.inputs["Vector"])
+    patchf = _math(nt, 'MULTIPLY', _math(nt, 'GREATER_THAN', _sep(nt, br.outputs["Color"])[0], 0.9),
+                   _math(nt, 'GREATER_THAN', _noise(nt, co, 0.8, 2.0, 0.5).outputs[0], 0.58))
+    col = _mix(nt, col, '#1e1c1c', patchf)
+    # dust and drifted dirt: stronger towards the edges, plus random drifts across the road
+    dust = _math(nt, 'ADD', _math(nt, 'MULTIPLY', e, 1.0), _math(nt, 'MULTIPLY', _noise(nt, co, 0.7, 4.0, 0.6).outputs[0], 0.95))
+    dustf = _ramp(nt, dust, [(1.0, '#000000'), (1.22, '#ffffff')])
+    # broken, lighter asphalt crumbs along the shoulder
+    shoulder = _ramp(nt, e, [(0.7, '#000000'), (0.84, '#ffffff')])
+    crumbs = _math(nt, 'MULTIPLY', shoulder, _math(nt, 'GREATER_THAN', _noise(nt, co, 14.0, 2.0, 0.5).outputs[0], 0.55))
+    col = _mix(nt, col, '#6e665c', crumbs)
+    dirt = _ramp(nt, _noise(nt, co, 3.0, 8.0, 0.7).outputs[0], [(0.3, '#56493a'), (0.5, '#76664e'), (0.7, '#8e7e62')])
+    col = _mix(nt, col, dirt, dustf)
+    nt.links.new(grit(nt, col, co, 0.4, 140.0), bs.inputs["Base Color"])
+    bs.inputs["Roughness"].default_value = 0.95
+    _bump(nt, bs, crk, 0.6, 0.02)
+    _alpha_out(m, nt, bs, alpha)
+    return m
+
+
+def road(x0, y0, x1, y1, ends=(False, False), z=0.008, name="road"):
+    axis = 'x' if (x1 - x0) >= (y1 - y0) else 'y'
+    L = (x1 - x0) if axis == 'x' else (y1 - y0)
+    hw = ((y1 - y0) if axis == 'x' else (x1 - x0)) / 2
+    m = mat_road(name + str(R.randint(0, 99999)), L, hw, ends, axis)
+    # widen the mesh a bit: the material erodes it back to a ragged edge
+    pad = 0.35
+    if axis == 'x':
+        ob = mesh([(x0, y0 - pad, z), (x1, y0 - pad, z), (x1, y1 + pad, z), (x0, y1 + pad, z)], [(0, 1, 2, 3)], m, name)
+    else:
+        ob = mesh([(x0 - pad, y0, z), (x1 + pad, y0, z), (x1 + pad, y1, z), (x0 - pad, y1, z)], [(0, 1, 2, 3)], m, name)
+    # object coords centred on the road so the material's along/across maths works
+    import mathutils
+    c = g2b((x0 + x1) / 2, (y0 + y1) / 2, 0)
+    for v in ob.data.vertices:
+        v.co.x -= c.x; v.co.y -= c.y
+    ob.location = (c.x, c.y, 0)
+    ob.visible_shadow = False
+    return ob
+
+
+def mat_footpath(name):
+    """Worn dirt trail: lighter packed earth with pebbles, soft ragged edges (uses the ribbon's UV)."""
+    m, nt, bs = _nodes(name)
+    uv = nt.nodes.new("ShaderNodeUVMap")
+    uvo = _sep(nt, uv.outputs[0])
+    tc = nt.nodes.new("ShaderNodeTexCoord")
+    co = tc.outputs["Object"]
+    v = _math(nt, 'MULTIPLY', _math(nt, 'ABSOLUTE', _math(nt, 'SUBTRACT', uvo[1], 0.5)), 2.0)
+    n = _noise(nt, co, 3.0, 6.0, 0.7).outputs[0]
+    e = _math(nt, 'ADD', v, _math(nt, 'MULTIPLY', _math(nt, 'SUBTRACT', n, 0.5), 0.7))
+    alpha = _ramp(nt, e, [(0.55, '#ffffff'), (0.95, '#000000')])
+    col = _ramp(nt, _noise(nt, co, 8.0, 8.0, 0.7).outputs[0], [(0.35, '#9a8668'), (0.6, '#b4a282')])
+    # two faint ruts worn down the middle
+    rut = _ramp(nt, _math(nt, 'ABSOLUTE', _math(nt, 'SUBTRACT', v, 0.35)), [(0.0, '#8a7a60'), (0.12, '#ffffff')])
+    m2 = nt.nodes.new("ShaderNodeMix"); m2.data_type = 'RGBA'; m2.blend_type = 'MULTIPLY'; m2.inputs[0].default_value = 0.5
+    nt.links.new(col, m2.inputs[6]); nt.links.new(rut, m2.inputs[7]); col = m2.outputs[2]
+    vo = nt.nodes.new("ShaderNodeTexVoronoi"); vo.inputs["Scale"].default_value = 30.0
+    nt.links.new(co, vo.inputs["Vector"])
+    peb = _ramp(nt, vo.outputs["Distance"], [(0.0, '#5a4e40'), (0.1, '#ffffff')])
+    mm = nt.nodes.new("ShaderNodeMix"); mm.data_type = 'RGBA'; mm.blend_type = 'MULTIPLY'; mm.inputs[0].default_value = 0.6
+    nt.links.new(col, mm.inputs[6]); nt.links.new(peb, mm.inputs[7])
+    nt.links.new(grit(nt, mm.outputs[2], co, 0.25, 120.0), bs.inputs["Base Color"])
+    bs.inputs["Roughness"].default_value = 1.0
+    _alpha_out(m, nt, bs, alpha)
+    return m
+
+
+_FP = {}
+TERRAIN = {"amp": 0.0, "scale": 0.6, "flat": []}
+
+
+def ground_z(gx, gy):
+    """Height of the last terrain() at a game point (so paths and props can sit on it)."""
+    import math as _m
+    amp, scale, flat = TERRAIN["amp"], TERRAIN["scale"], TERRAIN["flat"]
+    z = amp * (_m.sin(gx * scale * 1.3 + 0.7) * _m.cos(gy * scale * 0.9 + 1.1) + 0.5 * _m.sin(gx * scale * 2.7 + gy * scale * 1.9))
+    for (a0, b0, a1, b1) in flat:
+        dx = max(a0 - gx, 0, gx - a1); dy = max(b0 - gy, 0, gy - b1)
+        z *= min(1.0, (dx * dx + dy * dy) ** 0.5 / 1.5)
+    return z - 0.02
+
+
+def footpath(points, width=0.6, z=0.012, wobble=0.15, seed=0):
+    """A worn trail along points (game xy): smoothed, wobbled, tapered at both ends."""
+    import bmesh as _bm
+    rr = random.Random(seed)
+    pts = [Vector((p[0], p[1])) for p in points]
+    # Catmull-Rom resample
+    dense = []
+    for i in range(len(pts) - 1):
+        p0 = pts[max(i - 1, 0)]; p1 = pts[i]; p2 = pts[i + 1]; p3 = pts[min(i + 2, len(pts) - 1)]
+        seg = max(2, int((p2 - p1).length * 4))
+        for k in range(seg):
+            t = k / seg
+            t2, t3 = t * t, t * t * t
+            dense.append(0.5 * ((2 * p1) + (-p0 + p2) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2 + (-p0 + 3 * p1 - 3 * p2 + p3) * t3))
+    dense.append(pts[-1])
+    off = 0.0
+    for i in range(len(dense)):
+        off = off * 0.85 + rr.uniform(-wobble, wobble) * 0.3
+        if 0 < i < len(dense) - 1:
+            d = (dense[i + 1] - dense[i - 1]).normalized()
+            dense[i] = dense[i] + Vector((-d.y, d.x)) * off
+    bm = _bm.new()
+    uvl = bm.loops.layers.uv.new()
+    rows = []
+    total = len(dense) - 1
+    for i, p in enumerate(dense):
+        d = (dense[min(i + 1, total)] - dense[max(i - 1, 0)]).normalized()
+        nrm = Vector((-d.y, d.x))
+        taper = min(1.0, i / 3.0, (total - i) / 3.0) * 0.6 + 0.4
+        w = width * taper * rr.uniform(0.85, 1.15) / 2
+        a = p + nrm * w; b = p - nrm * w
+        rows.append((bm.verts.new(g2b(a.x, a.y, ground_z(a.x, a.y) + z)), bm.verts.new(g2b(b.x, b.y, ground_z(b.x, b.y) + z)), i))
+    for k in range(total):
+        va, vb, i = rows[k]; vc, vd, j = rows[k + 1]
+        f = bm.faces.new((va, vc, vd, vb))
+        for loop, uvv in zip(f.loops, ((i * 0.25, 0), (j * 0.25, 0), (j * 0.25, 1), (i * 0.25, 1))):
+            loop[uvl].uv = uvv
+    me = bpy.data.meshes.new("path")
+    bm.to_mesh(me); bm.free()
+    ob = bpy.data.objects.new("path", me)
+    bpy.context.scene.collection.objects.link(ob)
+    if "m" not in _FP:
+        _FP["m"] = mat_footpath("footpath")
+    me.materials.append(_FP["m"])
+    ob.visible_shadow = False
+    return ob
+
+
+def plan_path(start, goal, blockers, rng, step=1.5):
+    """Simple desire line: wobbly polyline from start to goal that walks around blocking rectangles."""
+    pts = [start]
+    cur = Vector(start)
+    g = Vector(goal)
+    for it in range(40):
+        if (g - cur).length < step:
+            break
+        d = (g - cur).normalized()
+        nxt = cur + d * step + Vector((rng.uniform(-.3, .3), rng.uniform(-.3, .3)))
+        hit = None
+        for (a0, b0, a1, b1) in blockers:
+            if a0 - .4 < nxt.x < a1 + .4 and b0 - .4 < nxt.y < b1 + .4:
+                hit = (a0, b0, a1, b1)
+        if hit:
+            a0, b0, a1, b1 = hit
+            corners = [Vector((a0 - .8, b0 - .8)), Vector((a1 + .8, b0 - .8)), Vector((a0 - .8, b1 + .8)), Vector((a1 + .8, b1 + .8))]
+            corners.sort(key=lambda c: (c - cur).length + (g - c).length)
+            nxt = corners[0]
+        pts.append((nxt.x, nxt.y))
+        cur = nxt
+    pts.append(goal)
+    return pts

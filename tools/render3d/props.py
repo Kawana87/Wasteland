@@ -1212,3 +1212,61 @@ def scatter(x0, y0, x1, y1, density, style, rng, avoid=()):
             if r <= 0:
                 fn(x, y, rng.uniform(0, 360), random.Random(rng.random()), **kw)
                 break
+
+
+# ------------------------------------------------------------------ small furniture for small rooms
+@prop
+def pantry_shelf(x, y, rng):
+    """Narrow metal shelving with cans, jars and boxes — pantries and storage closets."""
+    m = MAT("paint:%s:0.45" % rng.choice(["#7a7e78", "#8a8a7a", "#5a6a5a"]))
+    w, d, H = 0.8, 0.32, 1.6
+    for (a, b) in ((-w / 2, -d / 2), (w / 2, -d / 2), (-w / 2, d / 2), (w / 2, d / 2)):
+        B(x + a - .015, y + b - .015, 0, x + a + .015, y + b + .015, H, m)
+    for k in range(4):
+        z = 0.12 + k * 0.45
+        B(x - w / 2, y - d / 2, z, x + w / 2, y + d / 2, z + 0.02, m)
+        xx = x - w / 2 + 0.05
+        while xx < x + w / 2 - 0.08:
+            if rng.random() < 0.6:
+                t = rng.random()
+                if t < 0.5:
+                    cyl(xx + 0.03, y + rng.uniform(-.08, .08), z + 0.02, z + 0.02 + rng.uniform(0.08, 0.14), 0.03, MAT("metal:%s" % rng.choice(["#9a9a90", "#b83a2a", "#c8a040", "#4a6a8a"])), 8)
+                elif t < 0.75:
+                    cyl(xx + 0.03, y + rng.uniform(-.08, .08), z + 0.02, z + 0.2, 0.035, MAT("flat:%s:0.2" % rng.choice(["#8a6a3a", "#5a7a4a", "#a8a088"])), 8)
+                else:
+                    B(xx, y - .1, z + .02, xx + .12, y + .1, z + rng.uniform(0.15, 0.3), MAT("flat:%s:0.9" % rng.choice(["#a08058", "#c8b890", "#8a6e4a"])))
+            xx += rng.uniform(0.07, 0.12)
+
+
+@prop
+def nightstand(x, y, rng):
+    m = wood(rng)
+    B(x - .2, y - .18, 0.05, x + .2, y + .18, 0.55, m, 0.01)
+    B(x - .17, y + .18, 0.32, x + .17, y + .19, 0.5, m)
+    legs4(x - .2, y - .18, x + .2, y + .18, 0.05, m, 0.02, 0.03)
+    if rng.random() < 0.6:
+        cyl(x - .05, y, 0.55, 0.57, 0.06, MAT("metal:#5a5a54"), 10)
+        cyl(x - .05, y, 0.57, 0.8, 0.012, MAT("metal:#8a8a84"), 6)
+        bpy_cone = FAST.primitive_cone_add(vertices=10, radius1=0.1, radius2=0.06, depth=0.12, location=g2b(x - .05, y, 0.84))
+        bpy_cone.data.materials.append(MAT("fab:#d8c8a0"))
+    else:
+        clutter_top(x, y, 0.55, rng, 0.12)
+
+
+@prop
+def side_table(x, y, rng):
+    m = wood(rng)
+    B(x - .22, y - .22, 0.5, x + .22, y + .22, 0.54, m)
+    legs4(x - .22, y - .22, x + .22, y + .22, 0.5, m, 0.018, 0.03)
+    clutter_top(x, y, 0.54, rng, 0.12)
+
+
+@prop
+def coat_rack(x, y, rng):
+    cyl(x, y, 0, 1.6, 0.02, MAT("wood:#5a3e28:#4a3220"), 6)
+    for k in range(4):
+        a = k * 1.57
+        o = B(x - .01, y - .01, 1.45, x + .18, y + .01, 1.48, MAT("wood:#5a3e28:#4a3220"))
+        rot_z(o, math.degrees(a), (x, y))
+    if rng.random() < 0.6:
+        B(x - .1, y + .02, 0.9, x + .1, y + .1, 1.45, fabric(rng))

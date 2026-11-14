@@ -13,6 +13,7 @@ uniform sampler2D road_map : filter_linear, repeat_disable;
 uniform sampler2D side_map : filter_linear, repeat_disable;
 uniform sampler2D dirt_map : filter_linear, repeat_disable;
 uniform sampler2D shade_map : filter_linear, repeat_disable;
+uniform sampler2D path_map : filter_linear, repeat_disable;
 uniform float shadow_strength = 1.0;
 
 varying vec2 wpos;
@@ -50,14 +51,20 @@ void fragment() {
 	bool floor_mat = (m >= 6.5 && m <= 10.5) || m > 13.5;
 	bool city = wpos.x >= 24.0 && wpos.y >= 24.0;
 	if (!floor_mat) {
-		float rd = texture(road_map, uv).r;
+		float rough = (vnoise(wpos * 4.0) - 0.5) * 0.4 + (vnoise(wpos * 11.0) - 0.5) * 0.2;   // ragged edges
+		float rd = texture(road_map, uv).r + rough * 0.6;
 		float sd = texture(side_map, uv).r;
-		float dd = texture(dirt_map, uv).r;
+		float dd = texture(dirt_map, uv).r + rough;
+		float pd = texture(path_map, uv).r + rough;
+		sd += rough * 0.6;
 		float edge = 0.5 + (th - 0.5) * 0.3;
 		if (rd > 0.8) {
 			base = vec3(0.78, 0.66, 0.32); m = 5.0;            // faded centre paint
 		} else if (rd > edge * 0.5) {
 			base = vec3(0.29, 0.28, 0.30); m = 5.0;            // asphalt
+			// dust blown onto the road near its edges, and drifts across it
+			float drift = clamp((0.5 - rd) * 2.2 + (vnoise(wpos * 0.6 + 3.0) - 0.62) * 2.5, 0.0, 1.0);
+			if (drift > th) { base = mix(vec3(0.46, 0.40, 0.31), vec3(0.36, 0.33, 0.30), 0.3); m = 11.0; }
 			float cr = vnoise(wpos * 3.0);
 			if (abs(cr - 0.5) < 0.02) { extra = 1.0; }          // cracks
 			float ph = hash(floor(wpos * 1.5));
@@ -74,6 +81,9 @@ void fragment() {
 			} else {
 				base = vec3(0.50, 0.46, 0.38); m = 3.0;        // gravel shoulder
 			}
+		} else if (pd > edge) {
+			base = vec3(0.58, 0.52, 0.41); m = 11.0;            // worn foot trail
+			if (hash(floor(wpos * 6.0)) < 0.06) { extra = 1.0; }
 		} else if (dd > edge) {
 			base = vec3(0.50, 0.42, 0.30); m = 11.0;            // dirt track with ruts
 			if (abs(fract(wpos.x * 1.7 + wpos.y * 1.7) - 0.5) < 0.06) { extra = 1.0; }
