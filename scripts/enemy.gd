@@ -1,10 +1,21 @@
 class_name Enemy
 extends Actor
-## Raiders, mutant hounds and rats. All share the awareness system:
+## Raiders and mutants. All share the awareness system:
 ## 0-35 unaware (wander/patrol), 35-75 suspicious "?" (go check the last noise), 75+ alert "!".
 
-var type := "hound"
-var hp := 1
+const STATS := {
+	#           hp  chase  dmg  windup sense  fears fire
+	"rat":       [2,  1.3,  1,   0.55,  0.7,   true],
+	"ghoul":     [6,  2.0,  3,   0.40,  1.15,  true],
+	"shellback": [14, 0.8,  4,   0.50,  0.9,   true],
+	"brute":     [24, 1.05, 6,   0.80,  1.0,   false],
+	"raider":    [6,  1.3,  3,   0.0,   1.0,   false],
+}
+
+var type := "ghoul"
+var hp := 6.0
+var max_hp := 6.0
+var dmg := 3
 var aw := 0.0
 var st := 0
 var head := Vector2.RIGHT
@@ -16,6 +27,7 @@ var wander_t := 0.0
 var pause := 0.0
 var wind := 0.0
 var shoot_cd := 1.5
+var charge_t := 0.0
 var strafe := 1.0
 var hit_t := 0.0
 var patrol: Array = []
@@ -25,8 +37,10 @@ var dead := false
 var seed_off := 0.0
 var walk_t := 0.0
 var walk_f := 0
+var weapon := "pipe_pistol"
 var icon: Sprite2D
 var gun: Line2D
+var hpbar := 0.0
 
 func setup(spawn: Dictionary) -> void:
 	type = spawn["type"]
@@ -37,7 +51,8 @@ func setup(spawn: Dictionary) -> void:
 	patrol = spawn.get("patrol", [])
 	pi = 1 if patrol.size() > 1 else 0
 	camp = spawn.get("camp", -1)
-	hp = 2 if type == "raider" else 1
+	var s: Array = STATS[type]
+	hp = s[0]; max_hp = s[0]; dmg = s[2]
 	seed_off = randf() * 10.0
 	shoot_cd = randf_range(1.0, 2.0)
 	strafe = 1.0 if randf() < 0.5 else -1.0
@@ -46,14 +61,22 @@ func setup(spawn: Dictionary) -> void:
 	match type:
 		"raider":
 			make_body("raider", 6, 16, 24)
+			weapon = ["pipe_pistol", "pipe_pistol", "pistol_10mm", "shotgun"][randi_range(0, 3)]
 			gun = Line2D.new()
 			gun.width = 1.0
 			gun.default_color = Color("2a2a2a")
 			gun.antialiased = false
 			add_child(gun)
-		"hound":
-			make_body("hound", 2, 16, 10)
-			shadow_w = 12
+		"ghoul":
+			make_body("ghoul", 6, 16, 24)
+		"brute":
+			make_body("brute", 4, 20, 26)
+			shadow_w = 14
+			radius = 0.35
+		"shellback":
+			make_body("shellback", 2, 22, 11)
+			shadow_w = 18
+			radius = 0.38
 		"rat":
 			make_body("rat", 2, 8, 6)
 			shadow_w = 6
@@ -63,32 +86,38 @@ func setup(spawn: Dictionary) -> void:
 	icon.visible = false
 	add_child(icon)
 
+func fears_fire() -> bool:
+	return STATS[type][5]
+
 func hear(at: Vector2, rad: float, amt: float) -> void:
-	var r := rad * (1.3 if type == "hound" else 1.0)
+	var r: float = rad * STATS[type][4]
 	var d := wpos.distance_to(at)
 	if d < r:
 		aw = minf(100.0, aw + amt * (1.0 - 0.6 * d / r))
 		last = at + Vector2(randf_range(-0.8, 0.8), randf_range(-0.8, 0.8))
 
-func damage(n: int, from: Vector2) -> void:
+func damage(n: float, from: Vector2) -> void:
+	if type == "shellback" and n < 6.0:
+		n *= 0.5          # the shell shrugs off small arms; rifles and big hits get through
 	hp -= n
 	aw = 100.0
 	last = from
 	hit_t = 0.15
-	if hp <= 0:
+	hpbar = 2.0
+	if hp <= 0.0:
 		Game.I.kill_enemy(self, false)
 	else:
-		Game.I.burst(wpos, 4, [Color("a83a2a")], 9.0)
-		Game.I.sfx("hit")
+		Game.I.burst(wpos, 4, [Color("a83a2a") if type != "shellback" else Color("8a6a4a")], 9.0, fl)
+		queue_redraw()
 
-func think(delta: float, p: Player, p_at_camp: bool) -> void:
+func think(delta: float, p: Player, p_safe: bool) -> void:
 	var g := Game.I
 	var w := world()
 	var to_p := p.wpos - wpos
 	var d := to_p.length()
 	var same := (building() == p.building() and fl == p.fl) or (d < 2.2 and fl == p.fl)
 	same = same and g.state == "play" and p.climb.is_empty()
-	var k := 1.35 if type == "hound" else (0.7 if type == "rat" else 1.0)
+	var k: float = STATS[type][4]
 	var gain := 0.0
 	if same:
 		if p.crouch:
@@ -106,35 +135,53 @@ func think(delta: float, p: Player, p_at_camp: bool) -> void:
 		last = p.wpos
 	st = 2 if aw >= 75.0 else (1 if aw >= 35.0 else 0)
 	hit_t -= delta
+	hpbar -= delta
 	var tgt := wpos
 	var sp := 0.0
-	var wob := 0.12 if type == "raider" else 0.4
+	var wob := 0.12 if type == "raider" or type == "brute" else 0.35
 	var fire_camp = g.camp_near(wpos, 4.0)
-	if type != "raider" and st > 0 and (fire_camp != null or (p_at_camp and st == 2)):
-		# mutants won't go near a campfire
-		var c = fire_camp if fire_camp != null else g.camp_near(p.wpos, 3.2)
-		tgt = wpos + (wpos - c.wpos) * 2.0
+	var si := w.settlement_at(wpos, 2.0)
+	if (fears_fire() and st > 0 and (fire_camp != null or (p_safe and st == 2))) or si >= 0:
+		# mutants keep away from campfires; nobody fights inside a settlement
+		var away: Vector2 = wpos - (fire_camp.wpos if fire_camp != null else p.wpos)
+		if si >= 0:
+			away = wpos - w.settlements[si].pos
+		tgt = wpos + away.normalized() * 3.0
 		sp = 1.4
 		aw = minf(aw, 70.0)
 	elif st == 2:
-		if type == "raider":
-			if d > 6.5:
-				tgt = p.wpos; sp = 1.3
-			elif d < 3.2:
-				tgt = wpos - to_p; sp = 1.1
-			else:
-				tgt = wpos + Vector2(-to_p.y, to_p.x) * strafe; sp = 0.9
-				if randf() < delta * 0.4: strafe = -strafe
-			shoot_cd -= delta
-			if shoot_cd <= 0.0 and d < 9.5:
-				if fl == p.fl and w.los(wpos, p.wpos, fl):
-					g.enemy_shoot(self, p.wpos)
-				shoot_cd = randf_range(1.0, 1.7)
-		else:
-			tgt = p.wpos
-			sp = 1.9 if type == "hound" else 1.3
-			if d < 0.7 and wind <= 0.0 and p.inv <= 0.0:
-				wind = 0.45 if type == "hound" else 0.55
+		match type:
+			"raider":
+				if d > 6.5:
+					tgt = p.wpos; sp = 1.3
+				elif d < 3.2:
+					tgt = wpos - to_p; sp = 1.1
+				else:
+					tgt = wpos + Vector2(-to_p.y, to_p.x) * strafe; sp = 0.9
+					if randf() < delta * 0.4: strafe = -strafe
+				shoot_cd -= delta
+				if shoot_cd <= 0.0 and d < 9.5:
+					if fl == p.fl and w.los(wpos, p.wpos, fl):
+						g.enemy_shoot(self, p.wpos, weapon)
+					shoot_cd = randf_range(1.0, 1.7) * (1.3 if weapon == "shotgun" else 1.0)
+			"brute":
+				tgt = p.wpos; sp = 1.05
+				shoot_cd -= delta
+				if shoot_cd <= 0.0 and d > 3.0 and d < 8.0 and fl == p.fl and w.los(wpos, p.wpos, fl):
+					g.throw_rock(self, p.wpos)
+					shoot_cd = randf_range(3.0, 4.5)
+				if d < 0.9 and wind <= 0.0 and p.inv <= 0.0: wind = STATS[type][3]
+			"shellback":
+				tgt = p.wpos; sp = STATS[type][1]
+				shoot_cd -= delta
+				if charge_t > 0.0:
+					charge_t -= delta; sp = 2.9
+				elif shoot_cd <= 0.0 and d > 1.5 and d < 5.0:
+					charge_t = 0.9; shoot_cd = randf_range(3.0, 4.0)
+				if d < 0.85 and wind <= 0.0 and p.inv <= 0.0: wind = STATS[type][3]
+			_:
+				tgt = p.wpos; sp = STATS[type][1]
+				if d < 0.75 and wind <= 0.0 and p.inv <= 0.0: wind = STATS[type][3]
 	elif st == 1 and wpos.distance_to(last) > 0.5:
 		tgt = last
 		sp = 0.6 if type == "rat" else 0.9
@@ -154,8 +201,8 @@ func think(delta: float, p: Player, p_at_camp: bool) -> void:
 	if wind > 0.0:
 		wind -= delta
 		sp = 0.0
-		if wind <= 0.0 and d < 0.95:
-			g.hurt_player(wpos)
+		if wind <= 0.0 and d < (1.2 if type == "brute" else 0.95):
+			g.hurt_player(wpos, dmg)
 	if type != "raider" or st < 2:
 		pause -= delta
 		if pause <= 0.0 and randf() < delta * 0.35:
@@ -170,28 +217,27 @@ func think(delta: float, p: Player, p_at_camp: bool) -> void:
 		if not move(head * sp * delta) and patrol.size() > 0:
 			pi = (pi + 1) % patrol.size()
 		walk_t += delta
-		if walk_t > (0.12 if type == "hound" else 0.25):
+		if walk_t > (0.14 if sp > 1.5 else 0.25):
 			walk_t = 0.0
 			walk_f ^= 1
 	_visual(p)
 
 func _visual(p: Player) -> void:
 	var sd := Vector2(head.x - head.y, (head.x + head.y) * 0.5)   # heading on screen
-	if type == "raider":
-		var a := sd
-		if st == 2:
-			var t := p.wpos - wpos
-			a = Vector2(t.x - t.y, (t.x + t.y) * 0.5)
-		a = a.normalized() if a.length() > 0.01 else Vector2(0, 1)
-		body.frame = (2 if a.y < -0.3 else 0) + walk_f
-		body.flip_h = a.x < 0
-		var base := Vector2(0, -9)
-		gun.points = PackedVector2Array([(base + a * 2).round(), (base + a * 7).round()])
+	if st == 2:
+		var t := p.wpos - wpos
+		sd = Vector2(t.x - t.y, (t.x + t.y) * 0.5)
+	sd = sd.normalized() if sd.length() > 0.01 else Vector2(0, 1)
+	if type in ["raider", "ghoul", "brute"]:
+		body.frame = (2 if sd.y < -0.3 else 0) + walk_f
 	else:
 		body.frame = walk_f
-		body.flip_h = sd.x < 0
+	body.flip_h = sd.x < 0
+	if gun:
+		var base := Vector2(0, -9)
+		gun.points = PackedVector2Array([(base + sd * 2).round(), (base + sd * (7 if weapon == "shotgun" else 6)).round()])
 	body.position.x = (1 if hit_t > 0.0 else 0) + (round(sin(Game.I.time * 40.0)) if wind > 0.0 else 0)
-	var top := -26 if type == "raider" else (-16 if type == "hound" else -11)
+	var top: int = {"raider": -26, "ghoul": -26, "brute": -32, "shellback": -15, "rat": -11}[type]
 	if st == 2:
 		icon.texture = Assets.tex("icon_alert"); icon.visible = true; icon.position = Vector2(-1, top)
 	elif st == 1:
@@ -199,3 +245,10 @@ func _visual(p: Player) -> void:
 	else:
 		icon.visible = false
 	sync()
+
+func _draw() -> void:
+	draw_rect(Rect2(-shadow_w * 0.5, -1, shadow_w, 2), Color(0, 0, 0, 0.35))
+	if hpbar > 0.0 and hp < max_hp:
+		var top: float = {"raider": -29, "ghoul": -29, "brute": -35, "shellback": -18, "rat": -14}[type]
+		draw_rect(Rect2(-6, top, 12, 2), Color(0.1, 0.05, 0.05, 0.8))
+		draw_rect(Rect2(-6, top, 12.0 * hp / max_hp, 2), Color("c84a3a"))

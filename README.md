@@ -32,19 +32,23 @@ The first open takes a moment while Godot imports the sprites.
 | Sneak (toggle) | C | Y | SNEAK |
 | Use / chop / climb / stairs | E | X | USE |
 | Camp menu | B | Back | CAMP |
-| Fast travel | T | Start | (from the camp menu) |
+| Inventory / gear | I or Tab | Start | INV |
+| Quick heal (med kit, then food) | H | LB | HEAL |
+| Fast travel | T | | (from the camp menu) |
 | CRT filter | V | | CRT button |
 
-## What's in Milestone 1
+## What's in the game so far
 
-- **New world every start:** sloped hills and cliffs in the west, a flat ruined city in the east, roads, cars, forests.
-- **Buildings with thin walls and up to two floors:** walk in and the roof lifts, the front walls drop and floors above disappear. Use the stairs with E.
+- **New world every start:** sloped hills and cliffs in the west, a ruined city in the east. Highways, streets and dirt tracks wind and curve, with wrecked cars at every angle, power lines, jersey barriers and roadside junk.
+- **Wasteland feel:** rubble, toxic spills, dead bushes, bones, crows that scatter when you get close, drifting dust, a washed-out colour grade and a day/night cycle (8 minutes per day).
+- **Buildings:** houses, shops, offices, garages and shacks with furnished interiors (kitchens, beds, shelves, desks, counters). Some are ruined with collapsed corners. Pitched or flat roofs. Second floors show from outside. Buildings and trees go see-through when you walk behind them.
+- **Settlements:** friendly tin-shack villages with a campfire, gardens, a water pump, settlers, cattle and a trader. Pay the trader in scrap for guns, armour, ammo and med kits, or sell spare gear.
+- **Inventory and gear:** guns (pipe pistol, 10mm, SMG, shotgun, hunting rifle), melee weapons, head and body armour, ammo types, med kits and food. Every container rolls its own loot: fridges hold food, medicine cabinets hold med kits, gun lockers hold guns.
+- **Creatures:** fewer of them, but tougher. Ghouls lurk in ruins. Brutes throw rocks and hit hard. Shellbacks guard toxic spills and shrug off weak hits. Rats live indoors. Raiders carry real guns and drop them.
 - **Raider camps on plateaus:** walk up the ramp or climb the rope round the back. Clear them out for their stash.
-- **Threats:** raiders (keep distance, strafe, shoot), patrols on the roads, mutant hound packs (fast, scared of campfires), rats indoors.
-- **Awareness system:** `?` = suspicious, `!` = hunting you. Closeness, searching and gunfire make noise. Sneak to get close; melee an unaware enemy for a silent takedown.
-- **Looting and chopping:** crates, car trunks, raider bags and stashes; chop trees (3 swings) for wood.
-- **Camps:** set up to 4 camps anywhere (4 wood + 2 scrap), one shared stash, per-camp upgrades (shelter, workbench, garden, watchtower), make any camp your main camp, pack camps up, **fast travel** between them when nothing is hunting you. Going down sends you to the nearest camp.
-- **Survivors** hiding in city buildings you can recruit; they bring back scrap and wood.
+- **Awareness system:** `?` = suspicious, `!` = hunting you. Closeness, searching and gunfire make noise. Sneak to get close, then melee an unaware enemy for a silent takedown (brutes take triple damage instead).
+- **Camps:** set up to 4 camps anywhere (4 wood + 2 scrap). They share one stash and have per-camp upgrades. Fast travel between them when nothing is hunting you. Going down sends you to the nearest camp.
+- **Survivors** hide in city buildings. Recruit them and they bring back scrap and wood.
 - Optional **CRT filter**, saved between sessions.
 
 ## Project layout
@@ -57,10 +61,13 @@ scripts/
   world.gd             Map data + procedural generation + collision / line of sight
   terrain_mesh.gd      Builds the sloped ground mesh (lighting per triangle)
   building_view.gd     Wall/roof/floor sprites for a building + the cutaway logic
+  items.gd             Item database: guns, melee, armour, ammo, consumables, loot tables
+  npc.gd               Friendly settlers, traders, wanderers, cattle, crows
   actor.gd, player.gd, enemy.gd, dog.gd, camp.gd
   hud.gd, touch_controls.gd, fx_layer.gd, iso.gd, assets.gd
 shaders/terrain.gdshader   Dithered pixel-art terrain shading
 shaders/crt.gdshader       Optional CRT effect
+shaders/grade.gdshader     Wasteland colour grade + day/night
 assets/sprites/        Generated placeholder sprites
 tools/make_assets.py   Regenerates the sprites (python3 tools/make_assets.py, needs Pillow)
 ```
@@ -69,5 +76,5 @@ To swap in real art later, replace PNGs in `assets/sprites/` keeping the same na
 
 ## Next up (Milestone 2+)
 
-Save/load and sleeping, day/night, more weapons and crafting stations, skills + Grit, survivor roles and missions,
-settlements (friendly / traders), overpasses, bridges and rivers, sound and music.
+Save/load and sleeping, weapon mods and crafting stations, skills + Grit, survivor roles and missions,
+quests from settlers, overpasses, bridges and rivers, sound and music.

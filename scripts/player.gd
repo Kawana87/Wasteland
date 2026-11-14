@@ -2,9 +2,9 @@ class_name Player
 extends Actor
 ## The player character: movement, aiming, shooting, melee, sneaking, jumping, climbing.
 
-var hp := 5
-var max_hp := 5
-var ammo := 18
+var hp := 20.0
+var max_hp := 20.0
+var gun_len := 6
 var aim := Vector2(0, 1)       # screen-space aim direction
 var cd := 0.0
 var mcd := 0.0
@@ -79,7 +79,7 @@ func _visual() -> void:
 	body.visible = not (inv > 0.0 and int(Time.get_ticks_msec() / 80) % 2 == 0)
 	var base := Vector2(0, -9 + (3 if crouch else 0) - round(jz))
 	gun.visible = climb.is_empty()
-	gun.points = PackedVector2Array([(base + aim * 2).round(), (base + aim * 7).round()])
+	gun.points = PackedVector2Array([(base + aim * 2).round(), (base + aim * (1 + gun_len)).round()])
 	if swing > 0.0:
 		var pts := PackedVector2Array()
 		var a0 := aim.angle()

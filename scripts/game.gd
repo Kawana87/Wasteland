@@ -47,6 +47,19 @@ var income_t := 0.0
 var using_touch := false
 var _last_pb := -1
 var _last_pfl := -1
+var npcs: Array = []
+var furn_nodes := {}             # Furn -> Sprite2D
+var decor_nodes: Array = []      # [Decor, Sprite2D]
+var smoke_spots: Array = []      # Vector2 world positions that puff smoke
+var faded_trees := {}
+var inventory: Array = []        # [{id, n}]
+var equip := {"gun": "pipe_pistol", "melee": "fists", "head": "", "body": ""}
+var day_t := 0.3                 # 0..1 time of day (0.25 = morning)
+var grade: ShaderMaterial
+var noise_level := 0.0
+var in_settlement := -1
+var dust: Array = []
+var rng := RandomNumberGenerator.new()
 
 # ------------------------------------------------------------------ setup
 func _ready() -> void:
@@ -71,6 +84,16 @@ func _ready() -> void:
 	bgr.set_anchors_preset(Control.PRESET_FULL_RECT)
 	bg.add_child(bgr)
 	vp.add_child(bg)
+	var gl := CanvasLayer.new()
+	gl.layer = 1
+	var gr := ColorRect.new()
+	gr.set_anchors_preset(Control.PRESET_FULL_RECT)
+	gr.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	grade = ShaderMaterial.new()
+	grade.shader = load("res://shaders/grade.gdshader")
+	gr.material = grade
+	gl.add_child(gr)
+	vp.add_child(gl)
 	var crt_layer := CanvasLayer.new()
 	crt_layer.layer = 2
 	add_child(crt_layer)
@@ -95,15 +118,15 @@ func _ready() -> void:
 		if "--soak" in args:
 			_debug_soak.call_deferred()
 		return
-	hud.show_title("A new world is generated every time: rolling hills and cliffs out west, a ruined city to the east.\nRaiders hold camps on top of plateaus — walk up the ramp, or climb the rope round the back.\nMutant hounds hunt in packs, but fear campfires. Set up camps anywhere and fast travel between them.\n\nPC: WASD move · mouse aim · left click shoot · F / right click melee · Space jump · C sneak\nE use / chop / climb / stairs · B camp menu · T fast travel · V CRT filter\nGamepad: left stick move · right stick aim · RT shoot · A jump · X use · B melee · Y sneak\nTouch: left thumb move · right thumb aim and shoot · buttons on the right", start_new_world)
+	hud.show_title("A new world is generated every time: rolling hills and cliffs out west, a ruined city to the east.\nRaiders hold plateau camps; feral ghouls haunt the ruins; brutes and shellbacks roam the wilds.\nFriendly settlements trade gear for scrap. Set up camps anywhere and fast travel between them.\n\nPC: WASD move · mouse aim · left click shoot · F / right click melee · Space jump · C sneak\nE use / talk / chop / climb / stairs · I inventory · H heal · B camp menu · T fast travel · V CRT filter\nGamepad: left stick move · right stick aim · RT shoot · A jump · X use · B melee · Y sneak\nTouch: left thumb move · right thumb aim and shoot · buttons on the right", start_new_world)
 
 func _setup_input() -> void:
 	var keys := {
 		"up": [KEY_W, KEY_UP], "down": [KEY_S, KEY_DOWN], "left": [KEY_A, KEY_LEFT], "right": [KEY_D, KEY_RIGHT],
 		"jump": [KEY_SPACE], "melee": [KEY_F], "use": [KEY_E], "sneak": [KEY_C], "camp": [KEY_B],
-		"travel": [KEY_T], "crt": [KEY_V], "close": [KEY_ESCAPE],
+		"travel": [KEY_T], "crt": [KEY_V], "close": [KEY_ESCAPE], "inventory": [KEY_I, KEY_TAB], "heal": [KEY_H],
 	}
-	var pads := {"jump": JOY_BUTTON_A, "use": JOY_BUTTON_X, "melee": JOY_BUTTON_B, "sneak": JOY_BUTTON_Y, "camp": JOY_BUTTON_BACK, "travel": JOY_BUTTON_START}
+	var pads := {"jump": JOY_BUTTON_A, "use": JOY_BUTTON_X, "melee": JOY_BUTTON_B, "sneak": JOY_BUTTON_Y, "camp": JOY_BUTTON_BACK, "inventory": JOY_BUTTON_START, "heal": JOY_BUTTON_LEFT_SHOULDER}
 	for a in keys:
 		if not InputMap.has_action(a):
 			InputMap.add_action(a)
@@ -121,7 +144,12 @@ func start_new_world() -> void:
 		if c is Node2D:
 			c.queue_free()
 	enemies.clear(); camps.clear(); survivors.clear(); views.clear(); bullets.clear(); particles.clear()
-	crate_nodes.clear(); tree_nodes.clear(); chop_hits.clear()
+	crate_nodes.clear(); tree_nodes.clear(); chop_hits.clear(); npcs.clear(); furn_nodes.clear(); decor_nodes.clear()
+	smoke_spots.clear(); faded_trees.clear(); dust.clear()
+	inventory = [{"id": "pipe_pistol", "n": 1}, {"id": "ammo_pistol", "n": 18}, {"id": "medkit", "n": 1}, {"id": "food", "n": 2}]
+	equip = {"gun": "pipe_pistol", "melee": "fists", "head": "", "body": ""}
+	day_t = 0.3
+	rng.randomize()
 	for f in floaters: f.label.queue_free()
 	floaters.clear()
 	stash = {"scrap": 0, "cloth": 0, "wood": 0}
@@ -150,6 +178,10 @@ func start_new_world() -> void:
 	dog.wpos = player.wpos + Vector2(-1, 0)
 	for s in world.spawns:
 		_spawn_enemy(s)
+	for d in world.critters:
+		_spawn_npc(d)
+	var wps := [world.road_point(), world.road_point(), world.road_point(), world.road_point()]
+	_spawn_npc({"type": "wanderer", "pos": wps[0], "patrol": wps})
 	for s in world.survivors:
 		var a := Actor.new()
 		root.add_child(a)
@@ -169,7 +201,14 @@ func start_new_world() -> void:
 	time = 0.0; spawn_t = 0.0; patrol_t = 0.0; income_t = 0.0
 	_last_pb = -1
 	state = "play"
-	hud.toast("Hills to the west, a ruined city to the east. Raiders hold the plateaus — and hounds roam the wilds.")
+	hud.toast("Hills to the west, a ruined city to the east. Find a settlement to trade — and press I for your inventory.")
+
+func _spawn_npc(d: Dictionary) -> Npc:
+	var n := Npc.new()
+	root.add_child(n)
+	n.setup(d)
+	npcs.append(n)
+	return n
 
 func _spawn_enemy(s: Dictionary) -> Enemy:
 	var e := Enemy.new()
@@ -198,9 +237,66 @@ func _spawn_props() -> void:
 				var p := Vector2(x + 0.5, y + 0.5)
 				tree_nodes[w.idx(x, y)] = _sprite(tex, p, w.hz(p.x, p.y), Vector2(-12, -36))
 	for c in w.cars:
-		_sprite("car_%s_%s" % [c.spr, c.axis], c.pos, w.hz(c.pos.x, c.pos.y), Vector2(-40, -30))
+		_sprite("car_%s_%d" % [c.spr, c.k], c.pos, w.hz(c.pos.x, c.pos.y), Vector2(-40, -34))
+	for b in w.buildings:
+		for f in b.furn:
+			var s := _sprite("furn_%s_%s" % [f.name, f.orient], f.pos, w.stand_z(f.pos.x, f.pos.y, f.fl), Vector2(-24, -40))
+			s.z_index = Iso.z_for(f.pos.x + f.pos.y, 3 + f.fl * 2)
+			furn_nodes[f] = s
+	for d in w.decor:
+		var z := w.stand_z(d.pos.x, d.pos.y, 0)
+		var s: Sprite2D
+		match d.name:
+			"campfire_decor":
+				s = _sprite("campfire0", d.pos, z, Vector2(-8, -16))
+				smoke_spots.append(d.pos)
+				s.set_meta("anim", true)
+			"stall": s = _sprite("furn_shopcounter_a", d.pos, z, Vector2(-24, -40))
+			"tower_decor": s = _sprite("tower", d.pos, z, Vector2(-12, -48))
+			"pump": s = _sprite("pump", d.pos, z, Vector2(-6, -29))
+			"garden":
+				s = _sprite("garden", d.pos, w.vh(int(d.pos.x), int(d.pos.y)), Vector2(-16, 0))
+				s.z_index = -3000
+			_:
+				var tex := Assets.tex(d.name)
+				var off := Vector2(-tex.get_width() * 0.5, -tex.get_height() + 4)
+				match d.name:
+					"rubble0", "rubble1", "rubble2", "bricks", "trashbag", "tire", "fence", "jersey_x", "jersey_y": off = Vector2(-20, -22) if not d.name.begins_with("jersey") else Vector2(-22, -22)
+					"barrel_rust", "barrel_toxic": off = Vector2(-10, -20)
+					"papers": off = Vector2(-16, -10)
+					"puddle_toxic": off = Vector2(-16, -8)
+					"cart": off = Vector2(-16, -22)
+					"bones": off = Vector2(-12, -12)
+					"sign_rad": off = Vector2(-11, -30)
+					"deadbush": off = Vector2(-12, -15)
+				if d.name.begins_with("tuft"): off = Vector2(-4, -7)
+				s = _sprite(d.name, d.pos, z, off)
+				if d.flat:
+					s.z_index = -3000 if d.name.begins_with("tuft") or d.name == "puddle_toxic" else Iso.z_for(d.pos.x + d.pos.y - 0.6, 0)
+		decor_nodes.append([d, s])
+	for line in w.pole_lines:
+		var tops := []
+		for p in line:
+			var z := w.hz(p.x, p.y)
+			_sprite("pole", p, z, Vector2(-4, -60))
+			tops.append(Iso.to_screen(p.x, p.y, z) + Vector2(0, -55))
+		for i in range(tops.size() - 1):
+			for side in [-4.0, 4.0]:
+				var l := Line2D.new()
+				l.width = 1.0
+				l.default_color = Color("2a2420")
+				l.antialiased = false
+				var a: Vector2 = tops[i] + Vector2(side, 0)
+				var bb: Vector2 = tops[i + 1] + Vector2(side, 0)
+				var pts := PackedVector2Array()
+				for k in 9:
+					var t := k / 8.0
+					pts.append((a.lerp(bb, t) + Vector2(0, sin(t * PI) * 6.0)).round())
+				l.points = pts
+				l.z_index = Iso.z_for(line[i].x + line[i].y + 1.0, 8)
+				root.add_child(l)
 	for cr in w.crates:
-		if cr.kind == "car":
+		if cr.kind != "crate" and cr.kind != "cache":
 			continue
 		var z := w.stand_z(cr.pos.x, cr.pos.y, cr.fl)
 		var s := _sprite(cr.kind, cr.pos, z, Vector2(-8, -12), 0.1)
@@ -278,10 +374,11 @@ func burst(p: Vector2, n: int, cols: Array, z: float, fl: int = 0) -> void:
 	for i in n:
 		particles.append({"pos": p, "z": z, "gz": gz, "vel": Vector2(randf_range(-2, 2), randf_range(-2, 2)), "vz": randf_range(10, 40), "col": cols[i % cols.size()], "life": randf_range(0.3, 0.8)})
 
-func add_text(p: Vector2, txt: String, col: Color = Color("f2e6c8")) -> void:
-	floaters.append({"pos": p, "z": 18.0, "t": 1.4, "label": hud.float_text(txt, col)})
+func add_text(p: Vector2, txt: String, col: Color = Color("f2e6c8"), dur: float = 1.6) -> void:
+	floaters.append({"pos": p, "z": 18.0, "t": dur, "label": hud.float_text(txt, col)})
 
 func noise(at: Vector2, rad: float, amt: float) -> void:
+	noise_level = maxf(noise_level, amt / 70.0)
 	for e in enemies:
 		if not e.dead:
 			e.hear(at, rad, amt)
@@ -292,8 +389,151 @@ func to_hud(px: Vector2) -> Vector2:
 	return (px - cam.get_screen_center_position() + vs * 0.5) * SHRINK
 
 func recalc_max() -> void:
-	player.max_hp = 5 + (1 if any_up("tent") else 0)
-	player.hp = mini(player.hp, player.max_hp)
+	player.max_hp = 20 + (4 if any_up("tent") else 0)
+	player.hp = minf(player.hp, player.max_hp)
+
+# ------------------------------------------------------------------ inventory
+func inv_count(id: String) -> int:
+	for it in inventory:
+		if it.id == id: return it.n
+	return 0
+
+func inv_add(id: String, n: int = 1) -> void:
+	if id == "": return
+	for it in inventory:
+		if it.id == id:
+			it.n += n
+			return
+	inventory.append({"id": id, "n": n})
+
+func inv_take(id: String, n: int = 1) -> bool:
+	for it in inventory:
+		if it.id == id and it.n >= n:
+			it.n -= n
+			if it.n <= 0: inventory.erase(it)
+			return true
+	return false
+
+func armor_total() -> int:
+	var a := 0
+	for slot in ["head", "body"]:
+		if equip[slot] != "": a += Items.info(equip[slot]).get("armor", 0)
+	return a
+
+func gun_info() -> Dictionary:
+	return Items.info(equip.gun) if equip.gun != "" else {}
+
+func equip_item(id: String) -> void:
+	var slot: String = Items.info(id).slot
+	if slot in ["gun", "melee", "head", "body"]:
+		equip[slot] = id
+		hud.toast("Equipped %s." % Items.iname(id))
+		_refresh_gun()
+	open_inventory()
+
+func use_item(id: String) -> void:
+	var d := Items.info(id)
+	if d.get("heal", 0) > 0 and player.hp < player.max_hp and inv_take(id):
+		player.hp = minf(player.max_hp, player.hp + d.heal)
+		add_text(player.wpos, "+%d hp" % d.heal, Color("9fd08a"))
+	if hud.menu_open(): open_inventory()
+
+func quick_heal() -> void:
+	if player.hp >= player.max_hp: return
+	if inv_count("medkit") > 0 and player.max_hp - player.hp >= 8: use_item("medkit")
+	elif inv_count("food") > 0: use_item("food")
+	elif inv_count("medkit") > 0: use_item("medkit")
+	else: hud.toast("Nothing to heal with. Look for food and med kits.")
+
+func _refresh_gun() -> void:
+	var g := gun_info()
+	player.gun_len = g.get("len", 6) if not g.is_empty() else 0
+
+func open_inventory() -> void:
+	if state != "play": return
+	var lines := ["HP %d/%d   ·   Armour %d (%d%% less damage)" % [int(player.hp), int(player.max_hp), armor_total(), int(_reduction() * 100)],
+		"Gun: %s   ·   Melee: %s   ·   Head: %s   ·   Body: %s" % [Items.iname(equip.gun) if equip.gun != "" else "none", Items.iname(equip.melee), Items.iname(equip.head) if equip.head != "" else "none", Items.iname(equip.body) if equip.body != "" else "none"],
+		"Carrying: %d scrap · %d cloth · %d wood" % [player.carry.scrap, player.carry.cloth, player.carry.wood]]
+	var ammo_line := []
+	var btns := []
+	for it in inventory:
+		var d := Items.info(it.id)
+		var nm: String = d.get("name", it.id)
+		match d.get("slot", ""):
+			"ammo": ammo_line.append("%s ×%d" % [nm, it.n])
+			"use":
+				var iid: String = it.id
+				btns.append(["Use %s ×%d  (+%d hp)" % [nm, it.n, d.heal], func(): use_item(iid), player.hp >= player.max_hp])
+			"gun", "melee", "head", "body":
+				var iid: String = it.id
+				var on: bool = equip[d.slot] == iid
+				var stat := ("dmg %d · %s" % [d.dmg * d.get("pellets", 1), Items.iname(d.ammo)]) if d.slot == "gun" else (("dmg %d" % d.dmg) if d.slot == "melee" else ("armour %d" % d.armor))
+				btns.append([("✓ " if on else "Equip ") + "%s  (%s)" % [nm, stat], func(): equip_item(iid), on])
+	if ammo_line.size(): lines.append("Ammo: " + "  ·  ".join(ammo_line))
+	if equip.melee != "fists":
+		btns.append(["Put away melee weapon (fists)", func(): equip_item("fists"), false])
+	btns.append(["Close", hud.hide_menu, false])
+	hud.show_menu("Inventory", lines, btns)
+
+func _reduction() -> float:
+	return minf(0.6, armor_total() * 0.07)
+
+# ------------------------------------------------------------------ trading
+const SHOP := [["ammo_pistol", 10, 3], ["ammo_shell", 6, 4], ["ammo_rifle", 5, 5], ["medkit", 1, 6], ["food", 2, 2]]
+
+func _buy(npc: Npc, id: String, n: int, cost: int) -> void:
+	if _pay(cost): inv_add(id, n)
+	open_trade(npc)
+
+func _buy_stock(npc: Npc, i: int, cost: int) -> void:
+	var stock: Array = npc.get_meta("stock")
+	if _pay(cost):
+		inv_add(stock[i])
+		stock[i] = ""
+	open_trade(npc)
+
+func _sell(npc: Npc, id: String, val: int) -> void:
+	if inv_take(id): player.carry.scrap += val
+	open_trade(npc)
+
+func _scrap_total() -> int:
+	return player.carry.scrap + stash.scrap
+
+func _pay(n: int) -> bool:
+	if _scrap_total() < n: return false
+	var from_carry := mini(n, player.carry.scrap)
+	player.carry.scrap -= from_carry
+	stash.scrap -= n - from_carry
+	return true
+
+func open_trade(npc: Npc) -> void:
+	if not npc.has_meta("stock"):
+		var stock := []
+		for t in 3:
+			stock.append(Items.gear_of_tier(rng.randi_range(1, 3), rng))
+		npc.set_meta("stock", stock)
+	var stock: Array = npc.get_meta("stock")
+	var lines := ["You have %d scrap (carried %d + stash %d)." % [_scrap_total(), player.carry.scrap, stash.scrap], "Buy:"]
+	var btns := []
+	for e in SHOP:
+		var id: String = e[0]
+		var n: int = e[1]
+		var cost: int = e[2]
+		btns.append(["Buy %s ×%d — %d scrap" % [Items.iname(id), n, cost], func(): _buy(npc, id, n, cost), _scrap_total() < cost])
+	for i in stock.size():
+		var id: String = stock[i]
+		if id == "": continue
+		var cost: int = Items.info(id).value
+		var ii := i
+		btns.append(["Buy %s — %d scrap" % [Items.iname(id), cost], func(): _buy_stock(npc, ii, cost), _scrap_total() < cost])
+	for it in inventory:
+		var d := Items.info(it.id)
+		if d.get("slot", "") in ["gun", "melee", "head", "body"] and it.id != equip[d.slot]:
+			var id: String = it.id
+			var val: int = maxi(1, int(d.value / 2))
+			btns.append(["Sell %s — +%d scrap" % [d.name, val], func(): _sell(npc, id, val), false])
+	btns.append(["Leave", hud.hide_menu, false])
+	hud.show_menu("Trader" if npc.type == "trader" else "Travelling merchant", lines, btns)
 
 # ------------------------------------------------------------------ input
 func _unhandled_input(ev: InputEvent) -> void:
@@ -303,8 +543,10 @@ func _unhandled_input(ev: InputEvent) -> void:
 		using_touch = false
 	if ev.is_action_pressed("crt"):
 		toggle_crt()
-	if ev.is_action_pressed("close") and hud.menu_open():
+	if hud.menu_open() and (ev.is_action_pressed("close") or ev.is_action_pressed("inventory")):
 		hud.hide_menu()
+		get_viewport().set_input_as_handled()
+		return
 	if state != "play" or hud.menu_open():
 		return
 	if ev.is_action_pressed("use"): interact()
@@ -313,6 +555,8 @@ func _unhandled_input(ev: InputEvent) -> void:
 	elif ev.is_action_pressed("sneak"): toggle_sneak()
 	elif ev.is_action_pressed("camp"): open_camp_menu()
 	elif ev.is_action_pressed("travel"): open_travel_menu()
+	elif ev.is_action_pressed("inventory"): open_inventory()
+	elif ev.is_action_pressed("heal"): quick_heal()
 	elif ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_RIGHT and ev.device != InputEvent.DEVICE_ID_EMULATION:
 		melee()
 
@@ -326,6 +570,8 @@ func _on_touch_action(n: String) -> void:
 		"jump": player.start_jump()
 		"sneak": toggle_sneak()
 		"camp": open_camp_menu()
+		"inv": open_inventory()
+		"heal": quick_heal()
 
 func _read_move() -> Vector2:
 	var v := Vector2(Input.get_action_strength("right") - Input.get_action_strength("left"), Input.get_action_strength("down") - Input.get_action_strength("up"))
@@ -384,6 +630,11 @@ func find_target() -> Dictionary:
 				if not world.in_bounds(xx, yy) or world.T[world.idx(xx, yy)] != World.TREE: continue
 				var d := p.wpos.distance_to(Vector2(xx + 0.5, yy + 0.5))
 				if d < 1.1 and d < bd: bd = d; best = {"k": "tree", "x": xx, "y": yy}
+	if p.fl == 0:
+		for n in npcs:
+			if n.type in ["trader", "wanderer", "settler"] and n.visible:
+				var d: float = p.wpos.distance_to(n.wpos)
+				if d < 1.4 and d < bd: bd = d; best = {"k": "npc", "o": n}
 	if best.is_empty() and camp_near(p.wpos, 3.2) != null:
 		best = {"k": "camp"}
 	return best
@@ -434,32 +685,44 @@ func interact() -> void:
 				add_text(tp, "+%d wood" % wd, Color("d8b880"))
 		"crate":
 			_loot(t.o)
+		"npc":
+			var n: Npc = t.o
+			if n.type == "settler":
+				add_text(n.wpos + Vector2(0, -0.2), Npc.BARKS[randi() % Npc.BARKS.size()], Color("e8e0c8"), 2.6)
+			else:
+				open_trade(n)
 
 func _loot(c: World.Crate) -> void:
 	var p := player
 	c.open = true
 	if crate_nodes.has(c):
-		crate_nodes[c].texture = Assets.tex(("cache" if c.kind == "cache" else "crate") + "_open") if c.kind != "bag" else null
+		var spr: Sprite2D = crate_nodes[c]
+		if c.kind == "crate" or c.kind == "cache":
+			spr.texture = Assets.tex(c.kind + "_open")
+		else:
+			spr.texture = null
 	var q := 0.55 if p.crouch else 1.0
-	noise(c.pos, (5.0 if c.kind == "car" else 4.5) * q, (35.0 if c.kind == "car" else 28.0) * q)
-	var s := 0; var cl := 0; var a := 0; var wd := 0
-	match c.kind:
-		"car": s = randi_range(1, 3); a = randi_range(0, 3)
-		"bag": s = randi_range(1, 2); a = randi_range(2, 5)
-		"cache":
-			s = randi_range(3, 6); cl = randi_range(1, 3); a = randi_range(4, 8); wd = randi_range(0, 3)
-			if randf() < 0.35: p.hp = p.max_hp; add_text(c.pos + Vector2(0, -0.4), "medkit! healed", Color("ff8a8a"))
-		_:
-			s = randi_range(1, 4); cl = randi_range(0, 2); a = randi_range(1, 4)
-			if randf() < 0.12: p.hp = p.max_hp; add_text(c.pos + Vector2(0, -0.4), "medkit! healed", Color("ff8a8a"))
-	if any_up("bench"): a += 2
-	p.carry.scrap += s; p.carry.cloth += cl; p.carry.wood += wd; p.ammo += a
+	noise(c.pos, (5.0 if c.kind == "car" else 4.5) * q, (35.0 if c.kind == "car" else 24.0) * q)
+	var mats := Items.roll_materials(c.kind, rng)
+	var items := Items.roll_loot(c.kind, rng)
+	if c.has_meta("extra"): items.append([c.get_meta("extra"), 1])
+	if any_up("bench") and rng.randf() < 0.5:
+		items.append([gun_info().get("ammo", "ammo_pistol"), 2])
+	p.carry.scrap += mats[0]; p.carry.cloth += mats[1]; p.carry.wood += mats[2]
 	var parts := []
-	if s: parts.append("+%d scrap" % s)
-	if cl: parts.append("+%d cloth" % cl)
-	if wd: parts.append("+%d wood" % wd)
-	if a: parts.append("+%d ammo" % a)
-	add_text(c.pos, " ".join(parts) if parts.size() else "empty")
+	if mats[0]: parts.append("+%d scrap" % mats[0])
+	if mats[1]: parts.append("+%d cloth" % mats[1])
+	if mats[2]: parts.append("+%d wood" % mats[2])
+	var found_gear := ""
+	for it in items:
+		if it[0] == "": continue
+		inv_add(it[0], it[1])
+		var d := Items.info(it[0])
+		parts.append(("%s ×%d" % [d.name, it[1]]) if it[1] > 1 else d.name)
+		if d.get("slot", "") in ["gun", "melee", "head", "body"]: found_gear = d.name
+	add_text(c.pos, " · ".join(parts) if parts.size() else "empty", Color("f2e6c8"), 2.2)
+	if found_gear != "":
+		hud.toast("Found %s! Press %s to open your inventory and equip it." % [found_gear, "INV" if using_touch else "I"])
 
 func toggle_sneak() -> void:
 	player.crouch = not player.crouch
@@ -473,6 +736,7 @@ func melee() -> void:
 	p.swing = 0.16
 	var wa := p.world_aim()
 	var loud := false
+	var dmg: float = Items.info(equip.melee).get("dmg", 1)
 	for e in enemies:
 		if e.dead or e.fl != p.fl:
 			continue
@@ -480,11 +744,15 @@ func melee() -> void:
 		var d := to.length()
 		if d < 1.3 and to.normalized().dot(wa) > 0.1:
 			if p.crouch and e.aw < 35.0:
-				add_text(e.wpos, "silent takedown", Color("9fd08a"))
-				kill_enemy(e, true)
+				if e.type == "brute":
+					add_text(e.wpos, "sneak attack!", Color("9fd08a"))
+					e.damage(dmg * 3.0, p.wpos)
+				else:
+					add_text(e.wpos, "silent takedown", Color("9fd08a"))
+					kill_enemy(e, true)
 			else:
 				loud = true
-				e.damage(1, p.wpos)
+				e.damage(dmg, p.wpos)
 	if loud or not p.crouch:
 		noise(p.wpos, 2.5, 12.0)
 
@@ -492,57 +760,75 @@ func shoot() -> void:
 	var p := player
 	if p.cd > 0.0 or not p.climb.is_empty():
 		return
-	if p.ammo <= 0:
+	var g := gun_info()
+	if g.is_empty() or inv_count(g.ammo) <= 0:
 		melee()
+		if not g.is_empty() and time - float(p.get_meta("noammo", -10.0)) > 3.0:
+			hud.toast("Out of %s. Melee still works — or switch guns in the inventory (I)." % Items.iname(g.ammo).to_lower())
+			p.set_meta("noammo", time)
 		return
-	p.ammo -= 1
-	p.cd = 0.17 if any_up("bench") else 0.3
+	inv_take(g.ammo)
+	p.cd = g.rate * (0.8 if any_up("bench") else 1.0)
 	var wa := p.world_aim()
-	bullets.append({"pos": p.wpos + wa * 0.4, "vel": wa * 15.0, "z": p.ground_z() + 10.0, "fl": p.fl, "life": 1.0, "enemy": false})
+	for k in g.pellets:
+		var dir := wa.rotated(randf_range(-g.spread, g.spread))
+		bullets.append({"pos": p.wpos + wa * 0.4, "vel": dir * g.speed, "z": p.ground_z() + 10.0, "fl": p.fl, "life": g.life, "enemy": false, "dmg": float(g.dmg)})
 	burst(p.wpos + wa * 0.5, 3, [Color("f2d06b"), Color("f28c28")], 9.0, p.fl)
 	noise(p.wpos, 10.0, 70.0)
 
-func enemy_shoot(e: Enemy, at: Vector2) -> void:
-	var a := (at - e.wpos).angle() + randf_range(-0.13, 0.13)
-	var dir := Vector2.from_angle(a)
-	bullets.append({"pos": e.wpos + dir * 0.4, "vel": dir * 8.0, "z": e.ground_z() + 10.0, "fl": e.fl, "life": 1.4, "enemy": true, "src": e.wpos})
+func enemy_shoot(e: Enemy, at: Vector2, weapon: String = "pipe_pistol") -> void:
+	var g := Items.info(weapon)
+	var base := (at - e.wpos).angle()
+	for k in g.get("pellets", 1):
+		var dir := Vector2.from_angle(base + randf_range(-0.13, 0.13) + randf_range(-g.spread, g.spread) * 0.5)
+		bullets.append({"pos": e.wpos + dir * 0.4, "vel": dir * 8.0, "z": e.ground_z() + 10.0, "fl": e.fl, "life": 1.4 if g.pellets == 1 else 0.6, "enemy": true, "src": e.wpos, "dmg": 3.0 if g.pellets == 1 else 2.0})
 	burst(e.wpos, 2, [Color("f2d06b")], 9.0, e.fl)
 	for o in enemies:
 		if o.type == "raider" and not o.dead and o.wpos.distance_to(e.wpos) < 8.0:
 			o.aw = maxf(o.aw, 80.0)
 			o.last = player.wpos
 
-func hurt_player(from: Vector2) -> void:
+func throw_rock(e: Enemy, at: Vector2) -> void:
+	var dir := (at - e.wpos).normalized()
+	bullets.append({"pos": e.wpos + dir * 0.5, "vel": dir * 6.0, "z": e.ground_z() + 18.0, "fl": e.fl, "life": 1.6, "enemy": true, "src": e.wpos, "dmg": 4.0, "rock": true})
+
+func hurt_player(from: Vector2, dmg: float = 3.0) -> void:
 	var p := player
 	if p.inv > 0.0 or state != "play":
 		return
-	p.hp -= 1
-	p.inv = 0.9
+	var taken := maxf(1.0, round(dmg * (1.0 - _reduction())))
+	p.hp -= taken
+	p.inv = 0.7
 	p.flash = 0.3
 	var d := p.wpos - from
 	if d.length() > 0.01:
-		p.move(d.normalized() * 0.4)
-	if p.hp <= 0:
+		p.move(d.normalized() * (0.9 if dmg >= 6.0 else 0.4))
+	if p.hp <= 0.0:
 		state = "down"
 		down_t = 2.8
 		p.climb = {}
+
+func _drop(pos: Vector2, kind: String, fl: int) -> World.Crate:
+	var c := World.Crate.new()
+	c.pos = pos
+	c.kind = kind
+	c.bid = world.building_at(pos.x, pos.y)
+	c.fl = fl
+	world.crates.append(c)
+	var s := _sprite("bag", c.pos, world.stand_z(c.pos.x, c.pos.y, c.fl), Vector2(-4, -8), 0.1)
+	crate_nodes[c] = s
+	return c
 
 func kill_enemy(e: Enemy, silent: bool) -> void:
 	if e.dead:
 		return
 	e.dead = true
 	player.kills += 1
-	var cols := [Color("8a3a3a"), Color("b07a6a"), Color("3a2a2a")] if e.type == "hound" else [Color("a83a2a"), Color("5a3a2a"), Color("3a2a2a")]
-	burst(e.wpos, 10, cols, 9.0, e.fl)
+	var cols := [Color("8a6a4a"), Color("5a3a24"), Color("3a2a2a")] if e.type == "shellback" else ([Color("6a8a4a"), Color("8a3a3a"), Color("3a2a2a")] if e.type in ["ghoul", "brute"] else [Color("a83a2a"), Color("5a3a2a"), Color("3a2a2a")])
+	burst(e.wpos, 12, cols, 9.0, e.fl)
 	if e.type == "raider":
-		var c := World.Crate.new()
-		c.pos = e.wpos
-		c.kind = "bag"
-		c.bid = e.building()
-		c.fl = e.fl
-		world.crates.append(c)
-		var s := _sprite("bag", c.pos, world.stand_z(c.pos.x, c.pos.y, c.fl), Vector2(-4, -8), 0.1)
-		crate_nodes[c] = s
+		var c := _drop(e.wpos, "bag", e.fl)
+		if randf() < 0.4: c.set_meta("extra", e.weapon)
 		if e.camp >= 0:
 			var left := false
 			for o in enemies:
@@ -550,6 +836,11 @@ func kill_enemy(e: Enemy, silent: bool) -> void:
 			if not left:
 				world.rcamps[e.camp].cleared = true
 				hud.toast("Raider camp cleared! Its stash is yours.")
+	elif e.type == "brute":
+		_drop(e.wpos, "brute", e.fl)
+		hud.toast("The brute goes down hard. It was carrying something…")
+	elif e.type == "ghoul" and randf() < 0.3:
+		_drop(e.wpos, "bag", e.fl)
 	e.visible = false
 
 func respawn() -> void:
@@ -569,9 +860,9 @@ func respawn() -> void:
 	for e in enemies:
 		if e.wpos.distance_to(c.wpos) < 12.0:
 			e.aw = 0.0
-			if e.camp < 0: kill_enemy(e, true)
+			if e.camp < 0 and e.type != "brute": kill_enemy(e, true)
 	state = "play"
-	hud.toast(("You came to at %s. Dropped %d items you were carrying." % [c.cname, lost]) if lost else "You came to at %s." % c.cname)
+	hud.toast(("You came to at %s. Dropped %d materials you were carrying." % [c.cname, lost]) if lost else "You came to at %s." % c.cname)
 
 # ------------------------------------------------------------------ camps
 func camp_problem() -> String:
@@ -757,7 +1048,7 @@ func _process(delta: float) -> void:
 		p.regen += delta
 		if p.regen > (1.0 if here.up.garden else 3.5) and p.hp < p.max_hp:
 			p.regen = 0.0
-			p.hp += 1
+			p.hp = minf(p.max_hp, p.hp + 1.0)
 			add_text(p.wpos, "+1 hp", Color("9fd08a"))
 	var nrec := 0
 	for s in survivors:
@@ -793,17 +1084,20 @@ func _process(delta: float) -> void:
 	for e in enemies:
 		if e.dead: e.queue_free()
 	enemies = enemies.filter(func(e): return not e.dead)
+	for n in npcs: n.step(delta, p)
+	noise_level = maxf(0.0, noise_level - delta * 30.0)
+	_world_life(delta)
 	spawn_t += delta
-	if spawn_t > 25.0:
+	if spawn_t > 40.0:
 		spawn_t = 0.0
-		var hounds := 0
+		var mutants := 0
 		for e in enemies:
-			if e.type == "hound": hounds += 1
-		if hounds < 9:
+			if e.type != "raider": mutants += 1
+		if mutants < 10:
 			var cps := []
 			for c in camps: cps.append(c.wpos)
 			var before := world.spawns.size()
-			world.add_pack(2, p.wpos, 18.0, cps)
+			world.add_monster(p.wpos, 20.0, cps)
 			for i in range(before, world.spawns.size()): _spawn_enemy(world.spawns[i])
 	patrol_t += delta
 	if patrol_t > 70.0:
@@ -819,6 +1113,39 @@ func _process(delta: float) -> void:
 	_update_visibility()
 	_update_camera()
 	_update_hud()
+
+func _world_life(delta: float) -> void:
+	var p := player
+	# day / night colour grade — a full day takes 8 minutes
+	day_t = fmod(day_t + delta / 480.0, 1.0)
+	var sun := sin(day_t * TAU)          # 0.25 = noon, 0.75 = midnight
+	var dayness := clampf(sun * 1.6 + 0.5, 0.0, 1.0)
+	var dusk := clampf(1.0 - absf(sun) * 3.0, 0.0, 1.0)
+	var tint := Vector3(1.0, 0.97, 0.9).lerp(Vector3(0.62, 0.72, 1.0), 1.0 - dayness)
+	tint = tint.lerp(Vector3(1.12, 0.86, 0.7), dusk * 0.6)
+	if grade:
+		grade.set_shader_parameter("tint", tint)
+		grade.set_shader_parameter("bright", lerpf(0.58, 1.0, dayness))
+		grade.set_shader_parameter("sat", lerpf(0.55, 0.82, dayness))
+	# settlement greeting
+	var si := world.settlement_at(p.wpos)
+	if si != in_settlement:
+		in_settlement = si
+		if si >= 0:
+			hud.toast("%s — a settlement. Folks here are friendly. Look for the trader." % world.settlements[si].name)
+	# campfires flicker and smoke
+	var fr := int(time * 6.0) % 2
+	for pair in decor_nodes:
+		var spr: Sprite2D = pair[1]
+		if spr.has_meta("anim"):
+			spr.texture = Assets.tex("campfire%d" % fr)
+	for sp in smoke_spots:
+		if randf() < delta * 5.0 and sp.distance_to(p.wpos) < 22.0:
+			particles.append({"pos": sp + Vector2(randf_range(-0.1, 0.1), randf_range(-0.1, 0.1)), "vel": Vector2(0.25, -0.15), "gz": world.hz(sp.x, sp.y), "z": 10.0, "vz": 9.0, "life": 2.2, "col": Color(0.55, 0.52, 0.48, 0.7), "fl": 0, "smoke": true})
+	# drifting dust motes
+	if randf() < delta * 3.0:
+		var a := p.wpos + Vector2(randf_range(-10, 10), randf_range(-10, 10))
+		particles.append({"pos": a, "vel": Vector2(0.6, 0.2), "gz": world.hz(a.x, a.y), "z": randf_range(8, 30), "vz": 0.5, "life": 3.0, "col": Color(0.85, 0.78, 0.6, 0.5), "fl": 0, "smoke": true})
 
 func _separate() -> void:
 	for i in enemies.size():
@@ -846,12 +1173,12 @@ func _update_bullets(delta: float) -> void:
 				break
 			if b.enemy:
 				if b.pos.distance_to(player.wpos) < 0.33 and player.climb.is_empty() and player.fl == b.fl:
-					hurt_player(b.src)
+					hurt_player(b.src, b.get("dmg", 3.0))
 					b.life = 0.0
 			else:
 				for e in enemies:
 					if not e.dead and e.fl == b.fl and b.pos.distance_to(e.wpos) < 0.42:
-						e.damage(1, player.wpos)
+						e.damage(b.get("dmg", 2.0), player.wpos)
 						b.life = 0.0
 						break
 		b.life -= delta
@@ -859,7 +1186,7 @@ func _update_bullets(delta: float) -> void:
 	for q in particles:
 		q.pos += q.vel * delta
 		q.z += q.vz * delta
-		q.vz -= 90.0 * delta
+		if not q.get("smoke", false): q.vz -= 90.0 * delta
 		if q.z < 0.0:
 			q.z = 0.0; q.vel *= 0.5; q.vz = 0.0
 		q.life -= delta
@@ -881,6 +1208,35 @@ func _update_visibility() -> void:
 	for c in crate_nodes:
 		var s: Sprite2D = crate_nodes[c]
 		s.visible = vis.call(c.pos.x, c.pos.y, c.fl) and s.texture != null
+	for f in furn_nodes:
+		var fs: Sprite2D = furn_nodes[f]
+		fs.visible = f.bid == pb and f.fl == p.fl
+		if f.crate != null and f.crate.open: fs.modulate = Color(0.78, 0.74, 0.7)
+	for pair in decor_nodes:
+		var d: World.Decor = pair[0]
+		if d.bid > 0:
+			(pair[1] as Sprite2D).visible = d.bid == pb and p.fl == 0
+	for n in npcs:
+		if n.type != "crow":
+			n.visible = vis.call(n.wpos.x, n.wpos.y, 0)
+	# see-through: fade buildings and trees standing between the camera and the player
+	var pscr := p.position + Vector2(0, -12)
+	var pdepth := p.wpos.x + p.wpos.y
+	for v in views:
+		var fade: bool = pb == 0 and v.b.id != pb and pdepth < v.front_depth - 0.5 and v.screen_rect().has_point(pscr)
+		v.set_faded(fade)
+	for k in faded_trees:
+		if is_instance_valid(faded_trees[k]): (faded_trees[k] as Sprite2D).modulate.a = 1.0
+	faded_trees.clear()
+	var px := int(p.wpos.x); var py := int(p.wpos.y)
+	for dy in range(0, 4):
+		for dx in range(0, 4):
+			var ti := world.idx(clampi(px + dx, 0, World.N - 1), clampi(py + dy, 0, World.N - 1))
+			if tree_nodes.has(ti):
+				var ts: Sprite2D = tree_nodes[ti]
+				if absf(ts.position.x - p.position.x) < 14.0 and ts.position.y > p.position.y - 2.0 and ts.position.y - 34.0 < p.position.y:
+					ts.modulate.a = 0.35
+					faded_trees[ti] = ts
 	var main: Camp = camps[0]
 	for c in camps:
 		if c.main: main = c
@@ -912,12 +1268,14 @@ func _update_camera() -> void:
 
 func _update_hud() -> void:
 	var p := player
-	var hearts := "♥".repeat(maxi(0, p.hp)) + "♡".repeat(maxi(0, p.max_hp - p.hp))
+	var g := gun_info()
+	var gun_s := ("%s  %d" % [g.name, inv_count(g.ammo)]) if not g.is_empty() else "unarmed"
+	var hh := int(day_t * 24.0 + 6.0) % 24
 	var nrec := 0
 	for s in survivors:
 		if s.get_meta("recruited"): nrec += 1
-	hud.stats.text = "HP %s   AMMO %d%s\nCarrying: %d scrap, %d cloth, %d wood\nShared stash: %d scrap, %d cloth, %d wood\nCamps: %d   Survivors: %d   Kills: %d   %s" % [
-		hearts, p.ammo, "   [SNEAKING]" if p.crouch else "", p.carry.scrap, p.carry.cloth, p.carry.wood,
+	hud.stats.text = "HP %d/%d   %s   ARMOUR %d   %02d:00%s\nMedkits %d  Food %d   Carrying: %d scrap, %d cloth, %d wood\nShared stash: %d scrap, %d cloth, %d wood\nCamps: %d   Survivors: %d   Kills: %d   %s" % [
+		int(ceil(p.hp)), int(p.max_hp), gun_s, armor_total(), hh, "   [SNEAKING]" if p.crouch else "", inv_count("medkit"), inv_count("food"), p.carry.scrap, p.carry.cloth, p.carry.wood,
 		stash.scrap, stash.cloth, stash.wood, camps.size(), 1 + nrec, p.kills, "Floor 2" if p.fl == 1 else ""]
 	var t := find_target()
 	var k := "USE" if using_touch else "[E]"
@@ -928,7 +1286,8 @@ func _update_hud() -> void:
 			"tree": msg = "%s Chop tree (%d/3)" % [k, chop_hits.get(world.idx(t.x, t.y), 0)]
 			"survivor": msg = "%s Recruit %s" % [k, t.o.get_meta("name")]
 			"stairs": msg = "%s Go %s" % [k, "downstairs" if p.fl == 1 else "upstairs"]
-			"crate": msg = "%s Search %s" % [k, {"car": "car trunk", "bag": "raider loot", "cache": "raider stash", "crate": "crate"}[t.o.kind]]
+			"crate": msg = "%s Search %s" % [k, {"car": "car trunk", "bag": "remains", "brute": "remains", "cache": "raider stash", "crate": "crate"}.get(t.o.kind, t.o.kind.replace("_", " "))]
+			"npc": msg = "%s %s" % [k, "Talk" if t.o.type == "settler" else "Trade"]
 			"camp": msg = "%s Camp menu" % ("CAMP" if using_touch else "[B]")
 	hud.set_prompt(msg)
 	hud.touch.queue_redraw()
@@ -942,34 +1301,51 @@ func _debug_shots() -> void:
 	var out := "user://shots"
 	DirAccess.make_dir_recursive_absolute(out)
 	await get_tree().create_timer(1.0).timeout
+	for e in enemies: e.aw = 0.0
 	_snap(out + "/1_start.png")
-	var rc: World.RaiderCamp = world.rcamps[0]
-	player.wpos = rc.pos + Vector2.from_angle(rc.ang) * 6.5
-	await get_tree().create_timer(0.6).timeout
-	_snap(out + "/2_ramp.png")
-	var r: World.Rope = world.ropes[0]
-	player.wpos = r.bottom
-	interact()
-	await get_tree().create_timer(1.6).timeout
-	_snap(out + "/3_rope_top.png")
+	await get_tree().create_timer(0.3).timeout
+	if world.settlements.size() > 0:
+		player.wpos = world.settlements[0].pos + Vector2(2.5, 2.5)
+		await get_tree().create_timer(0.8).timeout
+		_snap(out + "/2_settlement.png")
+	var done_in := false
 	for b in world.buildings:
-		if b.floors == 2 and not b.raider:
-			for e in enemies: e.aw = 0.0
-			player.wpos = Vector2(b.stairs) + Vector2(0.5, 0.5)
+		if b.floors == 2 and not b.raider and not done_in:
+			done_in = true
 			player.fl = 0
+			player.wpos = Vector2(b.out) + Vector2(0.5, 2.5)
+			await get_tree().create_timer(0.6).timeout
+			_snap(out + "/3_outside_2floor.png")
+			player.wpos = Vector2(b.stairs) + Vector2(0.5, 0.5)
 			await get_tree().create_timer(0.6).timeout
 			_snap(out + "/4_inside_ground.png")
 			interact()
 			await get_tree().create_timer(0.6).timeout
 			_snap(out + "/5_upstairs.png")
 			player.fl = 0
-			player.wpos = Vector2(b.out) + Vector2(0.5, 1.8)
+			player.wpos = Vector2(b.x0 + b.w * 0.5, b.y0 - 1.2)
 			await get_tree().create_timer(0.6).timeout
-			_snap(out + "/6_outside_building.png")
+			_snap(out + "/6_behind_building.png")
+	for e in enemies:
+		if e.type in ["brute", "ghoul"]:
+			player.wpos = e.wpos + Vector2(2.5, 2.5)
+			player.fl = e.fl
+			await get_tree().create_timer(0.5).timeout
+			_snap(out + "/7_%s.png" % e.type)
 			break
-	player.wpos = Vector2(40, 40)
+	player.fl = 0
+	player.wpos = Vector2(44, 40)
 	await get_tree().create_timer(0.6).timeout
-	_snap(out + "/7_city.png")
+	_snap(out + "/8_city.png")
+	inv_add("shotgun"); inv_add("road_helmet"); inv_add("ammo_shell", 8)
+	open_inventory()
+	await get_tree().create_timer(0.4).timeout
+	_snap(out + "/9_inventory.png")
+	hud.hide_menu()
+	day_t = 0.62
+	player.wpos = world.start + Vector2(1, 2)
+	await get_tree().create_timer(0.6).timeout
+	_snap(out + "/10_dusk.png")
 	print("SHOTS DONE ", ProjectSettings.globalize_path(out))
 	get_tree().quit()
 
@@ -1008,5 +1384,18 @@ func _debug_soak() -> void:
 		await get_tree().process_frame
 		player.step(get_process_delta_time(), Vector2(cos(i * 0.02), sin(i * 0.03)), Vector2.ZERO)
 		if i % 50 == 0: player.start_jump()
+	var tr: Npc = null
+	for n in npcs:
+		if n.type == "trader": tr = n
+	if tr:
+		open_trade(tr); hud.hide_menu()
+	open_inventory(); hud.hide_menu()
+	inv_add("shotgun"); inv_add("ammo_shell", 10); inv_add("combat_vest"); equip_item("shotgun"); equip_item("combat_vest")
+	for i in 30:
+		await get_tree().process_frame
+		if i % 8 == 0: shoot()
+	quick_heal()
+	day_t = 0.7
+	await get_tree().create_timer(0.3).timeout
 	print("SOAK DONE state=%s hp=%d kills=%d camps=%d enemies=%d" % [state, player.hp, player.kills, camps.size(), enemies.size()])
 	get_tree().quit()

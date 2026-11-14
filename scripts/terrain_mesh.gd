@@ -17,6 +17,7 @@ const MAT_COL := {
 	8: Color("bdb49c"),   # checker tile (colours set in shader)
 	9: Color("7a3a34"),   # carpet
 	10: Color("8a867c"),  # concrete
+	11: Color("8a7454"),  # dirt track
 	12: Color("4a484e"),  # cracked road
 	13: Color("4a484e"),  # pothole
 }
@@ -94,6 +95,8 @@ func _material(w: World, x: float, y: float, steep: float) -> int:
 		return 13 if g == 2 else (12 if g == 1 else 5)
 	if t == World.SIDE:
 		return 6
+	if t == World.DIRT_ROAD:
+		return 11
 	if t == World.FLOOR:
 		var b: World.Bld = w.bld(w.BID[i])
 		return [7, 8, 9, 10][b.fkind] if b else 7
