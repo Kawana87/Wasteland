@@ -1,0 +1,38 @@
+class_name FxLayer
+extends Node2D
+## Draws fast-moving bits on top of the world: bullets, particles, loot sparkles,
+## the red hurt flash and the fade used for fast travel / blacking out.
+
+var fade := 0.0
+var fade_text := ""
+var flash := 0.0
+
+func _draw() -> void:
+	var g := Game.I
+	if g == null or g.world == null:
+		return
+	var w := g.world
+	for b in g.bullets:
+		var p := Iso.to_screen(b.pos.x, b.pos.y, b.z).round()
+		draw_rect(Rect2(p, Vector2(2, 2)), Color("ff7a4a") if b.enemy else Color("f2e27a"))
+	for q in g.particles:
+		var p := Iso.to_screen(q.pos.x, q.pos.y, q.gz + q.z).round()
+		draw_rect(Rect2(p, Vector2(1, 1)), q.col)
+	var pb := g.player.building()
+	var sparkle := sin(g.time * 5.0)
+	for c in w.crates:
+		if c.open or c.bid != pb or c.fl != g.player.fl:
+			continue
+		if sin(g.time * 5.0 + c.pos.x * 3.0) > 0.75:
+			var p := Iso.to_screen(c.pos.x, c.pos.y, w.stand_z(c.pos.x, c.pos.y, c.fl) + 14.0).round()
+			draw_rect(Rect2(p, Vector2(2, 2)), Color("f2e27a"))
+	var vs := Vector2(g.vp.size)
+	var tl := g.cam.get_screen_center_position() - vs * 0.5
+	if flash > 0.0:
+		draw_rect(Rect2(tl, vs), Color(0.8, 0.12, 0.12, flash))
+	if fade > 0.0:
+		draw_rect(Rect2(tl, vs), Color(0.04, 0.02, 0.06, fade))
+		if fade > 0.6 and fade_text != "":
+			var f := ThemeDB.fallback_font
+			var ts := f.get_string_size(fade_text, HORIZONTAL_ALIGNMENT_CENTER, -1, 8)
+			draw_string(f, (tl + vs * 0.5 - Vector2(ts.x * 0.5, 0)).round(), fade_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color("f2e6c8"))
