@@ -341,6 +341,21 @@ def roof_shed(M, x0, y0, x1, y1, z, rise, mat):
 DIR = {"n": (0, -1), "s": (0, 1), "w": (-1, 0), "e": (1, 0)}
 
 
+def window_ok(a, b, t, juncs, margin=0.72):
+    """True if a window centred t along run a-b stays clear of every wall junction on that line
+    (corners, wings, dividers): windows never get sliced by a wall that meets them."""
+    horiz = abs(a[1] - b[1]) < 1e-6
+    lo = min(a[0], b[0]) if horiz else min(a[1], b[1])
+    fixed = a[1] if horiz else a[0]
+    c = lo + t
+    for (jx, jy) in juncs:
+        if horiz and abs(jy - fixed) < 0.15 and abs(jx - c) < margin:
+            return False
+        if not horiz and abs(jx - fixed) < 0.15 and abs(jy - c) < margin:
+            return False
+    return True
+
+
 def outer_runs(cells):
     """Merge the outer unit edges of a cell set into straight runs: [(a, b, side)]."""
     edges = {"n": [], "s": [], "w": [], "e": []}
@@ -380,7 +395,12 @@ def house(M, ox, oy, parts, wall_mat, roof="gable", roof_mat="sh_brown", door=No
     doors = [door] + list(extra_doors) if door else list(extra_doors)
     for s_ in range(maxst):
         level = {c for c, st in cells.items() if st > s_}
-        for (a, b, side) in outer_runs(level):
+        runs_here = outer_runs(level)
+        juncs = [p for (a, b, sd) in runs_here for p in (a, b)]
+        # where a taller part meets a lower one, the lower roofline also counts as a junction
+        for (a, b, sd) in outer_runs(set(cells)):
+            juncs += [a, b]
+        for (a, b, side) in runs_here:
             horiz = side in ("n", "s")
             L = abs(b[0] - a[0]) if horiz else abs(b[1] - a[1])
             lo = min(a[0], b[0]) if horiz else min(a[1], b[1])
@@ -396,9 +416,9 @@ def house(M, ox, oy, parts, wall_mat, roof="gable", roof_mat="sh_brown", door=No
                         t = dpos - lo
                         openings.append((t - 0.42, t + 0.42, 0.0, 1.6, "door"))
                         my_doors.append((t, dstate))
-            t = 0.9
+            t = 1.0
             while t < L - 0.6:
-                if all(abs(t - o[0] - 0.42) > 1.0 for o in openings):
+                if all(abs(t - o[0] - 0.42) > 1.0 for o in openings) and window_ok(a, b, t, juncs):
                     openings.append((t - 0.38, t + 0.38, 0.85, 1.65, "win"))
                 t += 1.6
             out_n = DIR[side]

@@ -11,6 +11,9 @@ import props as P
 from props import MAT, B
 
 
+GRAF_DIR = None      # set by the scene: where generated graffiti textures go
+
+
 # ------------------------------------------------------------------ fences and barricades
 def barbed_fence(M, x0, y0, x1, y1, gate=None, rng=None):
     """Chain-link fence around a rectangle with coiled razor wire on top. gate: (side, pos) gap."""
@@ -179,6 +182,8 @@ def storefront_row(M, x0, y0, n, rng):
         sign_board(x + 0.2, x + w - 0.2, y0 + h, 2.0 if st == 1 else 2.0, rng.choice(cols), rng)
         if rng.random() < 0.5:
             P.roof_clutter(x + w / 2, y0 + h / 2, 0, rng, z=H + 0.06)
+        if GRAF_DIR and rng.random() < 0.7:
+            graffiti_on(GRAF_DIR, x + 0.1, y0 + h + kit.WALL_T + 0.03, w - 0.2, rng, "s", zmax=1.7)
         x += w
 
 
@@ -356,3 +361,118 @@ def church(M, x0, y0, rng):
     box(tx - .03, ty - .03, 5.55, tx + .03, ty + .03, 6.0, MAT("metal:#7a7a74"))
     box(tx - .15, ty - .03, 5.8, tx + .15, ty + .03, 5.85, MAT("metal:#7a7a74"))
     kit.door(M, (tx - .55, ty + .55), (tx + .55, ty + .55), 0.15, 0.95, (0, 1), "open")
+
+
+# ------------------------------------------------------------------ burnt-out and bombed ruins
+def mat_burnt(name, base='#8a8276', soot=0.65):
+    """Wall material blackened by fire: soot blooms, heaviest near the top and around openings."""
+    from lib import _nodes, _coord, _noise, _ramp, _mix, _bump, grit
+    m, nt, bs = _nodes(name)
+    co = _coord(nt)
+    n = _noise(nt, co, 3.0, 8.0, 0.7).outputs[0]
+    n2 = _noise(nt, co, 30.0, 6.0, 0.7).outputs[0]
+    col = _ramp(nt, n2, [(0.3, '#4a4440'), (0.55, base), (0.8, '#a8a090')])
+    sootf = _ramp(nt, n, [(1 - soot - 0.1, '#000000'), (1 - soot + 0.15, '#ffffff')])
+    col = _mix(nt, col, '#1a1714', sootf)
+    nt.links.new(grit(nt, col, co, 0.45, 80.0), bs.inputs["Base Color"])
+    bs.inputs["Roughness"].default_value = 0.98
+    _bump(nt, bs, n2, 0.8, 0.02)
+    return m
+
+
+def ruin_building(M, x0, y0, w, h, rng, style="burnt", base='#8a8276', storeys=1):
+    """Gutted shell: jagged broken walls (one corner left standing tall), no roof or a slab caved in,
+    charred beams and rubble inside. 'bombed' adds a crater, blast debris thrown outward and scorch."""
+    wall = mat_burnt("burnt%d" % rng.randint(0, 99999), base, 0.5 if style == "burnt" else 0.35)
+    H = STOREY * storeys
+    tall_corner = rng.choice([(x0, y0), (x0 + w, y0), (x0, y0 + h)])
+    runs = [((x0, y0), (x0 + w, y0), True), ((x0, y0 + h), (x0 + w, y0 + h), True), ((x0, y0), (x0, y0 + h), False), ((x0 + w, y0), (x0 + w, y0 + h), False)]
+    t_ = kit.WALL_T
+    for (a, b, horiz) in runs:
+        L = abs(b[0] - a[0]) if horiz else abs(b[1] - a[1])
+        n = int(L / 0.25)
+        hcur = rng.uniform(0.3, H)
+        for k in range(n):
+            s0, s1 = k * L / n, (k + 1) * L / n
+            px, py = (a[0] + s0, a[1]) if horiz else (a[0], a[1] + s0)
+            dc = math.hypot(px - tall_corner[0], py - tall_corner[1])
+            target = H * (1.0 if dc < 1.2 else rng.uniform(0.05, 0.75))
+            hcur = max(0.08, min(H, hcur + (target - hcur) * 0.35 + rng.uniform(-0.25, 0.25)))
+            if style == "bombed" and rng.random() < 0.12:
+                continue          # blown-out gap
+            if horiz:
+                o = box(a[0] + s0 - (t_ if k == 0 else 0), a[1] - t_, 0, a[0] + s1 + (t_ if k == n - 1 else 0), a[1] + t_, hcur, wall)
+            else:
+                o = box(a[0] - t_, a[1] + s0 - (t_ if k == 0 else 0), 0, a[0] + t_, a[1] + s1 + (t_ if k == n - 1 else 0), hcur, wall)
+            # broken top edge: a small tilted chunk
+            if rng.random() < 0.35:
+                c = box(px - 0.08, py - 0.08, hcur, px + 0.08, py + 0.08, hcur + 0.08, wall)
+                c.rotation_euler = (rng.uniform(-.5, .5), rng.uniform(-.5, .5), rng.uniform(0, 3))
+    # floor, charred
+    box(x0, y0, 0, x0 + w, y0 + h, 0.03, MAT("flat:#2a2420:1.0"))
+    # collapsed roof slab leaning into the shell, charred beams
+    if style == "burnt" or rng.random() < 0.5:
+        sx, sy = x0 + w * rng.uniform(0.3, 0.6), y0 + h * rng.uniform(0.3, 0.6)
+        mesh([(sx - 1.4, sy - 1.0, 0.2), (sx + 1.4, sy - 1.0, 0.2), (sx + 1.2, sy + 1.0, H * 0.7), (sx - 1.2, sy + 1.0, H * 0.7)],
+             [(0, 1, 2, 3)], MAT("conc:#5a5650"), "slab", solidify=0.1)
+    char = MAT("flat:#1a1614:0.95")
+    for k in range(rng.randint(4, 9)):
+        bx, by = x0 + rng.uniform(0.3, w - 0.3), y0 + rng.uniform(0.3, h - 0.3)
+        o = box(bx - 0.06, by - rng.uniform(0.6, 1.4), 0.05, bx + 0.06, by + rng.uniform(0.6, 1.4), 0.17, char)
+        o.rotation_euler = (rng.uniform(-0.6, 0.6), rng.uniform(-0.3, 0.3), rng.uniform(0, 3.14))
+        o.location.z += rng.uniform(0, 0.6)
+    for k in range(rng.randint(2, 4)):
+        P.rubble_pile(x0 + rng.uniform(0.6, w - 0.6), y0 + rng.uniform(0.6, h - 0.6), 0, rng, size=rng.uniform(0.7, 1.4),
+                      mats=[wall, MAT("conc:#6a6660"), char])
+    # scorch around the building
+    for k in range(rng.randint(4, 8)):
+        P.stain(x0 + rng.uniform(-1, w + 1), y0 + rng.uniform(-1, h + 1), 0, rng, col="#1e1a16", r=rng.uniform(0.5, 1.0))
+    if style == "bombed":
+        cx, cy = x0 + w * rng.uniform(0.6, 1.1), y0 + h + rng.uniform(0.6, 1.6)
+        crater(cx, cy, rng.uniform(1.0, 1.5), rng)
+        for k in range(16):    # debris thrown outward
+            a = rng.uniform(0, 6.28); d = rng.uniform(1.5, 4.5)
+            s = rng.uniform(0.06, 0.18)
+            o = box(cx + math.cos(a) * d - s, cy + math.sin(a) * d - s, 0, cx + math.cos(a) * d + s, cy + math.sin(a) * d + s, s * 1.2,
+                    rng.choice([wall, MAT("conc:#7a7466")]), bevel=0.01)
+            o.rotation_euler = (rng.uniform(-.5, .5), rng.uniform(-.5, .5), rng.uniform(0, 6))
+
+
+def crater(cx, cy, r, rng):
+    """Shallow blast crater: dark scorched bowl ringed with thrown-up dirt and rubble."""
+    import bmesh as _bm
+    bm = _bm.new()
+    rings, segs = 6, 24
+    vs = []
+    for i in range(rings + 1):
+        rr = r * (i / rings) * 1.6
+        z = -0.25 * max(0.0, 1 - (i / rings * 1.6) ** 2) if i / rings * 1.6 < 1 else 0.12 * math.exp(-((i / rings * 1.6 - 1.15) ** 2) * 10)
+        ring = []
+        for j in range(segs):
+            a = j / segs * 6.283
+            jit = rng.uniform(0.9, 1.1)
+            ring.append(bm.verts.new(g2b(cx + math.cos(a) * rr * jit, cy + math.sin(a) * rr * jit, z + 0.01)))
+        vs.append(ring)
+    for i in range(rings):
+        for j in range(segs):
+            bm.faces.new((vs[i][j], vs[i][(j + 1) % segs], vs[i + 1][(j + 1) % segs], vs[i + 1][j]))
+    me = bpy.data.meshes.new("crater"); bm.to_mesh(me); bm.free()
+    ob = bpy.data.objects.new("crater", me); bpy.context.scene.collection.objects.link(ob)
+    me.materials.append(MAT("rock:#3a332c:#221e1a"))
+    for p in me.polygons: p.use_smooth = True
+    for k in range(10):
+        a = rng.uniform(0, 6.28)
+        P.rubble_pile(cx + math.cos(a) * r * 1.3, cy + math.sin(a) * r * 1.3, 0, rng, size=0.35)
+
+
+def graffiti_on(out_dir, x0, y_face, w, rng, facing="s", n=None, zmax=1.6):
+    """Spray a few graffiti decals along a wall face starting at x0 (or y0 for east faces)."""
+    import graffiti
+    for k in range(n or rng.randint(1, 2)):
+        gw = rng.uniform(1.4, 2.2)
+        gx = x0 + rng.uniform(0, max(0.01, w - gw))
+        gz = rng.uniform(0.15, zmax - gw * 0.5)
+        if facing == "s":
+            graffiti.place(out_dir, gx, y_face, gz, gw, gw * 0.5, "s", rng.randint(0, 400), offset=0.05)
+        else:
+            graffiti.place(out_dir, y_face, gx, gz, gw, gw * 0.5, "e", rng.randint(0, 400), offset=0.05)

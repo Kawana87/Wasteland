@@ -56,6 +56,9 @@ DIM = {P.couch: (1.6, 0.55, False), P.side_table: (0.5, 0.5, False), P.bookshelf
        P.junk_pile: (1.3, 1.0, False)}
 
 
+FIXED = {P.couch: {"w": 1.5}, P.bookshelf: {"w": 1.0}, P.counter: {"w": 1.2}, P.locker_row: {"n": 3}, P.bed: {"size": 1.4}}
+
+
 def _hit(r, rects):
     return any(r[0] < q[2] and q[0] < r[2] and r[1] < q[3] and q[1] < r[3] for q in rects)
 
@@ -84,7 +87,7 @@ def furnish_room(x0, y0, x1, y1, kind, rng, keepout=(), windows=()):
         if _hit(r, keepout) or _hit(r, placed) or (tall and _hit(r, windows)):
             return False
         cx, cy = (r[0] + r[2]) / 2, (r[1] + r[3]) / 2
-        fn(cx, cy, 0 if wall == "n" else -90, random.Random(rng.random()))
+        fn(cx, cy, 0 if wall == "n" else -90, random.Random(rng.random()), **FIXED.get(fn, {}))
         placed.append(r)
         budget -= 1
         return True
@@ -126,7 +129,19 @@ def cutaway_house(M, ox, oy, parts, rooms, wall_out, wall_in, floor_mat, rng, do
         for y in range(py, py + h):
             for x in range(px, px + w):
                 cells.add((ox + x, oy + y))
-    for (a, b, side) in outer_runs(cells):
+    runs = outer_runs(cells)
+    # divider walls between parts (computed first so windows can avoid them)
+    dividers = []
+    for i, (px, py, w, h) in enumerate(parts):
+        for (qx, qy, qw, qh) in parts[i + 1:]:
+            if px + w == qx and not (qy >= py + h or qy + qh <= py):
+                y0, y1 = max(py, qy), min(py + h, qy + qh)
+                dividers.append(((ox + qx, oy + y0), (ox + qx, oy + y1), False))
+            if py + h == qy and not (qx >= px + w or qx + qw <= px):
+                x0, x1 = max(px, qx), min(px + w, qx + qw)
+                dividers.append(((ox + x0, oy + qy), (ox + x1, oy + qy), True))
+    juncs = [p for (a, b, sd) in runs for p in (a, b)] + [p for (a, b, h) in dividers for p in (a, b)]
+    for (a, b, side) in runs:
         full = side in ("n", "w")
         horiz = side in ("n", "s")
         L = abs(b[0] - a[0]) if horiz else abs(b[1] - a[1])
@@ -141,7 +156,7 @@ def cutaway_house(M, ox, oy, parts, rooms, wall_out, wall_in, floor_mat, rng, do
                     door_zone(horiz, fixed, lo + t)
         t = 1.0
         while full and t < L - 0.6:
-            if all(abs(t - o[0] - 0.42) > 1.0 for o in openings) and rng.random() < 0.7:
+            if all(abs(t - o[0] - 0.42) > 1.0 for o in openings) and kit.window_ok(a, b, t, juncs) and rng.random() < 0.8:
                 openings.append((t - 0.38, t + 0.38, 0.85, 1.65, "win"))
             t += rng.uniform(1.5, 2.2)
         wm = wall_in if full else (wall_out if not isinstance(wall_out, dict) else wall_out[horiz])
@@ -157,16 +172,13 @@ def cutaway_house(M, ox, oy, parts, rooms, wall_out, wall_in, floor_mat, rng, do
     for (x, y) in cells:
         box(x, y, 0, x + 1, y + 1, 0.03, floor_mat)
     # room dividers between parts, with a doorway
-    for i, (px, py, w, h) in enumerate(parts):
-        for (qx, qy, qw, qh) in parts[i + 1:]:
-            if px + w == qx and not (qy >= py + h or qy + qh <= py):
-                y0, y1 = max(py, qy), min(py + h, qy + qh)
-                wall_run(M, (ox + qx, oy + y0), (ox + qx, oy + y1), STOREY, wall_in, [((y1 - y0) / 2 - 0.42, (y1 - y0) / 2 + 0.42, 0, 1.6, "door")])
-                door_zone(False, ox + qx, oy + (y0 + y1) / 2)
-            if py + h == qy and not (qx >= px + w or qx + qw <= px):
-                x0, x1 = max(px, qx), min(px + w, qx + qw)
-                wall_run(M, (ox + x0, oy + qy), (ox + x1, oy + qy), STOREY, wall_in, [((x1 - x0) / 2 - 0.42, (x1 - x0) / 2 + 0.42, 0, 1.6, "door")])
-                door_zone(True, oy + qy, ox + (x0 + x1) / 2)
+    for (a, b, horiz) in dividers:
+        L = abs(b[0] - a[0]) if horiz else abs(b[1] - a[1])
+        wall_run(M, a, b, STOREY, wall_in, [(L / 2 - 0.42, L / 2 + 0.42, 0, 1.6, "door")])
+        if horiz:
+            door_zone(True, a[1], (a[0] + b[0]) / 2)
+        else:
+            door_zone(False, a[0], (a[1] + b[1]) / 2)
     for (px, py, w, h), kind in zip(parts, rooms):
         furnish_room(ox + px, oy + py, ox + px + w, oy + py + h, kind, rng, keep, wins)
 
@@ -333,6 +345,8 @@ def scene_suburb():
     kit.footpath(kit.plan_path(doors[1][0], (doors[2][0][0], doors[2][0][1] + 0.5), blockers, rng), 0.5, seed=5)
     kit.footpath(kit.plan_path((22.5, 9.2), (30, 3.5), blockers, rng), 0.55, seed=6)     # beyond the dead end, a trail to a camp
     P.campfire_pit(30.5, 3.0, 0, rng); P.lean_to(32.0, 2.0, 0, rng); P.junk_pile(29.0, 2.0, 0, rng)
+    import landmarks as LM
+    LM.ruin_building(M, 19.5, 12.5, 4, 3, rng, "burnt", '#c88c74')
     P.car_wreck(-3.5, 9.4, 172, rng, style="sedan"); P.car_wreck(17.5, 9.0, 14, rng, style="burned")
     P.mailbox(-6.5, 7.6, 0, rng); P.mailbox(1.5, 7.6, 0, rng); P.mailbox(11, 7.6, 0, rng)
     P.wood_fence(-9.0, 7.2, 0, rng, n=4); P.chainlink(13, 7.4, 0, rng, n=3, wire=False)
@@ -347,6 +361,7 @@ def scene_city2():
     P._MC.clear(); kit._FP.clear()
     M = kit.materials()
     import landmarks as LM
+    LM.GRAF_DIR = os.path.join(OUT, "graf"); os.makedirs(LM.GRAF_DIR, exist_ok=True)
     rng = random.Random(12)
     asphalt, conc = M["asphalt"], M["conc"]
     box(-25, -25, -0.1, 50, 50, 0.0, M["dirt"])
@@ -367,14 +382,18 @@ def scene_city2():
     LM.park(M, 3.0, 13.4, 11.0, 8.0, rng)
     LM.mall(M, 21.0, 13.6, rng, lot_rows=1)
     LM.church(M, -14.5, 13.8, rng)
+    # graffiti on the big walls
+    LM.graffiti_on(LM.GRAF_DIR, 22.0, 1.0 + 5 + 0.14, 6.0, rng, "s", n=2, zmax=1.8)          # jail
+    LM.graffiti_on(LM.GRAF_DIR, 1.0 + 21.0, 13.6 + 7 + 0.14, 12.0, rng, "s", n=3, zmax=1.9)   # mall
+    LM.graffiti_on(LM.GRAF_DIR, 8.8, 2.6 + 5 + 0.14, 4.6, rng, "s", n=1)                      # office block
     # warehouse lot fenced off with barbed wire
     house(M, -16, -4, [(0, 0, 7, 5, 1)], {True: M["brick"], False: M["brick_y"]}, "flat", door=("s", 5, 3.0, "barred"), win_state="boarded")
     LM.barbed_fence(M, -16.8, -4.8, -8.0, 2.6, gate=("e", 3.0), rng=rng)
     # fill the blocks behind the main street
     house(M, 8.6, 2.6, [(0, 0, 5, 5, 2)], M["stucco"], "flat", door=("s", 5, 2.5, "locked"), win_state="broken")
-    house(M, -3.5, -5.5, [(0, 0, 5, 4, 1)], {True: M["brick"], False: M["brick_y"]}, "flat", door=("e", 5, 2.0, "closed"), win_state="boarded")
+    LM.ruin_building(M, -3.5, -5.5, 5, 4, rng, "bombed", '#8a4434')
     house(M, 3.5, -5.0, [(0, 0, 4, 3, 1), (0, 3, 2, 2, 1)], M["siding_cream"], "gable", "sh_slate", door=("s", 3, 3.0, "barred"))
-    house(M, 9.5, -4.5, [(0, 0, 4, 5, 1)], M["stucco"], "flat", door=("s", 5, 2.0, "open"), win_state="broken")
+    LM.ruin_building(M, 9.5, -4.5, 4, 5, rng, "burnt", '#a89c84', storeys=2)
     P.scatter(-9, -8, 15, 2.5, 6, "city", rng, avoid=[(-3.7, -5.7, 1.7, -1.3), (3.3, -5.2, 7.7, 0.2), (9.3, -4.7, 13.7, 0.7), (-16.9, -4.9, -7.9, 2.7)])
     # barricades: a checkpoint across the avenue, one across main street, a sandbag nest at the corner
     LM.barricade_line(16.2, 6.5, 18.8, 6.0, rng)
