@@ -109,13 +109,38 @@ def wall(axis, pi, mode, hh=WALL_H):
             col = tr if fr else (hx("#7a9aa8") if (u * 48 + v * 1.5) % 20 < 3 else hx("#2e4250"))
             if not fr and r.random() < .004:
                 col = hx("#c8d8e0")
-        if mode == "door" and .3 <= u <= .7 and v <= 19:
+        if mode.startswith("door") and .3 <= u <= .7 and v <= 19:
             fr = u < .34 or u > .66 or v > 18
-            col = tr if fr else hx("#7a4a30") if style != "streamline" else hx("#3e8a86")
-            if not fr and abs(u - .6) < .02 and 8 < v < 10:
-                col = hx("#e8d080")
-            if not fr and 12 < v < 16 and .4 < u < .6:
-                col = hx("#3a4a50")
+            leaf = hx("#7a4a30") if style != "streamline" else hx("#3e8a86")
+            col = tr if fr else leaf
+            if not fr:
+                if mode in ("door", "doorlock", "doorbar", "doorsealed"):
+                    if abs(u - .6) < .02 and 8 < v < 10:
+                        col = hx("#e8d080")
+                    if 12 < v < 16 and .4 < u < .6:
+                        col = hx("#3a4a50")
+                    if int(u * 48) % 4 == 0:
+                        col = sh(leaf, .85)
+                elif mode == "dooropen":
+                    col = hx("#1a1410") if u > .4 else sh(leaf, .8)     # door swung inward, edge visible at the hinge
+                    if u > .4 and v < 2:
+                        col = hx("#3a2e24")
+                elif mode == "doorbroken":
+                    jag = (int(u * 48) * 7 + int(v) * 3) % 5
+                    col = hx("#1a1410")
+                    if (u < .4 and jag < 3) or (v < 3 and jag < 2) or (u > .6 and v > 12 and jag == 0):
+                        col = sh(leaf, .75)
+            if mode == "doorlock":
+                if abs(v - 9.5) < .6 and .28 <= u <= .72 and int(u * 48) % 2 == 0:
+                    col = hx("#9a9a94")
+                if .46 < u < .54 and 7 < v < 10.5:
+                    col = hx("#c8a040") if v > 7.6 else hx("#7a6020")
+            if mode in ("doorbar", "doorsealed"):
+                boards = (3, 9.5, 16) if mode == "doorbar" else (1.5, 4.5, 7.5, 10.5, 13.5, 16.5)
+                for k, bz in enumerate(boards):
+                    tilt = (u - .5) * (6 if k % 2 else -6)
+                    if abs(v - bz - tilt) < 1.2 and .26 <= u <= .74:
+                        col = sh("#8a6a44" if k % 2 else "#7a5a3a", .9 if int(u * 48) % 9 else .6)
         if mode == "garage" and .06 <= u <= .94 and v <= 21:
             col = sh("#9a9a90" if style != "tin" else "#8a7a66", 1.0 if int(v) % 3 else .78)
             if u < .09 or u > .91 or v > 20:
@@ -164,7 +189,8 @@ def wall(axis, pi, mode, hh=WALL_H):
 def walls():
     for pi in range(len(WALLS)):
         for axis in "xy":
-            for mode in ("plain", "win", "broken", "boarded", "cracked", "door", "shop", "garage"):
+            for mode in ("plain", "win", "broken", "boarded", "cracked", "door", "shop", "garage",
+                         "doorlock", "doorbar", "dooropen", "doorbroken", "doorsealed"):
                 suf = "" if mode == "plain" else "_" + mode
                 wall(axis, pi, mode).save(f"wall_{axis}{pi}{suf}")
             wall(axis, pi, "plain", 5).save(f"low_{axis}{pi}")

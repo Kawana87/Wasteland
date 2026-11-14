@@ -45,6 +45,7 @@ The first open takes a moment while Godot imports the sprites.
 - **Atomic-age town:** diners with checkerboard floors and rooftop neon, gas stations with canopies and pumps,
   L/U-shaped motels, pastel ranch houses, brick shops with awnings and signs, T/U-shaped municipal offices,
   sawtooth-roof factories, water towers, billboards, vending machines, phone booths, retro street lamps.
+- **Doors:** front doors can be open, closed, locked, barricaded or boarded up. Pick locks quietly with lockpicks (it can fail and snap the pick), or bash doors in with melee attacks — loud enough to bring monsters running. Some houses are sealed and can't be entered.
 - **Varied layouts:** buildings are made of several parts (L, T and U shapes) and can mix storeys,
   e.g. a two-storey house with a one-storey wing.
 

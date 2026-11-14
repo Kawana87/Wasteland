@@ -27,6 +27,9 @@ class Seg:
 	var mode := "plain"     # plain, win, broken, boarded, cracked, door, shop, garage, stub
 	var solid := true
 	var cell := Vector2i()  # the building cell this wall belongs to
+	var is_door := false
+	var door := ""          # closed, locked, barred, open, broken, sealed
+	var door_hp := 0.0
 
 class Bld:
 	var id: int
@@ -57,6 +60,8 @@ class Bld:
 	var signs: Array = []    # [{tex, seg}]
 	var awnings: Array = []  # [{tex, seg}]
 	var roof_props: Array = []   # [{tex, pos, cell}]
+	var sealed := false      # boarded-up scenery house: can't be entered
+	var door_seg: Seg = null
 	func inside(x: float, y: float) -> bool:
 		return cells.has(Vector2i(int(floor(x)), int(floor(y))))
 	func floors_at(c: Vector2i) -> int:
@@ -516,7 +521,7 @@ func generate(sd: int) -> void:
 	# survivors holed up in city buildings
 	var cand := []
 	for b in buildings:
-		if b.kind in ["house", "shop", "office", "motel", "factory"] and b.cells.size() >= 12 and in_city(b.x0, b.y0):
+		if b.kind in ["house", "shop", "office", "motel", "factory"] and not b.sealed and b.cells.size() >= 12 and in_city(b.x0, b.y0):
 			cand.append(b)
 	cand.shuffle()
 	var sn := ["Mara", "Dez", "Jun", "Otis", "Rosa", "Hank", "Priya", "Theo", "Wren", "Gus"]
@@ -743,7 +748,7 @@ func _creatures() -> void:
 	var placed := 0
 	for b in buildings:
 		if placed >= 5: break
-		if (b.ruined or (in_city(b.x0, b.y0) and rng.randf() < 0.25)) and not b.kind in ["den", "shack", "canopy", "kiosk"] and b.settlement < 0:
+		if (b.ruined or (in_city(b.x0, b.y0) and rng.randf() < 0.25)) and not b.kind in ["den", "shack", "canopy", "kiosk"] and not b.sealed and b.settlement < 0:
 			var p := rand_cell(b)
 			if p.distance_to(start) < 14: continue
 			spawns.append({"type": "ghoul", "pos": p + Vector2(rf(-1, 1), rf(-1, 1)), "home": p, "home_r": 3.0})
@@ -1136,8 +1141,10 @@ func place_shape(parts: Array, kind: String, door_side: int = -1, allow_clear: b
 			for d in 4:
 				var nb: Vector2i = c + DIRS[d]
 				if cells.has(nb) and cells[nb] > fl: continue
-				if fl == 0 and c == dc and d == dd: continue
-				_edge(b, c, d, fl, DIR_SIDE[d])
+				var s := _edge(b, c, d, fl, DIR_SIDE[d])
+				if fl == 0 and c == dc and d == dd:
+					s.is_door = true
+					b.door_seg = s
 	# interior walls: between parts (one gap each) and splitting long parts
 	var gaps := {}
 	for fl in b.floors:
@@ -1185,8 +1192,12 @@ func place_shape(parts: Array, kind: String, door_side: int = -1, allow_clear: b
 		else:
 			b.stairs = opts[ri(0, opts.size() - 1)]
 	_dress_walls(b, info)
+	_pick_door(b)
 	if b.ruined:
 		_ruin(b)
+	if b.sealed:
+		_extras(b)
+		return b
 	_furnish(b, gaps)
 	_extras(b)
 	if raider:
@@ -1196,7 +1207,7 @@ func place_shape(parts: Array, kind: String, door_side: int = -1, allow_clear: b
 			cr.kind = "cache"
 			cr.bid = b.id
 			crates.append(cr)
-	if kind != "den" and kind != "shack" and rng.randf() < 0.35:
+	if kind != "den" and kind != "shack" and not b.sealed and rng.randf() < 0.35:
 		spawns.append({"type": "rat", "pos": rand_cell(b), "fl": 0, "home_r": 2.0})
 	return b
 
@@ -1218,6 +1229,46 @@ func _can_place(parts: Array, raider: bool = false, allow_clear: bool = false) -
 			if not inside and (T[i] == FLOOR or BID[i] != 0): return false
 	return true
 
+const DOOR_MODE := {"closed": "door", "locked": "doorlock", "barred": "doorbar", "open": "dooropen", "broken": "doorbroken", "sealed": "doorsealed"}
+
+## Front door state. Some ordinary houses are sealed scenery you can't enter at all.
+func _pick_door(b: Bld) -> void:
+	var s := b.door_seg
+	if s == null: return
+	var r := rng.randf()
+	var st := "open"
+	match b.kind:
+		"shack", "den", "kiosk", "diner":
+			st = "open" if r < 0.7 else "closed"
+		"house", "garage", "motel":
+			if r < 0.3: st = "open"
+			elif r < 0.55: st = "closed"
+			elif r < 0.8: st = "locked"
+			else: st = "barred"
+			if b.kind != "motel" and not b.ruined and b.settlement < 0 and rng.randf() < 0.22 and Vector2(b.x0, b.y0).distance_to(start) > 8:
+				st = "sealed"
+		_:
+			if r < 0.25: st = "open"
+			elif r < 0.5: st = "closed"
+			elif r < 0.85: st = "locked"
+			else: st = "barred"
+	if b.ruined and st != "sealed":
+		st = "broken" if rng.randf() < 0.5 else "open"
+	s.door = st
+	s.mode = DOOR_MODE[st]
+	s.solid = st in ["closed", "locked", "barred", "sealed"]
+	s.door_hp = {"locked": 10.0, "barred": 18.0, "closed": 6.0}.get(st, 0.0)
+	if st == "sealed":
+		b.sealed = true
+		for w in b.segs:
+			if w.mode in ["win", "broken", "shop"]: w.mode = "boarded"
+
+## Called by the game when a door changes state.
+func set_door(s: Seg, st: String) -> void:
+	s.door = st
+	s.mode = DOOR_MODE[st]
+	s.solid = st in ["closed", "locked", "barred", "sealed"]
+
 func rand_cell(b: Bld) -> Vector2:
 	var ks: Array = b.cells.keys()
 	return Vector2(ks[ri(0, ks.size() - 1)]) + Vector2(0.5, 0.5)
@@ -1230,7 +1281,7 @@ func _dress_walls(b: Bld, info: Dictionary) -> void:
 	var garage_done := false
 	var k := 0
 	for s in b.segs:
-		if s.side == "i": continue
+		if s.side == "i" or s.is_door: continue
 		k += 1
 		var r := rng.randf()
 		var ground: bool = s.fl == 0

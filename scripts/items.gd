@@ -25,6 +25,7 @@ const DB := {
 	"ammo_rifle": {"name": "Rifle rounds", "slot": "ammo", "value": 2},
 	"medkit": {"name": "Med Kit", "slot": "use", "heal": 12, "value": 10},
 	"food": {"name": "Canned Food", "slot": "use", "heal": 4, "value": 3},
+	"lockpick": {"name": "Lockpick", "slot": "tool", "value": 2},
 }
 
 static func info(id: String) -> Dictionary:
@@ -46,6 +47,8 @@ static func roll_loot(kind: String, rng: RandomNumberGenerator) -> Array:
 	var out := []
 	var r := rng.randf()
 	var ammo: String = ["ammo_pistol", "ammo_pistol", "ammo_shell", "ammo_rifle"][rng.randi_range(0, 3)]
+	if kind in ["desk", "filing", "dresser", "locker", "workbench", "terminal", "shopcounter"] and rng.randf() < 0.3:
+		out.append(["lockpick", rng.randi_range(1, 2)])
 	match kind:
 		"cache":
 			out.append([ammo, rng.randi_range(6, 14)])

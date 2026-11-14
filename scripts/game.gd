@@ -153,9 +153,10 @@ func start_new_world() -> void:
 	enemies.clear(); camps.clear(); survivors.clear(); views.clear(); bullets.clear(); particles.clear()
 	crate_nodes.clear(); tree_nodes.clear(); chop_hits.clear(); npcs.clear(); furn_nodes.clear(); decor_nodes.clear()
 	smoke_spots.clear(); faded_trees.clear(); dust.clear(); lights.lights.clear()
-	inventory = [{"id": "pipe_pistol", "n": 1}, {"id": "ammo_pistol", "n": 18}, {"id": "medkit", "n": 1}, {"id": "food", "n": 2}]
+	inventory = [{"id": "pipe_pistol", "n": 1}, {"id": "ammo_pistol", "n": 18}, {"id": "medkit", "n": 1}, {"id": "food", "n": 2}, {"id": "lockpick", "n": 3}]
 	equip = {"gun": "pipe_pistol", "melee": "fists", "head": "", "body": ""}
 	day_t = 0.3
+	busy = {}
 	rng.randomize()
 	for f in floaters: f.label.queue_free()
 	floaters.clear()
@@ -651,6 +652,10 @@ func find_target() -> Dictionary:
 			if n.type in ["trader", "wanderer", "settler"] and n.visible:
 				var d: float = p.wpos.distance_to(n.wpos)
 				if d < 1.4 and d < bd: bd = d; best = {"k": "npc", "o": n}
+	var dn := door_near(p.wpos, 1.15)
+	if dn != null:
+		var dd := p.wpos.distance_to((dn.a + dn.b) * 0.5)
+		if dd < bd: bd = dd; best = {"k": "door", "o": dn}
 	if best.is_empty() and camp_near(p.wpos, 3.2) != null:
 		best = {"k": "camp"}
 	return best
@@ -695,12 +700,14 @@ func interact() -> void:
 				chop_hits.erase(i)
 				if spr:
 					spr.texture = Assets.tex("stump")
-					spr.offset = Vector2(-7, -8)
+					spr.offset = Assets.off("stump")
 				var wd := randi_range(2, 4)
 				p.carry.wood += wd
 				add_text(tp, "+%d wood" % wd, Color("d8b880"))
 		"crate":
 			_loot(t.o)
+		"door":
+			open_door(t.o)
 		"npc":
 			var n: Npc = t.o
 			if n.type == "settler":
@@ -769,8 +776,100 @@ func melee() -> void:
 			else:
 				loud = true
 				e.damage(dmg, p.wpos)
+	if not loud:
+		var ds := door_near(p.wpos, 1.3, wa)
+		if ds != null:
+			bash_door(ds, dmg)
+			return
 	if loud or not p.crouch:
 		noise(p.wpos, 2.5, 12.0)
+
+# ------------------------------------------------------------------ doors
+var busy := {}   # lockpicking in progress: {door, t, total}
+
+## Closest closed/locked/barred/sealed door within r (optionally roughly in direction dir).
+func door_near(pos: Vector2, r: float, dir: Vector2 = Vector2.ZERO) -> World.Seg:
+	if player.fl != 0:
+		return null
+	var best: World.Seg = null
+	var bd := r
+	var tx := int(floor(pos.x))
+	var ty := int(floor(pos.y))
+	for yy in range(ty - 1, ty + 2):
+		for xx in range(tx - 1, tx + 2):
+			if not world.in_bounds(xx, yy): continue
+			for sg in world.seg_grid.get(yy * World.N + xx, []):
+				if not sg.is_door or sg.mode == "stub" or not sg.door in ["closed", "locked", "barred", "sealed"]: continue
+				var mid: Vector2 = (sg.a + sg.b) * 0.5
+				var d := pos.distance_to(mid)
+				if dir != Vector2.ZERO and d > 0.3 and (mid - pos).normalized().dot(dir) < 0.2: continue
+				if d < bd: bd = d; best = sg
+	return best
+
+func _view_of(bid: int) -> BuildingView:
+	for v in views:
+		if v.b.id == bid: return v
+	return null
+
+func set_door(sg: World.Seg, st: String) -> void:
+	world.set_door(sg, st)
+	var v := _view_of(sg.bid)
+	if v: v.refresh_seg(sg)
+
+func open_door(sg: World.Seg) -> void:
+	match sg.door:
+		"closed":
+			set_door(sg, "open")
+			noise((sg.a + sg.b) * 0.5, 1.5, 8.0)
+		"locked":
+			if inv_count("lockpick") > 0:
+				busy = {"door": sg, "t": 0.0, "total": 2.4}
+				hud.toast("Picking the lock… stay still. (%d lockpicks)" % inv_count("lockpick"))
+			else:
+				hud.toast("Locked. You need a lockpick — or bash it in with melee attacks (loud, draws attention).")
+		"barred":
+			hud.toast("Barricaded from the inside. Bash it down with melee attacks — it'll be loud.")
+		"sealed":
+			hud.toast("Boarded up tight. There's no getting in here.")
+
+func bash_door(sg: World.Seg, dmg: float) -> void:
+	var mid: Vector2 = (sg.a + sg.b) * 0.5
+	if sg.door == "sealed":
+		hud.toast("These boards are nailed solid. You won't get through.")
+		return
+	sg.door_hp -= maxf(1.0, dmg)
+	burst(mid, 6, [Color("8a6a44"), Color("5a3e28"), Color("c8a070")], 12.0, 0)
+	noise(mid, 9.0, 85.0)
+	if sg.door_hp <= 0.0:
+		set_door(sg, "broken")
+		noise(mid, 12.0, 100.0)
+		add_text(mid, "the door gives way!", Color("f2c36b"))
+	else:
+		add_text(mid, "bang!", Color("e8e0c8"), 0.8)
+
+func _update_busy(delta: float, moving: bool) -> void:
+	if busy.is_empty():
+		return
+	var sg: World.Seg = busy.door
+	if moving or player.inv > 0.0 or sg.door != "locked":
+		busy = {}
+		hud.toast("Stopped picking the lock.")
+		return
+	busy.t += delta
+	if busy.t >= busy.total:
+		var mid: Vector2 = (sg.a + sg.b) * 0.5
+		var chance := 0.6 + (0.15 if player.crouch else 0.0)
+		if rng.randf() < chance:
+			set_door(sg, "open")
+			add_text(mid, "click — unlocked", Color("9fd08a"))
+		else:
+			inv_take("lockpick")
+			noise(mid, 2.0, 10.0)
+			add_text(mid, "the pick snapped", Color("e88a6a"))
+			if inv_count("lockpick") > 0:
+				busy = {"door": sg, "t": 0.0, "total": 2.4}
+				return
+		busy = {}
 
 func shoot() -> void:
 	var p := player
@@ -1052,7 +1151,10 @@ func _process(delta: float) -> void:
 		_update_camera()
 		return
 	var p := player
-	p.step(delta, _read_move(), _read_aim())
+	var mv := _read_move()
+	_update_busy(delta, mv.length() > 0.2)
+	if not busy.is_empty(): mv = Vector2.ZERO
+	p.step(delta, mv, _read_aim())
 	if _wants_fire():
 		shoot()
 	dog.step(delta, p)
@@ -1310,7 +1412,16 @@ func _update_hud() -> void:
 			"stairs": msg = "%s Go %s" % [k, "downstairs" if p.fl == 1 else "upstairs"]
 			"crate": msg = "%s Search %s" % [k, {"car": "car trunk", "bag": "remains", "brute": "remains", "cache": "raider stash", "crate": "crate"}.get(t.o.kind, t.o.kind.replace("_", " "))]
 			"npc": msg = "%s %s" % [k, "Talk" if t.o.type == "settler" else "Trade"]
+			"door":
+				var mk := "MELEE" if using_touch else "[F]"
+				match t.o.door:
+					"closed": msg = "%s Open door" % k
+					"locked": msg = ("%s Pick lock (%d)   %s Bash (loud)" % [k, inv_count("lockpick"), mk]) if inv_count("lockpick") > 0 else "Locked — %s Bash it in (loud)" % mk
+					"barred": msg = "Barricaded — %s Bash (loud)" % mk
+					"sealed": msg = "Boarded up"
 			"camp": msg = "%s Camp menu" % ("CAMP" if using_touch else "[B]")
+	if not busy.is_empty():
+		msg = "Picking lock… %d%%" % int(100.0 * busy.t / busy.total)
 	hud.set_prompt(msg)
 	hud.touch.queue_redraw()
 	if p.flash > 0.0:
@@ -1368,6 +1479,15 @@ func _debug_shots() -> void:
 				await get_tree().create_timer(0.5).timeout
 				_snap(out + "/k_%s.png" % kind)
 				break
+	var seen := {}
+	for b in world.buildings:
+		var sg: World.Seg = b.door_seg
+		if sg == null or seen.has(sg.door) or sg.side in ["n", "w"]: continue
+		seen[sg.door] = true
+		player.fl = 0
+		player.wpos = Vector2(b.out) + Vector2(0.5, 0.5) + Vector2(World.DIRS[b.door_side]) * 1.2
+		await get_tree().create_timer(0.4).timeout
+		_snap(out + "/door_%s.png" % sg.door)
 	inv_add("shotgun"); inv_add("road_helmet"); inv_add("ammo_shell", 8)
 	open_inventory()
 	await get_tree().create_timer(0.4).timeout
@@ -1434,5 +1554,30 @@ func _debug_soak() -> void:
 	quick_heal()
 	day_t = 0.7
 	await get_tree().create_timer(0.3).timeout
+	# doors: pick a lock, bash a barricade
+	var picked := 0
+	var bashed := 0
+	var sealed_n := 0
+	for b in world.buildings:
+		if b.sealed: sealed_n += 1
+		var sg: World.Seg = b.door_seg
+		if sg == null: continue
+		if sg.door == "locked" and picked == 0:
+			player.wpos = Vector2(b.out) + Vector2(0.5, 0.5)
+			for a in ["left", "right", "up", "down"]: Input.action_release(a)
+			player.inv = 0.0
+			hud.hide_menu()
+			open_door(sg)
+			for i in 200:
+				await get_tree().process_frame
+				if busy.is_empty(): break
+			picked = 1 if sg.door == "open" else -1
+		if sg.door == "barred" and bashed == 0:
+			player.wpos = Vector2(b.out) + Vector2(0.5, 0.5)
+			for i in 30:
+				bash_door(sg, 2.0)
+				if sg.door == "broken": break
+			bashed = 1 if sg.door == "broken" else -1
+	print("DOORS picked=%d bashed=%d sealed=%d lockpicks=%d" % [picked, bashed, sealed_n, inv_count("lockpick")])
 	print("SOAK DONE state=%s hp=%d kills=%d camps=%d enemies=%d" % [state, player.hp, player.kills, camps.size(), enemies.size()])
 	get_tree().quit()

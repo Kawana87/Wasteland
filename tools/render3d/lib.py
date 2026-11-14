@@ -5,6 +5,7 @@ y goes screen left-down), z up in tiles. g2b() converts to Blender space (Y flip
 The camera is a true 2:1 dimetric orthographic camera, like Fallout 1/2's renders.
 """
 import bpy, bmesh, math, random
+import fast as FAST
 from mathutils import Vector, Euler
 
 TILE_PX = 64                      # width of one tile diamond on screen
@@ -346,23 +347,23 @@ def _apply_scale(ob):
 
 
 def cyl(x, y, z0, z1, r, mat, verts=16, name="cyl", rot=None):
-    bpy.ops.mesh.primitive_cylinder_add(vertices=verts, radius=r, depth=z1 - z0, location=g2b(x, y, (z0 + z1) / 2))
-    ob = bpy.context.active_object
+    ob = FAST.primitive_cylinder_add(vertices=verts, radius=r, depth=z1 - z0, location=g2b(x, y, (z0 + z1) / 2))
+    pass
     ob.name = name
     ob.data.materials.append(mat)
     if rot:
         ob.rotation_euler = rot
-    bpy.ops.object.shade_smooth()
+    FAST.shade_smooth()
     return ob
 
 
 def sphere(x, y, z, r, mat, name="sph", scale=(1, 1, 1)):
-    bpy.ops.mesh.primitive_uv_sphere_add(segments=16, ring_count=10, radius=r, location=g2b(x, y, z))
-    ob = bpy.context.active_object
+    ob = FAST.primitive_uv_sphere_add(segments=16, ring_count=10, radius=r, location=g2b(x, y, z))
+    pass
     ob.name = name
     ob.scale = scale
     ob.data.materials.append(mat)
-    bpy.ops.object.shade_smooth()
+    FAST.shade_smooth()
     return ob
 
 

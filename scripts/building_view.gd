@@ -207,6 +207,15 @@ func _spr(tex: String, pos: Vector2, depth: float, bias: int) -> Sprite2D:
 	add_child(s)
 	return s
 
+## A door opened, broke or got unlocked: swap that wall piece's texture.
+func refresh_seg(s: World.Seg) -> void:
+	for wn in walls:
+		if wn.seg == s:
+			var ax := "x" if s.axis == 0 else "y"
+			var tex := "wall_%s%d%s" % [ax, b.pal, "" if s.mode == "plain" else "_" + s.mode]
+			wn.full.texture = Assets.tex(tex)
+			return
+
 func set_faded(f: bool) -> void:
 	if f == _faded:
 		return
