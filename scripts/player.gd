@@ -77,15 +77,15 @@ func _visual() -> void:
 	body.frame = f
 	body.flip_h = aim.x < 0
 	body.visible = not (inv > 0.0 and int(Time.get_ticks_msec() / 80) % 2 == 0)
-	var base := Vector2(0, -9 + (3 if crouch else 0) - round(jz))
+	var base := Vector2(0, -14 + (5 if crouch else 0) - round(jz))
 	gun.visible = climb.is_empty()
-	gun.points = PackedVector2Array([(base + aim * 2).round(), (base + aim * (1 + gun_len)).round()])
+	gun.points = PackedVector2Array([(base + aim * 3).round(), (base + aim * (2 + gun_len * 1.5)).round()])
 	if swing > 0.0:
 		var pts := PackedVector2Array()
 		var a0 := aim.angle()
 		for i in range(-3, 4):
 			var a := a0 + i * 0.3
-			pts.append((base + Vector2(cos(a) * 9, sin(a) * 7)).round())
+			pts.append((base + Vector2(cos(a) * 14, sin(a) * 10)).round())
 		arc.points = pts
 		arc.visible = true
 	else:

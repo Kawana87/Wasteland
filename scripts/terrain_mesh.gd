@@ -20,6 +20,7 @@ const MAT_COL := {
 	11: Color("8a7454"),  # dirt track
 	12: Color("4a484e"),  # cracked road
 	13: Color("4a484e"),  # pothole
+	14: Color("9ab8a8"),  # linoleum (colours set in shader)
 }
 
 func build(w: World) -> void:
@@ -51,6 +52,9 @@ func build(w: World) -> void:
 	mesh = m
 	var mat := ShaderMaterial.new()
 	mat.shader = load("res://shaders/terrain.gdshader")
+	var maps := GroundMaps.build(w)
+	for k in maps:
+		mat.set_shader_parameter(k + "_map", maps[k])
 	material = mat
 	z_index = -4096
 	z_as_relative = false
@@ -91,15 +95,14 @@ func _material(w: World, x: float, y: float, steep: float) -> int:
 	var i := w.idx(tx, ty)
 	var t := w.T[i]
 	var g := w.G[i]
-	if t == World.ROAD:
-		return 13 if g == 2 else (12 if g == 1 else 5)
-	if t == World.SIDE:
-		return 6
+	# roads, sidewalks and tracks are painted per pixel from GroundMaps; this is what shows at their edges
+	if t == World.ROAD or t == World.SIDE:
+		return 3 if w.in_city(x, y) else 1
 	if t == World.DIRT_ROAD:
-		return 11
+		return 2
 	if t == World.FLOOR:
 		var b: World.Bld = w.bld(w.BID[i])
-		return [7, 8, 9, 10][b.fkind] if b else 7
+		return [7, 8, 9, 10, 14][b.fkind] if b else 7
 	match g:
 		1: return 1
 		2: return 2

@@ -30,7 +30,7 @@ func _place(tex: String, at: Vector2, off: Vector2) -> Sprite2D:
 	var s := Sprite2D.new()
 	s.texture = Assets.tex(tex)
 	s.centered = false
-	s.offset = off
+	s.offset = Assets.off(tex)
 	s.z_as_relative = false
 	s.position = Iso.to_screen(at.x, at.y, Game.I.world.hz(at.x, at.y)).round()
 	s.z_index = Iso.z_for(at.x + at.y, 3)
@@ -55,7 +55,7 @@ func build(k: String) -> void:
 				var t := Sprite2D.new()
 				t.texture = Assets.tex("garden")
 				t.centered = false
-				t.offset = Vector2(-16, 0)
+				t.offset = Assets.off("garden")
 				t.z_as_relative = false
 				t.z_index = Iso.z_for(x + y, -2)
 				t.position = Iso.to_screen(x, y, Game.I.world.vh(x, y))

@@ -234,10 +234,10 @@ func _visual(p: Player) -> void:
 		body.frame = walk_f
 	body.flip_h = sd.x < 0
 	if gun:
-		var base := Vector2(0, -9)
-		gun.points = PackedVector2Array([(base + sd * 2).round(), (base + sd * (7 if weapon == "shotgun" else 6)).round()])
+		var base := Vector2(0, -14)
+		gun.points = PackedVector2Array([(base + sd * 3).round(), (base + sd * (11 if weapon == "shotgun" else 9)).round()])
 	body.position.x = (1 if hit_t > 0.0 else 0) + (round(sin(Game.I.time * 40.0)) if wind > 0.0 else 0)
-	var top: int = {"raider": -26, "ghoul": -26, "brute": -32, "shellback": -15, "rat": -11}[type]
+	var top: int = {"raider": -42, "ghoul": -42, "brute": -48, "shellback": -24, "rat": -16}[type]
 	if st == 2:
 		icon.texture = Assets.tex("icon_alert"); icon.visible = true; icon.position = Vector2(-1, top)
 	elif st == 1:
@@ -247,8 +247,8 @@ func _visual(p: Player) -> void:
 	sync()
 
 func _draw() -> void:
-	draw_rect(Rect2(-shadow_w * 0.5, -1, shadow_w, 2), Color(0, 0, 0, 0.35))
+	super._draw()
 	if hpbar > 0.0 and hp < max_hp:
-		var top: float = {"raider": -29, "ghoul": -29, "brute": -35, "shellback": -18, "rat": -14}[type]
-		draw_rect(Rect2(-6, top, 12, 2), Color(0.1, 0.05, 0.05, 0.8))
-		draw_rect(Rect2(-6, top, 12.0 * hp / max_hp, 2), Color("c84a3a"))
+		var top: float = {"raider": -45, "ghoul": -45, "brute": -52, "shellback": -27, "rat": -19}[type]
+		draw_rect(Rect2(-9, top, 18, 3), Color(0.1, 0.05, 0.05, 0.8))
+		draw_rect(Rect2(-9, top, 18.0 * hp / max_hp, 3), Color("c84a3a"))

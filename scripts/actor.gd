@@ -53,8 +53,10 @@ func make_body(tex_name: String, frames: int, fw: int, fh: int) -> void:
 	body.texture = Assets.tex(tex_name)
 	body.hframes = frames
 	body.centered = false
-	body.offset = Vector2(-fw * 0.5, -fh)
+	body.offset = Assets.off(tex_name)   # anchor = feet of the first frame
 	add_child(body)
 
 func _draw() -> void:
-	draw_rect(Rect2(-shadow_w * 0.5, -1, shadow_w, 2), Color(0, 0, 0, 0.35))
+	var sw := shadow_w * Iso.S
+	draw_rect(Rect2(-sw * 0.5, -1, sw, 3), Color(0, 0, 0, 0.3))
+	draw_rect(Rect2(-sw * 0.5 + 2, -2, sw - 4, 5), Color(0, 0, 0, 0.2))

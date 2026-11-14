@@ -24,8 +24,9 @@ class Seg:
 	var fl: int
 	var window: bool
 	var bid: int
-	var mode := "plain"     # plain, win, broken, boarded, cracked, stub
+	var mode := "plain"     # plain, win, broken, boarded, cracked, door, shop, garage, stub
 	var solid := true
+	var cell := Vector2i()  # the building cell this wall belongs to
 
 class Bld:
 	var id: int
@@ -41,15 +42,25 @@ class Bld:
 	var out := Vector2i()
 	var stairs := Vector2i(-1, -1)
 	var segs: Array = []
-	var kind := "house"      # house, shop, office, garage, shack, den
+	var kind := "house"      # house, diner, motel, shop, office, factory, garage, kiosk, canopy, shack, den
 	var ruined := false
 	var holes := {}          # Vector2i -> true: no upper floor / no roof here
 	var furn: Array = []
-	var roof := "flat"       # flat, pitched, tin
+	var roof := "flat"       # flat, pitched, tin, saw, canopy
 	var settlement := -1
 	var door_in := Vector2i()
+	var door_side := 1
+	var cells := {}          # Vector2i -> storeys over that cell
+	var parts: Array = []    # [{r: Rect2i, fl: int}]
+	var rcol := 0            # roof colour index
+	var open := false        # gas-station canopy: counts as outdoors
+	var signs: Array = []    # [{tex, seg}]
+	var awnings: Array = []  # [{tex, seg}]
+	var roof_props: Array = []   # [{tex, pos, cell}]
 	func inside(x: float, y: float) -> bool:
-		return x > x0 and x < x0 + w and y > y0 and y < y0 + h
+		return cells.has(Vector2i(int(floor(x)), int(floor(y))))
+	func floors_at(c: Vector2i) -> int:
+		return cells.get(c, 0)
 
 class Crate:
 	var pos: Vector2
@@ -250,7 +261,9 @@ func can_stand(p: Vector2, r: float, fl: int) -> bool:
 		var id := building_at(p.x, p.y)
 		if id == 0:
 			return false
-		return not buildings[id - 1].holes.has(Vector2i(int(floor(p.x)), int(floor(p.y))))
+		var c := Vector2i(int(floor(p.x)), int(floor(p.y)))
+		var bb: Bld = buildings[id - 1]
+		return bb.floors_at(c) > fl and not bb.holes.has(c)
 	return not tree_hit(p, r) and not car_hit(p, r) and not decor_hit(p, r)
 
 ## Can you walk from a to b? Uphill steeper than 26 px/tile is a cliff (jumping adds a little lift).
@@ -320,11 +333,15 @@ const TEMPLATES := {
 	"kitchen": {"north": ["counter", "stove", "counter", "fridge"], "west": ["counter"], "center": ["table"]},
 	"living": {"north": ["bookshelf", "tv", "armchair"], "west": ["couch"], "center": []},
 	"bedroom": {"north": ["bed", "dresser"], "west": ["dresser"], "center": []},
-	"office": {"north": ["filing", "bookshelf", "filing"], "west": ["filing"], "center": ["desk"]},
+	"office": {"north": ["filing", "terminal", "bookshelf", "filing"], "west": ["filing", "locker"], "center": ["desk"]},
 	"shop": {"north": ["shopshelf", "shopshelf", "shopshelf"], "west": ["shopshelf"], "center": ["shopcounter"]},
 	"garage": {"north": ["workbench", "barrel", "barrel"], "west": ["shopshelf"], "center": []},
 	"shack": {"north": ["mattress", "barrel"], "west": ["workbench"], "center": []},
 	"den": {"north": ["mattress", "barrel", "mattress"], "west": ["mattress"], "center": []},
+	"diner": {"north": ["booth", "jukebox", "booth", "booth", "booth"], "west": ["booth", "booth"], "center": ["counter"]},
+	"motel": {"north": ["bed", "tv"], "west": ["dresser"], "center": []},
+	"factory": {"north": ["workbench", "locker", "locker", "workbench", "barrel", "shopshelf"], "west": ["barrel", "shopshelf", "barrel"], "center": ["workbench"]},
+	"kiosk": {"north": ["shopshelf", "vending"], "west": ["shopshelf"], "center": []},
 }
 const FURN_SIZE := {   # long side, depth, height (px)
 	"counter": [1.0, 0.5, 12], "stove": [0.5, 0.5, 12], "fridge": [0.5, 0.5, 28], "table": [0.9, 0.6, 10],
@@ -332,9 +349,12 @@ const FURN_SIZE := {   # long side, depth, height (px)
 	"bookshelf": [0.9, 0.3, 26], "bed": [1.0, 0.6, 7], "dresser": [0.6, 0.35, 14], "desk": [0.8, 0.45, 11],
 	"filing": [0.35, 0.35, 16], "shopshelf": [1.0, 0.35, 20], "shopcounter": [1.0, 0.4, 12],
 	"workbench": [0.9, 0.4, 11], "barrel": [0.35, 0.35, 12], "mattress": [0.9, 0.55, 3],
+	"booth": [1.0, 0.45, 12], "jukebox": [0.45, 0.35, 22], "terminal": [0.6, 0.4, 16], "locker": [0.8, 0.3, 26],
+	"stool": [0.25, 0.25, 8], "vending": [0.5, 0.4, 28],
 }
 const CONTAINER_CHANCE := {"fridge": 0.9, "dresser": 0.9, "desk": 0.9, "filing": 0.8, "shopshelf": 0.6,
-	"shopcounter": 1.0, "workbench": 0.9, "bookshelf": 0.4, "counter": 0.35, "barrel": 0.3, "mattress": 0.2}
+	"shopcounter": 1.0, "workbench": 0.9, "bookshelf": 0.4, "counter": 0.35, "barrel": 0.3, "mattress": 0.2,
+	"locker": 0.8, "terminal": 0.5, "vending": 0.7, "jukebox": 0.3, "booth": 0.15}
 
 func generate(sd: int) -> void:
 	seed_value = sd
@@ -406,19 +426,52 @@ func generate(sd: int) -> void:
 			hs.append(hz(c.x + o.x, c.y + o.y))
 		if hs.max() - hs.min() > 22.0: continue
 		_settlement(c, names[settlements.size()])
-	# city buildings, placed between the winding streets
-	for k in 320:
-		var w := ri(4, 8)
-		var h := ri(4, 7)
-		place_building(ri(CITY, N - 3 - w), ri(CITY, N - 3 - h), w, h)
-	# outskirts houses and garages
-	for k in 60:
-		var w := ri(4, 6)
-		var h := ri(4, 6)
-		if rng.randf() < 0.5:
-			place_building(ri(2, 18), ri(18, 58), w, h)
-		else:
-			place_building(ri(18, 58), ri(2, 18), w, h)
+	# city blocks: diners, motels, gas stations, shops, offices, factories, houses
+	var lots := []
+	for y in range(CITY, N - 4):
+		for x in range(CITY, N - 4):
+			lots.append(Vector2i(x, y))
+	for i in range(lots.size() - 1, 0, -1):
+		var j := ri(0, i)
+		var t: Vector2i = lots[i]; lots[i] = lots[j]; lots[j] = t
+	# big landmarks first so they get room, then fill the gaps with smaller buildings
+	var big := {"office": 3, "factory": 2, "motel": 1, "diner": 2, "gas": 1}
+	for lot in lots:
+		if BID[idx(lot.x, lot.y)] != 0 or T[idx(lot.x, lot.y)] == ROAD: continue
+		var opts := []
+		for k in big:
+			if big[k] > 0: opts.append(k)
+		if opts.is_empty(): break
+		var kind: String = opts[ri(0, opts.size() - 1)]
+		if kind in ["diner", "gas", "motel"] and not near_road(lot.x + 2, lot.y + 2, 4): continue
+		var before := buildings.size()
+		place_shape(shape_for(kind, lot.x, lot.y), kind)
+		if buildings.size() > before: big[kind] -= 1
+	for lot in lots:
+		if BID[idx(lot.x, lot.y)] != 0 or T[idx(lot.x, lot.y)] == ROAD: continue
+		var kind := _pick_kind(lot.x, lot.y)
+		if place_shape(shape_for(kind, lot.x, lot.y), kind) == null and kind != "gas":
+			var fb: String = ["house", "garage", "shop"][ri(0, 2)]
+			place_shape(shape_for(fb, lot.x, lot.y), fb)
+	# outskirts: ranch houses, garages and roadside stops
+	for k in 160:
+		var x := ri(2, 18) if rng.randf() < 0.5 else ri(18, 56)
+		var y := ri(18, 56) if x < 18 else ri(2, 18)
+		var kind := _pick_kind(x, y)
+		place_shape(shape_for(kind, x, y), kind)
+	# a few landmarks
+	for k in 2:
+		for t in 60:
+			var p := Vector2(rf(6, N - 6), rf(6, N - 6))
+			if _free_spot(p) and T[idx(int(p.x), int(p.y))] == GRASS and p.distance_to(start) > 10:
+				add_decor("watertower", p, true, Vector2(0.55, 0.55))
+				break
+	for k in 4:
+		for t in 60:
+			var p := road_point() + Vector2(rf(-2.5, 2.5), rf(-2.5, 2.5))
+			if _free_spot(p) and T[idx(int(p.x), int(p.y))] == GRASS and not near_road(int(p.x), int(p.y), 0):
+				add_decor("billboard_" + ["x", "y"][ri(0, 1)], p, true, Vector2(0.2, 0.2))
+				break
 	# trees
 	for y in N:
 		for x in N:
@@ -457,12 +510,13 @@ func generate(sd: int) -> void:
 				G[i] = 3
 			if T[i] == GRASS and near_road(x, y, 1) and rng.randf() < 0.5:
 				G[i] = 4
+	_lamps()
 	_debris()
 	_creatures()
 	# survivors holed up in city buildings
 	var cand := []
 	for b in buildings:
-		if b.kind != "den" and b.kind != "shack" and b.w >= 5 and b.h >= 5 and in_city(b.x0, b.y0):
+		if b.kind in ["house", "shop", "office", "motel", "factory"] and b.cells.size() >= 12 and in_city(b.x0, b.y0):
 			cand.append(b)
 	cand.shuffle()
 	var sn := ["Mara", "Dez", "Jun", "Otis", "Rosa", "Hank", "Priya", "Theo", "Wren", "Gus"]
@@ -470,7 +524,7 @@ func generate(sd: int) -> void:
 	for k in min(3, cand.size()):
 		var b: Bld = cand[k]
 		for t in 20:
-			var p := Vector2(b.x0 + 1.5 + ri(0, b.w - 3), b.y0 + 1.5 + ri(0, b.h - 3))
+			var p := rand_cell(b)
 			if can_stand(p, 0.28, 0):
 				survivors.append({"pos": p, "name": sn[k], "bid": b.id})
 				break
@@ -570,7 +624,7 @@ func _cars() -> void:
 			c.k = posmod(int(round(dir.angle() / (PI / 4.0))) + (4 if rng.randf() < 0.3 else 0), 8)
 			c.ang = c.k * PI / 4.0
 			c.pos = p + dir.orthogonal() * lane
-			c.spr = ["teal", "red", "yellow", "burned", "burned"][ri(0, 4)]
+			c.spr = ["teal", "red", "yellow", "teal", "red", "burned"][ri(0, 5)]
 			var clash := false
 			for o in cars:
 				if o.pos.distance_to(c.pos) < 3.0: clash = true
@@ -609,6 +663,21 @@ func add_decor(name: String, p: Vector2, solid: bool = false, half: Vector2 = Ve
 		if not decor_grid.has(k): decor_grid[k] = []
 		decor_grid[k].append(d)
 
+## Retro street lamps along city streets and highways, alternating sides.
+func _lamps() -> void:
+	for pth in paths:
+		if pth.kind == "dirt": continue
+		var pts: PackedVector2Array = pth.pts
+		var side := 1.0
+		for i in range(6, pts.size() - 2, 22):
+			var p := pts[i]
+			if not in_city(p.x, p.y) and rng.randf() < 0.6: continue
+			var dir := (pts[i + 1] - pts[i - 1]).normalized()
+			var q: Vector2 = p + dir.orthogonal() * side * (pth.w + 0.75)
+			side = -side
+			if _free_spot(q) and T[idx(int(q.x), int(q.y))] != ROAD:
+				add_decor("lamp", q, true, Vector2(0.08, 0.08))
+
 func _free_spot(p: Vector2) -> bool:
 	if not in_bounds(int(p.x), int(p.y)): return false
 	var t := T[idx(int(p.x), int(p.y))]
@@ -640,7 +709,7 @@ func _debris() -> void:
 			var pick: String = ["rubble0", "rubble1", "rubble2", "bricks", "papers", "trashbag", "barrel_rust", "tire"][ri(0, 7)]
 			add_decor(pick, p, pick == "barrel_rust", Vector2(0.17, 0.17), pick == "papers")
 	# wild clutter: bones, dead bushes, fences, toxic spills
-	for k in 90:
+	for k in 160:
 		var p := Vector2(rf(2, N - 2), rf(2, N - 2))
 		if in_city(p.x, p.y) or not _free_spot(p) or CL[idx(int(p.x), int(p.y))] == 1: continue
 		add_decor(["deadbush", "deadbush", "bones", "rubble2", "fence", "tire"][ri(0, 5)], p)
@@ -674,8 +743,8 @@ func _creatures() -> void:
 	var placed := 0
 	for b in buildings:
 		if placed >= 5: break
-		if (b.ruined or (in_city(b.x0, b.y0) and rng.randf() < 0.25)) and b.kind != "den" and b.kind != "shack" and b.settlement < 0:
-			var p := Vector2(b.x0 + b.w * 0.5, b.y0 + b.h * 0.5)
+		if (b.ruined or (in_city(b.x0, b.y0) and rng.randf() < 0.25)) and not b.kind in ["den", "shack", "canopy", "kiosk"] and b.settlement < 0:
+			var p := rand_cell(b)
 			if p.distance_to(start) < 14: continue
 			spawns.append({"type": "ghoul", "pos": p + Vector2(rf(-1, 1), rf(-1, 1)), "home": p, "home_r": 3.0})
 			if rng.randf() < 0.4:
@@ -814,6 +883,22 @@ func _settlement(c: Vector2, sname: String) -> void:
 	for k in ri(1, 2):
 		critters.append({"type": "cattle", "pos": c + Vector2(rf(-5, 5), rf(3, 5)), "home": c + Vector2(0, 4)})
 
+const DIRS := [Vector2i(0, -1), Vector2i(0, 1), Vector2i(-1, 0), Vector2i(1, 0)]   # n s w e
+const DIR_SIDE := ["n", "s", "w", "e"]
+
+## Wall segment on edge `d` (index into DIRS) of cell c.
+func _edge(b: Bld, c: Vector2i, d: int, fl: int, side: String) -> Seg:
+	var x := float(c.x)
+	var y := float(c.y)
+	var s: Seg
+	match d:
+		0: s = _add_seg(b, Vector2(x, y), Vector2(x + 1, y), 0, side, fl, false)
+		1: s = _add_seg(b, Vector2(x, y + 1), Vector2(x + 1, y + 1), 0, side, fl, false)
+		2: s = _add_seg(b, Vector2(x, y), Vector2(x, y + 1), 1, side, fl, false)
+		_: s = _add_seg(b, Vector2(x + 1, y), Vector2(x + 1, y + 1), 1, side, fl, false)
+	s.cell = c
+	return s
+
 func _add_seg(b: Bld, a: Vector2, bb: Vector2, axis: int, side: String, fl: int, window: bool) -> Seg:
 	var s := Seg.new()
 	s.a = a; s.b = bb; s.axis = axis; s.side = side; s.fl = fl; s.window = window; s.bid = b.id
@@ -831,144 +916,442 @@ func _add_seg(b: Bld, a: Vector2, bb: Vector2, axis: int, side: String, fl: int,
 		seg_grid[k].append(s)
 	return s
 
-func _pick_kind(x0: int, y0: int, w: int, h: int) -> String:
+# ------------------------------------------------------------------ building shapes
+## A building footprint is a list of non-overlapping rectangles ("parts").
+func shape_for(kind: String, x0: int, y0: int) -> Array:
 	var r := rng.randf()
-	if in_city(x0, y0):
-		var by_road := near_road(x0 + w / 2, y0 + h / 2, maxi(w, h) / 2 + 2)
-		if by_road:
-			return "shop" if r < 0.45 else ("office" if r < 0.7 else "house")
-		return "house" if r < 0.55 else ("office" if r < 0.75 else "garage")
-	return "house" if r < 0.75 else "garage"
+	match kind:
+		"house":
+			var w := ri(4, 5); var h := ri(3, 4)
+			if r < 0.55: return _shape_L(x0, y0, w, h, ri(2, 3), 2)
+			if r < 0.7: return _shape_T(x0, y0, w + 1, h, 2, 2)
+			return [Rect2i(x0, y0, w, h)]
+		"diner":
+			var long := ri(6, 7)
+			var parts := [Rect2i(x0, y0, long, 3)] if r < 0.5 else [Rect2i(x0, y0, 3, long)]
+			if rng.randf() < 0.5:
+				var m: Rect2i = parts[0]
+				parts.append(Rect2i(m.position.x + m.size.x, m.position.y, 2, 2) if m.size.x > m.size.y else Rect2i(m.position.x, m.position.y + m.size.y, 2, 2))
+			return parts
+		"motel":
+			var long := ri(6, 8)
+			if r < 0.5: return [Rect2i(x0, y0, long, 2), Rect2i(x0, y0 + 2, 2, ri(2, 3))]
+			if r < 0.8: return [Rect2i(x0, y0, long, 2), Rect2i(x0, y0 + 2, 2, 2), Rect2i(x0 + long - 2, y0 + 2, 2, 2)]
+			return [Rect2i(x0, y0, 2, long), Rect2i(x0 + 2, y0, ri(2, 3), 2)]
+		"shop":
+			var w := ri(4, 6); var h := ri(4, 5)
+			if r < 0.35: return _shape_L(x0, y0, w, h, 2, 2)
+			return [Rect2i(x0, y0, w, h)]
+		"office":
+			var w := ri(6, 8); var h := ri(3, 4)
+			if r < 0.45: return _shape_T(x0, y0, w, h, ri(2, 3), ri(2, 3))
+			if r < 0.8: return _shape_U(x0, y0, w, h, 2, ri(2, 3))
+			return [Rect2i(x0, y0, w, h + 1)]
+		"factory":
+			var w := ri(7, 9); var h := ri(5, 6)
+			if r < 0.5: return [Rect2i(x0, y0, w, h), Rect2i(x0 + w, y0 + h - 2, 2, 2)]
+			return [Rect2i(x0, y0, w, h)]
+		"garage":
+			return [Rect2i(x0, y0, ri(4, 5), ri(3, 4))]
+		"kiosk":
+			return [Rect2i(x0, y0, 3, 3)]
+	return [Rect2i(x0, y0, ri(4, 6), ri(4, 5))]
 
+## main rect + a wing hanging off one side, flush with one end
+func _shape_L(x0: int, y0: int, w: int, h: int, ww: int, wh: int) -> Array:
+	var main := Rect2i(x0, y0, w, h)
+	match ri(0, 3):
+		0: return [main, Rect2i(x0 + (0 if rng.randf() < 0.5 else w - ww), y0 + h, ww, wh)]
+		1: return [main, Rect2i(x0 + w, y0 + (0 if rng.randf() < 0.5 else h - ww), wh, ww)]
+		2: return [Rect2i(x0, y0 + wh, w, h), Rect2i(x0 + (0 if rng.randf() < 0.5 else w - ww), y0, ww, wh)]
+	return [Rect2i(x0 + wh, y0, w, h), Rect2i(x0, y0 + (0 if rng.randf() < 0.5 else h - ww), wh, ww)]
+
+func _shape_T(x0: int, y0: int, w: int, h: int, ww: int, wh: int) -> Array:
+	if rng.randf() < 0.5:
+		return [Rect2i(x0, y0, w, h), Rect2i(x0 + (w - ww) / 2, y0 + h, ww, wh)]
+	return [Rect2i(x0, y0, h, w), Rect2i(x0 + h, y0 + (w - ww) / 2, wh, ww)]
+
+func _shape_U(x0: int, y0: int, w: int, h: int, ww: int, wh: int) -> Array:
+	if rng.randf() < 0.5:
+		return [Rect2i(x0, y0, w, h), Rect2i(x0, y0 + h, ww, wh), Rect2i(x0 + w - ww, y0 + h, ww, wh)]
+	return [Rect2i(x0, y0, h, w), Rect2i(x0 + h, y0, wh, ww), Rect2i(x0 + h, y0 + w - ww, wh, ww)]
+
+func _pick_kind(x: int, y: int) -> String:
+	var r := rng.randf()
+	if in_city(x, y):
+		if near_road(x + 2, y + 2, 4):
+			if r < 0.3: return "shop"
+			if r < 0.42: return "diner"
+			if r < 0.52: return "gas"
+			if r < 0.62: return "motel"
+			if r < 0.82: return "office"
+			return "house"
+		if r < 0.4: return "house"
+		if r < 0.6: return "office"
+		if r < 0.78: return "factory"
+		return "garage"
+	if near_road(x + 2, y + 2, 4):
+		if r < 0.15: return "gas"
+		if r < 0.27: return "diner"
+		if r < 0.37: return "motel"
+	return "house" if r < 0.8 else "garage"
+
+const KIND_INFO := {   # wall palettes, roof style, floor kind, window chance, max storeys
+	"house": {"pal": [0, 1, 2, 3], "roof": "pitched", "fk": [0, 2], "win": 0.35, "fl": 2},
+	"diner": {"pal": [9], "roof": "flat", "fk": [1], "win": 0.2, "fl": 1},
+	"motel": {"pal": [10, 1, 2], "roof": "pitched", "fk": [2], "win": 0.3, "fl": 1},
+	"shop": {"pal": [6, 7, 1], "roof": "flat", "fk": [4, 3], "win": 0.3, "fl": 2},
+	"office": {"pal": [8, 7], "roof": "flat", "fk": [2, 4], "win": 0.55, "fl": 2},
+	"factory": {"pal": [11, 8], "roof": "saw", "fk": [3], "win": 0.2, "fl": 1},
+	"garage": {"pal": [5, 8, 6], "roof": "pitched", "fk": [3], "win": 0.15, "fl": 1},
+	"kiosk": {"pal": [10], "roof": "flat", "fk": [4], "win": 0.3, "fl": 1},
+	"shack": {"pal": [5], "roof": "tin", "fk": [3], "win": 0.2, "fl": 1},
+	"den": {"pal": [6], "roof": "flat", "fk": [3], "win": 0.2, "fl": 1},
+	"canopy": {"pal": [10], "roof": "canopy", "fk": [3], "win": 0.0, "fl": 1},
+}
+
+## Old single-rectangle entry point (raider dens, settlement shacks).
 func place_building(x0: int, y0: int, w: int, h: int, kind: String = "", door_side: int = -1, allow_clear: bool = false) -> Bld:
-	var raider := kind == "den"
-	if x0 < 2 or y0 < 2 or x0 + w >= N - 2 or y0 + h >= N - 2:
+	return place_shape([Rect2i(x0, y0, w, h)], kind if kind != "" else _pick_kind(x0, y0), door_side, allow_clear)
+
+## Places a gas station: kiosk + canopy over two pumps + a tall pole sign.
+func place_gas(x0: int, y0: int) -> bool:
+	var along_x := rng.randf() < 0.5
+	var cr := Rect2i(x0 + 4, y0, 4, 3) if along_x else Rect2i(x0, y0 + 4, 3, 4)
+	if not _can_place([Rect2i(x0, y0, 3, 3)]) or not _can_place([cr]): return false
+	var k: Bld = place_shape([Rect2i(x0, y0, 3, 3)], "kiosk")
+	if k == null: return false
+	var c: Bld = place_shape([cr], "canopy", -1, false, true)
+	if c == null: return true
+	c.open = true
+	var a := Vector2(cr.position)
+	var e := Vector2(cr.end)
+	for p in [Vector2(a.x + 0.35, a.y + 0.35), Vector2(e.x - 0.35, a.y + 0.35), Vector2(a.x + 0.35, e.y - 0.35), Vector2(e.x - 0.35, e.y - 0.35)]:
+		add_decor("pillar", p, true, Vector2(0.08, 0.08))
+		decor[decor.size() - 1].bid = 0
+	var mid := (a + e) * 0.5
+	for o in ([Vector2(-0.8, 0), Vector2(0.8, 0)] if along_x else [Vector2(0, -0.8), Vector2(0, 0.8)]):
+		add_decor("fuelpump", mid + o, true, Vector2(0.14, 0.12))
+		decor[decor.size() - 1].bid = 0
+	var sp := Vector2(e.x + 0.6, e.y + 0.6) if along_x else Vector2(e.x + 0.6, e.y + 0.4)
+	if _free_spot(sp):
+		add_decor("sign_gas", sp, true, Vector2(0.08, 0.08))
+	return true
+
+func place_shape(parts: Array, kind: String, door_side: int = -1, allow_clear: bool = false, open: bool = false) -> Bld:
+	if kind == "gas":
+		var p0: Rect2i = parts[0]
+		place_gas(p0.position.x, p0.position.y)
 		return null
-	for y in range(y0 - 1, y0 + h + 1):
-		for x in range(x0 - 1, x0 + w + 1):
-			var i := idx(x, y)
-			var inside := x >= x0 and x < x0 + w and y >= y0 and y < y0 + h
-			if inside and (T[i] != GRASS or (CL[i] == 1 and not raider and not allow_clear)): return null
-			if not inside and (T[i] == FLOOR or BID[i] != 0): return null
+	var raider := kind == "den"
+	var info: Dictionary = KIND_INFO.get(kind, KIND_INFO["house"])
+	var cells := {}
+	var bb: Rect2i = parts[0]
+	for r in parts:
+		bb = bb.merge(r)
+		for y in range(r.position.y, r.end.y):
+			for x in range(r.position.x, r.end.x):
+				cells[Vector2i(x, y)] = 1
+	if not _can_place(parts, raider, allow_clear):
+		return null
 	var mn := 1e9
 	var mx := -1e9
 	var sum := 0.0
 	var n := 0
-	for y in range(y0, y0 + h + 1):
-		for x in range(x0, x0 + w + 1):
-			var v := vh(x, y)
+	for c in cells:
+		for o in [Vector2i(0, 0), Vector2i(1, 0), Vector2i(0, 1), Vector2i(1, 1)]:
+			var v := vh(c.x + o.x, c.y + o.y)
 			mn = minf(mn, v); mx = maxf(mx, v); sum += v; n += 1
 	if mx - mn > (60.0 if raider else 18.0):
 		return null
-	var h0 := vh(int(round(x0 + w / 2.0)), int(round(y0 + h / 2.0))) if raider else sum / n
-	for y in range(y0 - 1, y0 + h + 2):
-		for x in range(x0 - 1, x0 + w + 2):
-			var inner := x >= x0 and x <= x0 + w and y >= y0 and y <= y0 + h
+	var ctr := Vector2(bb.position) + Vector2(bb.size) * 0.5
+	var h0 := vh(int(round(ctr.x)), int(round(ctr.y))) if raider else sum / n
+	for y in range(bb.position.y - 1, bb.end.y + 2):
+		for x in range(bb.position.x - 1, bb.end.x + 2):
+			var inner := false
+			for o in [Vector2i(0, 0), Vector2i(-1, 0), Vector2i(0, -1), Vector2i(-1, -1)]:
+				if cells.has(Vector2i(x, y) + o): inner = true
 			set_vh(x, y, h0 if inner else (vh(x, y) + h0) * 0.5)
 	var b := Bld.new()
 	b.id = buildings.size() + 1
-	b.x0 = x0; b.y0 = y0; b.w = w; b.h = h; b.h0 = h0; b.raider = raider
-	b.kind = kind if kind != "" else _pick_kind(x0, y0, w, h)
-	b.pal = 5 if b.kind == "shack" else (1 if raider else ri(0, 3))
-	b.fkind = {"shop": 1, "office": 2, "garage": 3, "den": 3, "shack": 3}.get(b.kind, ri(0, 1) * 2)
-	b.floors = 2 if (b.kind in ["house", "office", "shop"] and w >= 5 and h >= 5 and rng.randf() < 0.55) else 1
-	b.roof = "tin" if b.kind == "shack" else ("pitched" if b.kind in ["house", "garage"] else "flat")
-	b.ruined = b.kind in ["house", "office", "shop", "garage"] and rng.randf() < (0.3 if in_city(x0, y0) else 0.35)
-	for y in range(y0, y0 + h):
-		for x in range(x0, x0 + w):
-			T[idx(x, y)] = FLOOR
-			BID[idx(x, y)] = b.id
-	# door: one gap in the ground-floor outer wall
-	var side := door_side if door_side >= 0 else ri(0, 3)
-	var door := Vector2i()
-	if side == 0: door = Vector2i(x0 + ri(1, w - 2), y0)
-	elif side == 1: door = Vector2i(x0 + ri(1, w - 2), y0 + h)
-	elif side == 2: door = Vector2i(x0, y0 + ri(1, h - 2))
-	else: door = Vector2i(x0 + w, y0 + ri(1, h - 2))
-	b.out = Vector2i(door.x, door.y - 1) if side == 0 else (Vector2i(door.x, door.y) if side == 1 else (Vector2i(door.x - 1, door.y) if side == 2 else Vector2i(door.x, door.y)))
-	b.door_in = Vector2i(door.x, y0) if side == 0 else (Vector2i(door.x, y0 + h - 1) if side == 1 else (Vector2i(x0, door.y) if side == 2 else Vector2i(x0 + w - 1, door.y)))
-	var iw := -1
-	if w >= 5 and b.kind != "shack" and not raider:
-		iw = x0 + ri(2, w - 2)
+	b.x0 = bb.position.x; b.y0 = bb.position.y; b.w = bb.size.x; b.h = bb.size.y
+	b.h0 = h0; b.raider = raider; b.kind = kind; b.open = open
+	var pals: Array = info.pal
+	b.pal = pals[ri(0, pals.size() - 1)]
+	var fks: Array = info.fk
+	b.fkind = fks[ri(0, fks.size() - 1)]
+	b.rcol = ri(0, 4)
+	b.roof = info.roof
+	if kind == "garage" and rng.randf() < 0.5: b.roof = "flat"
+	if kind == "motel" and rng.randf() < 0.4: b.roof = "flat"
+	b.ruined = kind in ["house", "office", "shop", "garage", "diner", "motel", "factory"] and rng.randf() < (0.28 if in_city(b.x0, b.y0) else 0.3)
+	# storeys per part: the biggest part may get a second floor, wings usually stay low
+	var big := 0
+	for i in parts.size():
+		if parts[i].get_area() > parts[big].get_area(): big = i
+	var two := int(info.fl) >= 2 and rng.randf() < (0.7 if kind == "office" else 0.4)
+	for i in parts.size():
+		var r: Rect2i = parts[i]
+		var f := 1
+		if two and (i == big or (kind == "office" and rng.randf() < 0.5)) and r.size.x >= 3 and r.size.y >= 3:
+			f = 2
+		b.parts.append({"r": r, "fl": f})
+		for y in range(r.position.y, r.end.y):
+			for x in range(r.position.x, r.end.x):
+				cells[Vector2i(x, y)] = f
+	b.cells = cells
+	for c in cells:
+		b.floors = maxi(b.floors, cells[c])
+		T[idx(c.x, c.y)] = FLOOR
+		BID[idx(c.x, c.y)] = b.id
+	buildings.append(b)
+	if kind == "canopy":
+		return b
+	# door: an outer ground-floor edge, preferably facing a road and the camera
+	var cands := []
+	for c in cells:
+		for d in 4:
+			var nb: Vector2i = c + DIRS[d]
+			if cells.has(nb) or not in_bounds(nb.x, nb.y): continue
+			var t := T[idx(nb.x, nb.y)]
+			if t == FLOOR or t == TREE or BID[idx(nb.x, nb.y)] != 0: continue
+			var score := rng.randf()
+			if door_side >= 0: score += 5.0 if d == door_side else 0.0
+			else:
+				if near_road(nb.x, nb.y, 2): score += 2.0
+				if d == 1 or d == 3: score += 0.6
+			cands.append([score, c, d])
+	if cands.is_empty():
+		cands.append([0.0, cells.keys()[0], 1])
+	cands.sort_custom(func(p, q): return p[0] > q[0])
+	var dc: Vector2i = cands[0][1]
+	var dd: int = cands[0][2]
+	b.door_in = dc
+	b.out = dc + DIRS[dd]
+	b.door_side = dd
+	# outer walls on every storey
+	for fl in b.floors:
+		for c in cells:
+			if cells[c] <= fl: continue
+			for d in 4:
+				var nb: Vector2i = c + DIRS[d]
+				if cells.has(nb) and cells[nb] > fl: continue
+				if fl == 0 and c == dc and d == dd: continue
+				_edge(b, c, d, fl, DIR_SIDE[d])
+	# interior walls: between parts (one gap each) and splitting long parts
 	var gaps := {}
 	for fl in b.floors:
-		for x in range(x0, x0 + w):
-			if not (fl == 0 and side == 0 and x == door.x):
-				_add_seg(b, Vector2(x, y0), Vector2(x + 1, y0), 0, "n", fl, rng.randf() < 0.3)
-			if not (fl == 0 and side == 1 and x == door.x):
-				_add_seg(b, Vector2(x, y0 + h), Vector2(x + 1, y0 + h), 0, "s", fl, rng.randf() < 0.3)
-		for y in range(y0, y0 + h):
-			if not (fl == 0 and side == 2 and y == door.y):
-				_add_seg(b, Vector2(x0, y), Vector2(x0, y + 1), 1, "w", fl, rng.randf() < 0.3)
-			if not (fl == 0 and side == 3 and y == door.y):
-				_add_seg(b, Vector2(x0 + w, y), Vector2(x0 + w, y + 1), 1, "e", fl, rng.randf() < 0.3)
-		if iw > 0:
-			var gap := y0 + ri(0, h - 1)
-			gaps[fl] = gap
-			for y in range(y0, y0 + h):
-				if y != gap:
-					_add_seg(b, Vector2(iw, y), Vector2(iw, y + 1), 1, "i", fl, false)
+		for i in b.parts.size():
+			for j in range(i + 1, b.parts.size()):
+				var shared := []
+				for c in cells:
+					if cells[c] <= fl or not b.parts[i].r.has_point(c): continue
+					for d in 4:
+						var nb: Vector2i = c + DIRS[d]
+						if b.parts[j].r.has_point(nb) and cells[nb] > fl:
+							shared.append([c, d])
+				if shared.is_empty() or kind in ["diner"]: continue
+				var gi := shared.size() / 2
+				for k in shared.size():
+					if k == gi:
+						gaps[shared[k][0]] = true
+						gaps[shared[k][0] + DIRS[shared[k][1]]] = true
+						continue
+					_edge(b, shared[k][0], shared[k][1], fl, "i")
+		for p in b.parts:
+			var r: Rect2i = p.r
+			if p.fl <= fl or kind in ["shack", "den", "diner", "factory", "kiosk"] or raider: continue
+			if r.size.x >= 6 or (kind == "motel" and r.size.x >= 4 and r.size.y == 2):
+				var step := 3 if kind == "motel" else r.size.x
+				var xs := range(r.position.x + 3, r.end.x - 1, 3) if kind == "motel" else [r.position.x + ri(2, r.size.x - 3)]
+				for wx in xs:
+					var gy := r.position.y + ri(0, r.size.y - 1)
+					for y in range(r.position.y, r.end.y):
+						if y == gy:
+							gaps[Vector2i(wx, y)] = true; gaps[Vector2i(wx - 1, y)] = true
+							continue
+						_edge(b, Vector2i(wx, y), 2, fl, "i")
+	# stairs in a two-storey part
 	if b.floors == 2:
-		for t in 30:
-			var sx := ri(x0, x0 + w - 1)
-			var sy := ri(y0 + 1, y0 + h - 1)
-			if Vector2i(sx, sy) == b.door_in or Vector2(sx, sy).distance_to(Vector2(b.door_in)) < 1.5: continue
-			if sx == iw or sx == iw - 1: continue
-			b.stairs = Vector2i(sx, sy)
-			break
-		if b.stairs.x < 0:
+		var opts := []
+		for c in cells:
+			if cells[c] < 2 or c == dc or Vector2(c).distance_to(Vector2(dc)) < 1.5 or gaps.has(c): continue
+			opts.append(c)
+		if opts.is_empty():
 			b.floors = 1
-			var keep := []
-			for s in b.segs:
-				if s.fl == 0: keep.append(s)
-			b.segs = keep
-	# weathering: broken / boarded windows, cracks
-	for s in b.segs:
-		if s.side == "i": continue
-		var r := rng.randf()
-		if s.window:
-			s.mode = "broken" if r < 0.5 else ("boarded" if r < 0.75 else "win")
-		elif r < 0.15:
-			s.mode = "cracked"
-	# ruins: one corner has collapsed
+			for c in cells: cells[c] = 1
+			for p in b.parts: p.fl = 1
+			b.segs = b.segs.filter(func(s): return s.fl == 0)
+		else:
+			b.stairs = opts[ri(0, opts.size() - 1)]
+	_dress_walls(b, info)
 	if b.ruined:
-		var corner := Vector2([x0, x0 + w][ri(0, 1)], [y0, y0 + h][ri(0, 1)])
-		var cr := rf(1.6, 2.6)
-		for s in b.segs:
-			var mid: Vector2 = (s.a + s.b) * 0.5
-			if mid.distance_to(corner) < cr:
-				s.mode = "stub"
-				s.solid = false
-		for y in range(y0, y0 + h):
-			for x in range(x0, x0 + w):
-				if Vector2(x + 0.5, y + 0.5).distance_to(corner) < cr + 0.3 and Vector2i(x, y) != b.stairs:
-					b.holes[Vector2i(x, y)] = true
-				elif rng.randf() < 0.08:
-					b.holes[Vector2i(x, y)] = true
-		var rp := corner.lerp(Vector2(x0 + w * 0.5, y0 + h * 0.5), 0.25)
-		add_decor("rubble%d" % ri(0, 2), rp)
-		add_decor("bricks", rp + Vector2(rf(-0.6, 0.6), rf(-0.6, 0.6)))
-	buildings.append(b)
-	_furnish(b, iw, gaps)
+		_ruin(b)
+	_furnish(b, gaps)
+	_extras(b)
 	if raider:
 		for k in ri(1, 2):
 			var cr := Crate.new()
-			cr.pos = Vector2(rf(x0 + 1, x0 + w - 1), rf(y0 + 1.6, y0 + h - 1))
+			cr.pos = Vector2(cells.keys()[ri(0, cells.size() - 1)]) + Vector2(0.5, 0.5)
 			cr.kind = "cache"
 			cr.bid = b.id
 			crates.append(cr)
-	if b.kind != "den" and b.kind != "shack" and rng.randf() < 0.35:
-		spawns.append({"type": "rat", "pos": Vector2(rf(x0 + 0.6, x0 + w - 0.6), rf(y0 + 0.6, y0 + h - 0.6)), "fl": ri(0, b.floors - 1), "home_r": 2.0})
+	if kind != "den" and kind != "shack" and rng.randf() < 0.35:
+		spawns.append({"type": "rat", "pos": rand_cell(b), "fl": 0, "home_r": 2.0})
 	return b
+
+func _can_place(parts: Array, raider: bool = false, allow_clear: bool = false) -> bool:
+	var cells := {}
+	var bb: Rect2i = parts[0]
+	for r in parts:
+		bb = bb.merge(r)
+		for y in range(r.position.y, r.end.y):
+			for x in range(r.position.x, r.end.x):
+				cells[Vector2i(x, y)] = 1
+	if bb.position.x < 2 or bb.position.y < 2 or bb.end.x >= N - 2 or bb.end.y >= N - 2:
+		return false
+	for y in range(bb.position.y - 1, bb.end.y + 1):
+		for x in range(bb.position.x - 1, bb.end.x + 1):
+			var i := idx(x, y)
+			var inside := cells.has(Vector2i(x, y))
+			if inside and ((T[i] != GRASS and T[i] != SIDE) or (CL[i] == 1 and not raider and not allow_clear)): return false
+			if not inside and (T[i] == FLOOR or BID[i] != 0): return false
+	return true
+
+func rand_cell(b: Bld) -> Vector2:
+	var ks: Array = b.cells.keys()
+	return Vector2(ks[ri(0, ks.size() - 1)]) + Vector2(0.5, 0.5)
+
+func _front(s: Seg) -> bool:   # south / east faces are the ones the camera sees
+	return s.side == "s" or s.side == "e"
+
+## Windows, shopfronts, painted doors, garage doors and weathering.
+func _dress_walls(b: Bld, info: Dictionary) -> void:
+	var garage_done := false
+	var k := 0
+	for s in b.segs:
+		if s.side == "i": continue
+		k += 1
+		var r := rng.randf()
+		var ground: bool = s.fl == 0
+		var on_door_side: bool = s.side == DIR_SIDE[b.door_side]
+		match b.kind:
+			"diner", "kiosk":
+				if ground and (on_door_side or _front(s)) and r < 0.75: s.mode = "shop"
+			"shop":
+				if ground and on_door_side and r < 0.8: s.mode = "shop"
+			"motel":
+				if ground and _front(s): s.mode = "door" if k % 3 == 0 else ("win" if k % 3 == 1 else "plain")
+			"garage", "factory":
+				if ground and not garage_done and _front(s) and r < 0.5:
+					s.mode = "garage"; garage_done = true
+		if s.mode == "plain" and rng.randf() < float(info.win):
+			s.mode = "win"
+		if s.mode == "plain" and b.kind == "house" and ground and _front(s) and rng.randf() < 0.08:
+			s.mode = "door"
+		# weathering
+		var w := rng.randf()
+		if s.mode == "win" or s.mode == "shop":
+			if w < 0.45: s.mode = "broken"
+			elif w < 0.65: s.mode = "boarded"
+		elif s.mode == "plain" and w < 0.12:
+			s.mode = "cracked"
+
+func _ruin(b: Bld) -> void:
+	var edge_cells := []
+	for c in b.cells:
+		for d in DIRS:
+			if not b.cells.has(c + d): edge_cells.append(c); break
+	var cc: Vector2i = edge_cells[ri(0, edge_cells.size() - 1)]
+	var corner := Vector2(cc) + Vector2(rf(0, 1), rf(0, 1))
+	var cr := rf(1.6, 2.6)
+	for s in b.segs:
+		if ((s.a + s.b) * 0.5).distance_to(corner) < cr:
+			s.mode = "stub"
+			s.solid = false
+	for c in b.cells:
+		if Vector2(c.x + 0.5, c.y + 0.5).distance_to(corner) < cr + 0.3 and c != b.stairs:
+			b.holes[c] = true
+		elif rng.randf() < 0.08 and c != b.stairs:
+			b.holes[c] = true
+	var rp := corner.lerp(Vector2(b.x0 + b.w * 0.5, b.y0 + b.h * 0.5), 0.25)
+	if b.cells.has(Vector2i(int(rp.x), int(rp.y))):
+		add_decor("rubble%d" % ri(0, 2), rp)
+		add_decor("bricks", rp + Vector2(rf(-0.5, 0.5), rf(-0.5, 0.5)))
+
+const SHOP_SIGNS := ["grocery", "hardware", "clinic", "radio", "bar"]
+
+## Signs, awnings, rooftop clutter and yard props.
+func _extras(b: Bld) -> void:
+	var fronts := []
+	for s in b.segs:
+		if _front(s) and s.mode != "stub" and s.fl == b.cells.get(s.cell, 1) - 1: fronts.append(s)
+	var ground_front: Array = fronts.filter(func(s): return s.fl == 0)
+	match b.kind:
+		"shop", "office", "garage", "factory":
+			var word: String = SHOP_SIGNS[ri(0, SHOP_SIGNS.size() - 1)]
+			if b.kind == "office": word = "cityhall" if rng.randf() < 0.4 else ""
+			if b.kind == "garage": word = "garage"
+			if b.kind == "factory": word = "factory"
+			if word != "" and fronts.size() > 0:
+				var s: Seg = fronts[ri(0, fronts.size() - 1)]
+				b.signs.append({"tex": "wsign_%s_%s" % [word, "x" if s.axis == 0 else "y"], "seg": s})
+			if b.kind == "shop":
+				var col: String = ["c84a3a", "3e8a86", "d8b040"][ri(0, 2)]
+				for s in ground_front:
+					if s.mode in ["shop", "broken", "boarded"] and rng.randf() < 0.8:
+						b.awnings.append({"tex": "awning_%s_%s" % [col, "x" if s.axis == 0 else "y"], "seg": s})
+	var flat_cells := []
+	for c in b.cells:
+		if not b.holes.has(c): flat_cells.append(c)
+	if b.roof == "flat" and flat_cells.size() > 0 and not b.ruined:
+		var props: Array = {"office": ["ac_unit", "ac_unit", "roof_vent", "antenna", "roof_tank"], "shop": ["ac_unit", "roof_vent"],
+			"diner": ["roof_vent"], "kiosk": ["roof_vent"], "garage": ["roof_vent"], "motel": ["ac_unit"]}.get(b.kind, [])
+		for nm in props:
+			if rng.randf() < 0.7:
+				var c: Vector2i = flat_cells[ri(0, flat_cells.size() - 1)]
+				b.roof_props.append({"tex": nm, "pos": Vector2(c) + Vector2(rf(0.3, 0.7), rf(0.3, 0.7)), "cell": c})
+	if b.kind == "diner" and not b.ruined:
+		var p: Dictionary = b.parts[0]
+		var c := Vector2(p.r.get_center())
+		b.roof_props.append({"tex": "sign_diner", "pos": c, "cell": Vector2i(int(c.x), int(c.y))})
+	# yard / street props outside the door
+	var out := Vector2(b.out) + Vector2(0.5, 0.5)
+	var side := Vector2(DIRS[b.door_side]).orthogonal()
+	match b.kind:
+		"house":
+			if rng.randf() < 0.6: _try_decor("mailbox", out + side * 1.2, true, Vector2(0.08, 0.08))
+			if rng.randf() < 0.5:
+				var ax := "x" if (b.door_side == 0 or b.door_side == 1) else "y"
+				for k in [-3, -2, 2, 3]:
+					_try_decor("picket_" + ax, out + side * k + Vector2(DIRS[b.door_side]) * 0.4, false)
+			if rng.randf() < 0.5: _try_decor("shrub", out + side * -1.3, false)
+		"motel":
+			_try_decor("sign_motel", out + side * 2.0 + Vector2(DIRS[b.door_side]) * 1.2, true, Vector2(0.08, 0.08))
+			if rng.randf() < 0.6: _try_decor("vending_" + ("x" if b.door_side < 2 else "y"), out + side * -1.2, true, Vector2(0.2, 0.15))
+		"diner":
+			if rng.randf() < 0.6: _try_decor("vending_" + ("x" if b.door_side < 2 else "y"), out + side * 1.3, true, Vector2(0.2, 0.15))
+		"shop", "office":
+			if rng.randf() < 0.4: _try_decor(["newsbox", "phonebooth", "bench", "hydrant"][ri(0, 3)], out + side * 1.4, true, Vector2(0.15, 0.15))
+
+func _try_decor(name: String, p: Vector2, solid: bool, half: Vector2 = Vector2(0.2, 0.2)) -> void:
+	if _free_spot(p) and p.distance_to(start) > 4.0:
+		var ti := idx(int(p.x), int(p.y))
+		if T[ti] == ROAD: return
+		add_decor(name, p, solid, half)
 
 func _rooms_for(b: Bld) -> Dictionary:
 	match b.kind:
-		"house": return {0: ["kitchen", "living"], 1: ["bedroom", "bedroom"]}
+		"house": return {0: ["kitchen", "living", "bedroom"], 1: ["bedroom", "bedroom"]}
 		"shop": return {0: ["shop", "shop"], 1: ["office", "bedroom"]}
 		"office": return {0: ["office", "office"], 1: ["office", "office"]}
 		"garage": return {0: ["garage", "garage"]}
 		"shack": return {0: ["shack"]}
 		"den": return {0: ["den"]}
+		"diner": return {0: ["diner", "kitchen"]}
+		"motel": return {0: ["motel"]}
+		"factory": return {0: ["factory", "office"]}
+		"kiosk": return {0: ["kiosk"]}
 	return {0: ["living", "kitchen"]}
 
 func _add_furn(b: Bld, name: String, p: Vector2, orient: String, fl: int) -> Furn:
@@ -987,54 +1370,64 @@ func _add_furn(b: Bld, name: String, p: Vector2, orient: String, fl: int) -> Fur
 	b.furn.append(f)
 	return f
 
-func _furnish(b: Bld, iw: int, gaps: Dictionary) -> void:
+## Rooms = parts, with long parts split where an interior wall was built.
+func _furnish(b: Bld, gaps: Dictionary) -> void:
 	var rooms := _rooms_for(b)
-	var blocked := {b.door_in: true, b.stairs: true}
-	for o in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+	var blocked := gaps.duplicate()
+	blocked[b.door_in] = true
+	blocked[b.stairs] = true
+	for o in DIRS:
 		blocked[b.door_in + o] = true
 		if b.stairs.x >= 0: blocked[b.stairs + o] = true
 	for fl in b.floors:
 		var types: Array = rooms.get(fl, rooms[0])
-		var spans := [[b.x0, b.x0 + b.w]] if iw < 0 else [[b.x0, iw], [iw, b.x0 + b.w]]
-		for ri_ in spans.size():
-			var rx0: int = spans[ri_][0]
-			var rx1: int = spans[ri_][1]
-			var tpl: Dictionary = TEMPLATES[types[mini(ri_, types.size() - 1)]]
-			var gap: int = gaps.get(fl, -99)
-			# along the back (north) wall
-			var items: Array = tpl.north
-			var k := 0
-			for x in range(rx0, rx1):
-				if k >= items.size(): break
-				var t := Vector2i(x, b.y0)
-				if blocked.has(t) or b.holes.has(t) and fl > 0: continue
-				var nm: String = items[k]
-				var d: float = FURN_SIZE[nm][1]
-				_add_furn(b, nm, Vector2(x + 0.5, b.y0 + d * 0.5 + 0.08), "a", fl)
-				k += 1
-			# along the west wall
-			items = tpl.west
-			k = 0
-			for y in range(b.y0 + 1, b.y0 + b.h):
-				if k >= items.size(): break
-				var t := Vector2i(rx0, y)
-				if blocked.has(t) or y == gap or (b.holes.has(t) and fl > 0): continue
-				if rng.randf() < 0.4: continue
-				var nm: String = items[k]
-				var d: float = FURN_SIZE[nm][1]
-				_add_furn(b, nm, Vector2(rx0 + d * 0.5 + 0.08, y + 0.5), "b", fl)
-				k += 1
-			# something in the middle of bigger rooms
-			if tpl.center.size() > 0 and rx1 - rx0 >= 3 and b.h >= 4:
-				var cp := Vector2((rx0 + rx1) * 0.5, b.y0 + b.h * 0.5 + 0.4)
-				var ct := Vector2i(int(cp.x), int(cp.y))
-				if not blocked.has(ct) and cp.distance_to(Vector2(b.door_in) + Vector2(0.5, 0.5)) > 1.6 and not (fl > 0 and b.holes.has(ct)):
-					var nm: String = tpl.center[0]
-					_add_furn(b, nm, cp, "a", fl)
-					if nm == "table" or nm == "desk":
-						_add_furn(b, "chair", cp + Vector2(0, 0.55), "a", fl)
-			# a bit of mess
-			for m in ri(1, 3):
-				var p := Vector2(rf(rx0 + 0.4, rx1 - 0.4), rf(b.y0 + 1.2, b.y0 + b.h - 0.4))
-				if fl == 0:
-					add_decor(["papers", "papers", "rubble2", "bones"][ri(0, 3)] if b.kind != "shack" else "papers", p, false, Vector2.ZERO, true)
+		var ri_ := 0
+		for p in b.parts:
+			if p.fl <= fl: continue
+			var r: Rect2i = p.r
+			# split points from interior walls running along y inside this part
+			var xs := [r.position.x]
+			for s in b.segs:
+				if s.side == "i" and s.fl == fl and s.axis == 1 and r.has_point(Vector2i(int(s.a.x), int(s.a.y))) and int(s.a.x) > r.position.x and not xs.has(int(s.a.x)):
+					xs.append(int(s.a.x))
+			xs.sort()
+			xs.append(r.end.x)
+			for q in range(xs.size() - 1):
+				var rx0: int = xs[q]
+				var rx1: int = xs[q + 1]
+				var tpl: Dictionary = TEMPLATES[types[mini(ri_, types.size() - 1)]]
+				ri_ += 1
+				var items: Array = tpl.north
+				var k := 0
+				for x in range(rx0, rx1):
+					if k >= items.size(): break
+					var t := Vector2i(x, r.position.y)
+					if blocked.has(t) or (b.holes.has(t) and fl > 0): continue
+					var nm: String = items[k]
+					_add_furn(b, nm, Vector2(x + 0.5, r.position.y + FURN_SIZE[nm][1] * 0.5 + 0.08), "a", fl)
+					k += 1
+				items = tpl.west
+				k = 0
+				for y in range(r.position.y + 1, r.end.y):
+					if k >= items.size(): break
+					var t := Vector2i(rx0, y)
+					if blocked.has(t) or (b.holes.has(t) and fl > 0): continue
+					if rng.randf() < 0.3: continue
+					var nm: String = items[k]
+					_add_furn(b, nm, Vector2(rx0 + FURN_SIZE[nm][1] * 0.5 + 0.08, y + 0.5), "b", fl)
+					k += 1
+				if tpl.center.size() > 0 and rx1 - rx0 >= 3 and r.size.y >= 3:
+					var cp := Vector2((rx0 + rx1) * 0.5, r.position.y + r.size.y * 0.5 + 0.4)
+					var ct := Vector2i(int(cp.x), int(cp.y))
+					if not blocked.has(ct) and cp.distance_to(Vector2(b.door_in) + Vector2(0.5, 0.5)) > 1.6 and not (fl > 0 and b.holes.has(ct)):
+						var nm: String = tpl.center[0]
+						_add_furn(b, nm, cp, "a", fl)
+						if nm == "table" or nm == "desk":
+							_add_furn(b, "chair", cp + Vector2(0, 0.55), "a", fl)
+						if nm == "counter":
+							for sx in [-0.35, 0.35]:
+								_add_furn(b, "stool", cp + Vector2(sx, 0.55), "a", fl)
+				for m in ri(1, 3):
+					var pp := Vector2(rf(rx0 + 0.4, rx1 - 0.4), rf(r.position.y + 1.2, r.end.y - 0.4))
+					if fl == 0:
+						add_decor(["papers", "papers", "rubble2", "bones", "trashbag"][ri(0, 4)] if b.kind != "shack" else "papers", pp, false, Vector2.ZERO, true)

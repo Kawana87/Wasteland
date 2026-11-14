@@ -39,6 +39,15 @@ The first open takes a moment while Godot imports the sprites.
 
 ## What's in the game so far
 
+- **Art:** 48×24 px tiles at a 576×324 pixel canvas (1.5× the original detail), shaded sprites with outlines,
+  cast shadows and contact shadows on the ground, smooth curved roads with faded centre lines, and glowing neon,
+  street lamps and fires at night.
+- **Atomic-age town:** diners with checkerboard floors and rooftop neon, gas stations with canopies and pumps,
+  L/U-shaped motels, pastel ranch houses, brick shops with awnings and signs, T/U-shaped municipal offices,
+  sawtooth-roof factories, water towers, billboards, vending machines, phone booths, retro street lamps.
+- **Varied layouts:** buildings are made of several parts (L, T and U shapes) and can mix storeys,
+  e.g. a two-storey house with a one-storey wing.
+
 - **New world every start:** sloped hills and cliffs in the west, a ruined city in the east. Highways, streets and dirt tracks wind and curve, with wrecked cars at every angle, power lines, jersey barriers and roadside junk.
 - **Wasteland feel:** rubble, toxic spills, dead bushes, bones, crows that scatter when you get close, drifting dust, a washed-out colour grade and a day/night cycle (8 minutes per day).
 - **Buildings:** houses, shops, offices, garages and shacks with furnished interiors (kitchens, beds, shelves, desks, counters). Some are ruined with collapsed corners. Pitched or flat roofs. Second floors show from outside. Buildings and trees go see-through when you walk behind them.
@@ -60,6 +69,8 @@ scripts/
   game.gd              Main controller: scene setup, game loop, input, combat, loot, camps, menus
   world.gd             Map data + procedural generation + collision / line of sight
   terrain_mesh.gd      Builds the sloped ground mesh (lighting per triangle)
+  ground_maps.gd       World-space masks for roads, sidewalks, dirt tracks and shadows
+  light_layer.gd       Night-time glows (neon, lamps, fires)
   building_view.gd     Wall/roof/floor sprites for a building + the cutaway logic
   items.gd             Item database: guns, melee, armour, ammo, consumables, loot tables
   npc.gd               Friendly settlers, traders, wanderers, cattle, crows
@@ -68,11 +79,12 @@ scripts/
 shaders/terrain.gdshader   Dithered pixel-art terrain shading
 shaders/crt.gdshader       Optional CRT effect
 shaders/grade.gdshader     Wasteland colour grade + day/night
-assets/sprites/        Generated placeholder sprites
+assets/sprites/        Generated sprites (+ assets/anchors.json: where each sprite touches the ground)
 tools/make_assets.py   Regenerates the sprites (python3 tools/make_assets.py, needs Pillow)
+  px2.py, art_chars.py, art_world.py, art_build.py   drawing helpers and the art itself
 ```
 
-To swap in real art later, replace PNGs in `assets/sprites/` keeping the same names and sizes.
+To swap in real art later, replace PNGs in `assets/sprites/` keeping the same names, and update their anchors in `assets/anchors.json`.
 
 ## Next up (Milestone 2+)
 

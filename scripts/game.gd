@@ -5,7 +5,7 @@ extends Node
 
 static var I: Game
 
-const SHRINK := 3                 # game pixels -> screen: the world renders at 1/3 of the UI size
+const SHRINK := 2                 # game pixels -> screen: the world renders at 1/2 of the UI size
 const RES := ["scrap", "cloth", "wood"]
 const UPG := [
 	{"k": "tent", "n": "Shelter", "d": "+1 max health", "c": {"scrap": 2, "cloth": 3, "wood": 4}},
@@ -45,7 +45,7 @@ var spawn_t := 0.0
 var patrol_t := 0.0
 var income_t := 0.0
 var using_touch := false
-var _last_pb := -1
+var _last_pb := -99999
 var _last_pfl := -1
 var npcs: Array = []
 var furn_nodes := {}             # Furn -> Sprite2D
@@ -56,6 +56,7 @@ var inventory: Array = []        # [{id, n}]
 var equip := {"gun": "pipe_pistol", "melee": "fists", "head": "", "body": ""}
 var day_t := 0.3                 # 0..1 time of day (0.25 = morning)
 var grade: ShaderMaterial
+var lights: LightLayer
 var noise_level := 0.0
 var in_settlement := -1
 var dust: Array = []
@@ -94,6 +95,12 @@ func _ready() -> void:
 	gr.material = grade
 	gl.add_child(gr)
 	vp.add_child(gl)
+	var ll := CanvasLayer.new()
+	ll.layer = 2
+	ll.follow_viewport_enabled = true
+	lights = LightLayer.new()
+	ll.add_child(lights)
+	vp.add_child(ll)
 	var crt_layer := CanvasLayer.new()
 	crt_layer.layer = 2
 	add_child(crt_layer)
@@ -145,7 +152,7 @@ func start_new_world() -> void:
 			c.queue_free()
 	enemies.clear(); camps.clear(); survivors.clear(); views.clear(); bullets.clear(); particles.clear()
 	crate_nodes.clear(); tree_nodes.clear(); chop_hits.clear(); npcs.clear(); furn_nodes.clear(); decor_nodes.clear()
-	smoke_spots.clear(); faded_trees.clear(); dust.clear()
+	smoke_spots.clear(); faded_trees.clear(); dust.clear(); lights.lights.clear()
 	inventory = [{"id": "pipe_pistol", "n": 1}, {"id": "ammo_pistol", "n": 18}, {"id": "medkit", "n": 1}, {"id": "food", "n": 2}]
 	equip = {"gun": "pipe_pistol", "melee": "fists", "head": "", "body": ""}
 	day_t = 0.3
@@ -161,6 +168,8 @@ func start_new_world() -> void:
 	terrain.build(world)
 	root.add_child(terrain)
 	for b in world.buildings:
+		for rp in b.roof_props:
+			_light_for(rp.tex, rp.pos, b.h0 + b.floors_at(rp.cell) * World.FLOOR_H)
 		var v := BuildingView.new()
 		v.setup(world, b)
 		root.add_child(v)
@@ -169,6 +178,7 @@ func start_new_world() -> void:
 	var c := Camp.new()
 	root.add_child(c)
 	c.setup(world.start, "Home Camp", true)
+	_light_for("campfire_decor", world.start, world.hz(world.start.x, world.start.y))
 	camps.append(c)
 	player = Player.new()
 	root.add_child(player)
@@ -199,7 +209,7 @@ func start_new_world() -> void:
 	root.add_child(cam)
 	cam.make_current()
 	time = 0.0; spawn_t = 0.0; patrol_t = 0.0; income_t = 0.0
-	_last_pb = -1
+	_last_pb = -99999
 	state = "play"
 	hud.toast("Hills to the west, a ruined city to the east. Find a settlement to trade — and press I for your inventory.")
 
@@ -221,11 +231,28 @@ func _sprite(tex: String, at: Vector2, z: float, off: Vector2, depth_bias: float
 	var s := Sprite2D.new()
 	s.texture = Assets.tex(tex)
 	s.centered = false
-	s.offset = off
+	s.offset = Assets.off(tex)
 	s.position = Iso.to_screen(at.x, at.y, z).round()
 	s.z_index = Iso.z_for(at.x + at.y + depth_bias, 3)
 	root.add_child(s)
 	return s
+
+const LIGHTS := {   # decor name -> [height (logical px), screen x offset, colour, radius, flicker]
+	"lamp": [58.0, 14.0, Color(1.0, 0.85, 0.55), 46.0, false],
+	"campfire_decor": [6.0, 0.0, Color(1.0, 0.55, 0.2), 54.0, true],
+	"sign_motel": [70.0, 18.0, Color(0.35, 0.95, 0.9), 60.0, false],
+	"sign_gas": [78.0, 0.0, Color(0.4, 0.85, 0.8), 56.0, false],
+	"sign_diner": [26.0, 0.0, Color(1.0, 0.45, 0.4), 62.0, false],
+	"vending_x": [16.0, 0.0, Color(1.0, 0.4, 0.3), 20.0, false],
+	"vending_y": [16.0, 0.0, Color(1.0, 0.4, 0.3), 20.0, false],
+	"pillar": [26.0, 0.0, Color(0.95, 0.95, 0.85), 30.0, false],
+	"phonebooth": [20.0, 0.0, Color(0.9, 0.95, 1.0), 18.0, false],
+}
+
+func _light_for(nm: String, p: Vector2, z: float) -> void:
+	if LIGHTS.has(nm):
+		var L: Array = LIGHTS[nm]
+		lights.add(Iso.to_screen(p.x, p.y, z + L[0]) + Vector2(L[1], 0), L[2], L[3], L[4])
 
 func _spawn_props() -> void:
 	var w := world
@@ -258,30 +285,19 @@ func _spawn_props() -> void:
 				s = _sprite("garden", d.pos, w.vh(int(d.pos.x), int(d.pos.y)), Vector2(-16, 0))
 				s.z_index = -3000
 			_:
-				var tex := Assets.tex(d.name)
-				var off := Vector2(-tex.get_width() * 0.5, -tex.get_height() + 4)
-				match d.name:
-					"rubble0", "rubble1", "rubble2", "bricks", "trashbag", "tire", "fence", "jersey_x", "jersey_y": off = Vector2(-20, -22) if not d.name.begins_with("jersey") else Vector2(-22, -22)
-					"barrel_rust", "barrel_toxic": off = Vector2(-10, -20)
-					"papers": off = Vector2(-16, -10)
-					"puddle_toxic": off = Vector2(-16, -8)
-					"cart": off = Vector2(-16, -22)
-					"bones": off = Vector2(-12, -12)
-					"sign_rad": off = Vector2(-11, -30)
-					"deadbush": off = Vector2(-12, -15)
-				if d.name.begins_with("tuft"): off = Vector2(-4, -7)
-				s = _sprite(d.name, d.pos, z, off)
+				s = _sprite(d.name, d.pos, z, Vector2.ZERO)
 				if d.flat:
 					s.z_index = -3000 if d.name.begins_with("tuft") or d.name == "puddle_toxic" else Iso.z_for(d.pos.x + d.pos.y - 0.6, 0)
 		decor_nodes.append([d, s])
+		_light_for(d.name, d.pos, z)
 	for line in w.pole_lines:
 		var tops := []
 		for p in line:
 			var z := w.hz(p.x, p.y)
 			_sprite("pole", p, z, Vector2(-4, -60))
-			tops.append(Iso.to_screen(p.x, p.y, z) + Vector2(0, -55))
+			tops.append(Iso.to_screen(p.x, p.y, z) + Vector2(0, -83))
 		for i in range(tops.size() - 1):
-			for side in [-4.0, 4.0]:
+			for side in [-5.0, 18.0]:
 				var l := Line2D.new()
 				l.width = 1.0
 				l.default_color = Color("2a2420")
@@ -588,7 +604,7 @@ func _read_aim() -> Vector2:
 	if not using_touch:
 		var mouse_vp := get_viewport().get_mouse_position() / SHRINK
 		var m := cam.get_screen_center_position() - Vector2(vp.size) * 0.5 + mouse_vp
-		return m - (player.position + Vector2(0, -9))
+		return m - (player.position + Vector2(0, -14))
 	return Vector2.ZERO
 
 func _wants_fire() -> bool:
@@ -912,6 +928,7 @@ func new_camp() -> void:
 	var c := Camp.new()
 	root.add_child(c)
 	c.setup(player.wpos + Vector2(0, -1), camp_name(), false)
+	_light_for("campfire_decor", c.wpos, world.hz(c.wpos.x, c.wpos.y))
 	camps.append(c)
 	hud.toast("Set up %s. Your stash is shared between all camps." % c.cname)
 	open_camp_menu()
@@ -1127,6 +1144,7 @@ func _world_life(delta: float) -> void:
 		grade.set_shader_parameter("tint", tint)
 		grade.set_shader_parameter("bright", lerpf(0.58, 1.0, dayness))
 		grade.set_shader_parameter("sat", lerpf(0.55, 0.82, dayness))
+	lights.strength = clampf((1.0 - dayness) * 1.1, 0.0, 0.9)
 	# settlement greeting
 	var si := world.settlement_at(p.wpos)
 	if si != in_settlement:
@@ -1195,13 +1213,17 @@ func _update_bullets(delta: float) -> void:
 func _update_visibility() -> void:
 	var p := player
 	var pb := p.building()
+	if pb > 0 and world.bld(pb).open and p.fl == 0:
+		pb = -pb    # under a canopy: the canopy roof lifts but everything else counts as outdoors
 	if pb != _last_pb or p.fl != _last_pfl:
 		_last_pb = pb
 		_last_pfl = p.fl
 		for v in views:
-			v.update_view(pb, p.fl)
+			v.update_view(absi(pb), p.fl)
+	if pb < 0: pb = 0
 	var vis := func(x: float, y: float, fl: int) -> bool:
 		var b := world.building_at(x, y)
+		if b > 0 and world.bld(b).open: b = 0
 		return (b == 0 and fl == 0) or (b == pb and fl == p.fl)
 	for e in enemies:
 		e.visible = not e.dead and vis.call(e.wpos.x, e.wpos.y, e.fl)
@@ -1220,7 +1242,7 @@ func _update_visibility() -> void:
 		if n.type != "crow":
 			n.visible = vis.call(n.wpos.x, n.wpos.y, 0)
 	# see-through: fade buildings and trees standing between the camera and the player
-	var pscr := p.position + Vector2(0, -12)
+	var pscr := p.position + Vector2(0, -18)
 	var pdepth := p.wpos.x + p.wpos.y
 	for v in views:
 		var fade: bool = pb == 0 and v.b.id != pb and pdepth < v.front_depth - 0.5 and v.screen_rect().has_point(pscr)
@@ -1253,7 +1275,7 @@ func _update_visibility() -> void:
 	dog.visible = dog.fl == p.fl or pb == 0
 
 func _update_camera() -> void:
-	cam.position = (player.position + Vector2(0, -12)).round()
+	cam.position = (player.position + Vector2(0, -18)).round()
 	fx.queue_redraw()
 	for f in floaters:
 		f.t -= get_process_delta_time()
@@ -1337,15 +1359,30 @@ func _debug_shots() -> void:
 	player.wpos = Vector2(44, 40)
 	await get_tree().create_timer(0.6).timeout
 	_snap(out + "/8_city.png")
+	for kind in ["diner", "canopy", "motel", "factory", "office", "house"]:
+		for b in world.buildings:
+			if b.kind == kind:
+				player.wpos = Vector2(b.x0 + b.w + 1.5, b.y0 + b.h + 1.5)
+				player.fl = 0
+				for e in enemies: e.aw = 0.0
+				await get_tree().create_timer(0.5).timeout
+				_snap(out + "/k_%s.png" % kind)
+				break
 	inv_add("shotgun"); inv_add("road_helmet"); inv_add("ammo_shell", 8)
 	open_inventory()
 	await get_tree().create_timer(0.4).timeout
 	_snap(out + "/9_inventory.png")
 	hud.hide_menu()
-	day_t = 0.62
-	player.wpos = world.start + Vector2(1, 2)
+	day_t = 0.7
+	player.wpos = Vector2(44, 40)
 	await get_tree().create_timer(0.6).timeout
-	_snap(out + "/10_dusk.png")
+	_snap(out + "/10_night_city.png")
+	for b in world.buildings:
+		if b.kind == "canopy" or b.kind == "diner" or b.kind == "motel":
+			player.wpos = Vector2(b.x0 + b.w + 1.5, b.y0 + b.h + 1.5)
+			await get_tree().create_timer(0.5).timeout
+			_snap(out + "/11_night_%s.png" % b.kind)
+			break
 	print("SHOTS DONE ", ProjectSettings.globalize_path(out))
 	get_tree().quit()
 
