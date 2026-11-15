@@ -125,7 +125,7 @@ def place(out_dir, x, y, z, w, h, facing, seed, offset=0.004):
     for i, l in enumerate(me.loops):
         uv.data[i].uv = [(0, 0), (1, 0), (1, 1), (0, 1)][i]
     ob = bpy.data.objects.new("graf", me)
-    bpy.context.scene.collection.objects.link(ob)
+    bpy.context.scene.collection.objects.link(ob); __import__('lib').REG.append(ob)
     me.materials.append(m)
     ob.visible_shadow = False
     return ob

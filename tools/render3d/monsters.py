@@ -30,7 +30,7 @@ def ghoul():
     for w in wr:
         for f in range(3):
             FAST.primitive_cone_add(vertices=4, radius1=0.012, depth=0.08, location=g2b(w[0] + (f - 1) * 0.02, w[1] + 0.02, w[2] - 0.06))
-            bpy.context.active_object.data.materials.append(rot)
+            FAST.LAST[0].data.materials.append(rot)
 
 
 def brute():
@@ -69,7 +69,7 @@ def shellback():
         skin_body([(s * 0.3, 0.45, 0.3), (s * 0.45, 0.75, 0.32), (s * 0.4, 0.95, 0.3)], [(0, 1), (1, 2)],
                   [(0.07, 0.07), (0.09, 0.07), (0.1, 0.06)], claw, levels=1)
         FAST.primitive_cone_add(vertices=6, radius1=0.06, depth=0.25, location=g2b(s * 0.37, 1.1, 0.33), rotation=(math.radians(-90), 0, 0))
-        bpy.context.active_object.data.materials.append(claw)
+        FAST.LAST[0].data.materials.append(claw)
         cyl(s * 0.12, 0.5, 0.35, 0.55, 0.015, claw, 6)           # eye stalks
         sphere(s * 0.12, 0.5, 0.56, 0.03, mat_flat("seye", '#e85a2a', 0.3, noise=0))
 
@@ -81,7 +81,7 @@ def mole_rat():
     sphere(0, 0.48, 0.16, 0.09, skin, scale=(1, 1.3, 0.9))
     for s in (-1, 1):
         FAST.primitive_cone_add(vertices=4, radius1=0.02, depth=0.08, location=g2b(s * 0.025, 0.6, 0.11), rotation=(math.radians(180), 0, 0))
-        bpy.context.active_object.data.materials.append(mat_flat("teeth", '#e8e0c0', 0.4, noise=0))
+        FAST.LAST[0].data.materials.append(mat_flat("teeth", '#e8e0c0', 0.4, noise=0))
         for (y, f) in ((-0.25, 1), (0.25, -1)):
             skin_body([(s * 0.12, y, 0.15), (s * 0.16, y + 0.03 * f, 0.0)], [(0, 1)], [(0.04, 0.04), (0.03, 0.03)], skin, levels=1)
     skin_body([(0, -0.48, 0.15), (0, -0.75, 0.08), (0.08, -0.95, 0.03)], [(0, 1), (1, 2)], [(0.03, 0.03), (0.02, 0.02), (0.01, 0.01)], skin, levels=1)
@@ -106,7 +106,7 @@ def hound():
     sphere(0, 0.68, 0.72, 0.06, fur, scale=(0.9, 1.6, 0.8))                 # snout
     for s in (-1, 1):
         FAST.primitive_cone_add(vertices=4, radius1=0.03, depth=0.1, location=g2b(s * 0.05, 0.52, 0.82))
-        bpy.context.active_object.data.materials.append(fur)
+        FAST.LAST[0].data.materials.append(fur)
     eyes(0, 0.62, 0.77, 0.035, 0.012, mat_flat("heye", '#e8a040', 0.3, noise=0))
     for k in range(5):   # mangy bald patches
         sphere(R.uniform(-.08, .08), R.uniform(-.3, .2), 0.6, 0.05, mat_skin_rot("mange", '#a07a6a', '#7a5a4a', '#b08a7a'))
@@ -147,7 +147,7 @@ def cattle():
         sphere(s * 0.32, 0.86, 0.9, 0.08, mat_flat("muzzle", '#d8a890', 0.6, noise=0.2), scale=(1, 1.2, 0.8))
         for h in (-1, 1):
             FAST.primitive_cone_add(vertices=6, radius1=0.025, depth=0.16, location=g2b(s * 0.3 + h * 0.07, 0.72, 1.08), rotation=(0, math.radians(40 * h), 0))
-            bpy.context.active_object.data.materials.append(mat_flat("horn", '#e0d8c0', 0.5, noise=0))
+            FAST.LAST[0].data.materials.append(mat_flat("horn", '#e0d8c0', 0.5, noise=0))
     skin_body([(0, -0.68, 0.85), (0, -0.88, 0.5)], [(0, 1)], [(0.035, 0.035), (0.02, 0.02)], hide, levels=1)
 
 

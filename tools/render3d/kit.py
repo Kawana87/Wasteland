@@ -159,7 +159,7 @@ def mesh(verts, faces, mat, name="mesh", smooth=False, solidify=0.0):
     me.from_pydata([g2b(*v) for v in verts], [], faces)
     me.update()
     ob = bpy.data.objects.new(name, me)
-    bpy.context.scene.collection.objects.link(ob)
+    bpy.context.scene.collection.objects.link(ob); __import__('lib').REG.append(ob)
     me.materials.append(mat)
     if smooth:
         for p in me.polygons: p.use_smooth = True
@@ -224,6 +224,29 @@ def edge_point(a, b, t, out_n, off=0.0):
     return (a[0] + out_n[0] * off, lo + t)
 
 
+PLANK_H = 0.13        # every board in the game has the same cross-section
+PLANK_MAX = 1.6       # longest single board; wider openings get butt-jointed boards
+
+
+def board_up(make, t0, t1, z0, z1, axis, over=0.08, tilt=5.0):
+    """Nail boards across an opening. All boards share one size: the count follows the opening's height,
+    the length follows its width (split into equal boards when wider than PLANK_MAX), same overhang each side."""
+    W = (t1 - t0) + 2 * over
+    nseg = max(1, math.ceil(W / PLANK_MAX)); seg = W / nseg
+    n = max(2, round((z1 - z0) / 0.26))
+    obs = []
+    for k in range(n):
+        zc = z0 + (z1 - z0) * (k + 0.5) / n
+        stagger = (seg * 0.5 if (k % 2 and nseg > 1) else 0.0)
+        a = t0 - over
+        cuts = [a] + [a + stagger + seg * i for i in range(1, nseg)] + [t1 + over]
+        for i in range(len(cuts) - 1):
+            ob = make(cuts[i] + 0.005, cuts[i + 1] - 0.005, zc - PLANK_H / 2, zc + PLANK_H / 2)
+            ob.rotation_euler.rotate_axis(axis, math.radians(R.uniform(-tilt, tilt)))
+            obs.append(ob)
+    return obs
+
+
 def window(M, a, b, t0, t1, z0, z1, out_n, state="glass", shutters=None, zbase=0.0):
     horiz = abs(a[1] - b[1]) < 1e-6
     lo = min(a[0], b[0]) if horiz else min(a[1], b[1])
@@ -243,11 +266,7 @@ def window(M, a, b, t0, t1, z0, z1, out_n, state="glass", shutters=None, zbase=0
     pane((t0 + t1) / 2 - 0.02, (t0 + t1) / 2 + 0.02, z0, z1, M["trim"], 0.0, 0.03)
     pane(t0, t1, (z0 + z1) / 2 - 0.02, (z0 + z1) / 2 + 0.02, M["trim"], 0.0, 0.03)
     if state == "boarded":
-        for k in range(3):
-            zc = z0 + (z1 - z0) * (k + 0.5) / 3
-            ob = pane(t0 - 0.08, t1 + 0.08, zc - 0.06, zc + 0.06, M["board"], WALL_T + 0.04, 0.02)
-            # tilt boards a little
-            ob.rotation_euler.rotate_axis('Y' if horiz else 'X', math.radians(R.uniform(-8, 8)))
+        board_up(lambda p0, p1, za, zb: pane(p0, p1, za, zb, M["board"], WALL_T + 0.04, 0.02), t0, t1, z0, z1, 'Y' if horiz else 'X')
     if shutters:
         w = (t1 - t0) * 0.42
         pane(t0 - 0.08 - w, t0 - 0.08, z0 - 0.04, z1 + 0.04, shutters, WALL_T + 0.02, 0.02)
@@ -293,9 +312,7 @@ def door(M, a, b, t0, t1, out_n, state="closed", paint=None):
             slab(s - 0.025, s + 0.025, 0.8 - 0.03 * (i % 2), 0.84 - 0.03 * (i % 2), M["chain"], 0.07, 0.015)
         slab((t0 + t1) / 2 - 0.05, (t0 + t1) / 2 + 0.05, 0.66, 0.8, M["brass"], 0.09, 0.03)
     if state == "boarded":
-        for zc in (0.35, 0.8, 1.25):
-            ob = slab(t0 - 0.12, t1 + 0.12, zc - 0.07, zc + 0.07, M["board"], 0.08, 0.02)
-            ob.rotation_euler.rotate_axis('Y' if horiz else 'X', math.radians(R.uniform(-12, 12)))
+        board_up(lambda p0, p1, za, zb: slab(p0, p1, za, zb, M["board"], 0.08, 0.02), t0, t1, 0.15, 1.45, 'Y' if horiz else 'X')
 
 
 _door_fn = door
@@ -534,7 +551,7 @@ def skin_body(joints, edges, radii, mat, name="body", levels=2):
     me = bpy.data.meshes.new(name)
     me.from_pydata([g2b(*j) for j in joints], edges, [])
     ob = bpy.data.objects.new(name, me)
-    bpy.context.scene.collection.objects.link(ob)
+    bpy.context.scene.collection.objects.link(ob); __import__('lib').REG.append(ob)
     bpy.context.view_layer.objects.active = ob
     ob.modifiers.new("skin", 'SKIN')
     for i, r in enumerate(radii):
@@ -629,7 +646,7 @@ def terrain(x0, y0, x1, y1, mat, amp=0.25, scale=0.6, res=3, flat=()):
     bm.to_mesh(me)
     bm.free()
     ob = bpy.data.objects.new("terrain", me)
-    bpy.context.scene.collection.objects.link(ob)
+    bpy.context.scene.collection.objects.link(ob); __import__('lib').REG.append(ob)
     me.materials.append(mat)
     for p in me.polygons: p.use_smooth = True
     return ob
@@ -663,7 +680,7 @@ def _alpha_out(m, nt, bs, alpha):
         pass
 
 
-def mat_road(name, L, hw, ends=(False, False), axis='x'):
+def mat_road(name, L, hw, ends=(False, False), axis='x', box_edges=False):
     """Asphalt with ragged, dusty edges, drifted dirt, cracks and patch repairs.
     ends: erode the road into broken chunks at its -/+ end (a dead end into the dirt)."""
     m, nt, bs = _nodes(name)
@@ -676,6 +693,8 @@ def mat_road(name, L, hw, ends=(False, False), axis='x'):
     n2 = _noise(nt, co, 9.0, 4.0, 0.6).outputs[0]
     # edge metric: 0 on the centre line, ~1 at the edge, made ragged by noise
     e = _math(nt, 'DIVIDE', _math(nt, 'ABSOLUTE', across), hw)
+    if box_edges:      # parking lots: every side fades, not just the long ones
+        e = _math(nt, 'MAXIMUM', e, _math(nt, 'DIVIDE', _math(nt, 'ABSOLUTE', along), L / 2))
     e = _math(nt, 'ADD', e, _math(nt, 'MULTIPLY', _math(nt, 'SUBTRACT', n1, 0.5), 0.45))
     e = _math(nt, 'ADD', e, _math(nt, 'MULTIPLY', _math(nt, 'SUBTRACT', n2, 0.5), 0.18))
     for k, flag in enumerate(ends):
@@ -686,7 +705,8 @@ def mat_road(name, L, hw, ends=(False, False), axis='x'):
         ef = _math(nt, 'ADD', ef, _math(nt, 'MULTIPLY', _math(nt, 'SUBTRACT', n1, 0.5), 1.2))
         ef = _math(nt, 'ADD', ef, _math(nt, 'MULTIPLY', _math(nt, 'SUBTRACT', n2, 0.5), 0.6))
         e = _math(nt, 'MAXIMUM', e, ef)
-    alpha = _ramp(nt, e, [(0.86, '#ffffff'), (0.9, '#000000')])
+    # soft edge: asphalt thins out into the ground over a band instead of stopping on a line
+    alpha = _ramp(nt, e, [(0.8, '#ffffff'), (0.9, '#8a8a8a'), (1.0, '#000000')])
     # asphalt colour + cracks + repair patches
     a = _noise(nt, co, 25.0, 10.0, 0.8)
     col = _ramp(nt, a.outputs[0], [(0.3, '#3a3836'), (0.55, '#4c4844'), (0.75, '#625c56')])
@@ -705,6 +725,9 @@ def mat_road(name, L, hw, ends=(False, False), axis='x'):
     # dust and drifted dirt: stronger towards the edges, plus random drifts across the road
     dust = _math(nt, 'ADD', _math(nt, 'MULTIPLY', e, 1.0), _math(nt, 'MULTIPLY', _noise(nt, co, 0.7, 4.0, 0.6).outputs[0], 0.95))
     dustf = _ramp(nt, dust, [(1.0, '#000000'), (1.22, '#ffffff')])
+    # edge gradient: the dirt takes over gradually towards the ragged edge
+    edgef = _ramp(nt, e, [(0.62, '#000000'), (0.92, '#ffffff')])
+    dustf = _math(nt, 'MAXIMUM', _sep(nt, dustf)[0], _sep(nt, edgef)[0])
     # broken, lighter asphalt crumbs along the shoulder
     shoulder = _ramp(nt, e, [(0.7, '#000000'), (0.84, '#ffffff')])
     crumbs = _math(nt, 'MULTIPLY', shoulder, _math(nt, 'GREATER_THAN', _noise(nt, co, 14.0, 2.0, 0.5).outputs[0], 0.55))
@@ -718,18 +741,21 @@ def mat_road(name, L, hw, ends=(False, False), axis='x'):
     return m
 
 
-def road(x0, y0, x1, y1, ends=(False, False), z=0.008, name="road"):
+def road(x0, y0, x1, y1, ends=(False, False), z=0.008, name="road", lot=False):
+    """Asphalt strip with soft eroded edges. lot=True: a parking lot (all four sides fade)."""
     PAVED.append((x0, y0, x1, y1))
     axis = 'x' if (x1 - x0) >= (y1 - y0) else 'y'
     L = (x1 - x0) if axis == 'x' else (y1 - y0)
     hw = ((y1 - y0) if axis == 'x' else (x1 - x0)) / 2
-    m = mat_road(name + str(R.randint(0, 99999)), L, hw, ends, axis)
-    # widen the mesh a bit: the material erodes it back to a ragged edge
-    pad = 0.35
+    pad = 0.45
+    if lot:      # lots: the faded band sits outside the usable rectangle
+        L += 2 * pad; hw += pad
+    m = mat_road(name + str(R.randint(0, 99999)), L, hw + (0.0 if lot else 0.0), ends, axis, box_edges=lot)
+    ex = pad if lot else 0.0
     if axis == 'x':
-        ob = mesh([(x0, y0 - pad, z), (x1, y0 - pad, z), (x1, y1 + pad, z), (x0, y1 + pad, z)], [(0, 1, 2, 3)], m, name)
+        ob = mesh([(x0 - ex, y0 - pad, z), (x1 + ex, y0 - pad, z), (x1 + ex, y1 + pad, z), (x0 - ex, y1 + pad, z)], [(0, 1, 2, 3)], m, name)
     else:
-        ob = mesh([(x0 - pad, y0, z), (x1 + pad, y0, z), (x1 + pad, y1, z), (x0 - pad, y1, z)], [(0, 1, 2, 3)], m, name)
+        ob = mesh([(x0 - pad, y0 - ex, z), (x1 + pad, y0 - ex, z), (x1 + pad, y1 + ex, z), (x0 - pad, y1 + ex, z)], [(0, 1, 2, 3)], m, name)
     # object coords centred on the road so the material's along/across maths works
     import mathutils
     c = g2b((x0 + x1) / 2, (y0 + y1) / 2, 0)
@@ -822,7 +848,7 @@ def footpath(points, width=0.6, z=0.012, wobble=0.15, seed=0):
     me = bpy.data.meshes.new("path")
     bm.to_mesh(me); bm.free()
     ob = bpy.data.objects.new("path", me)
-    bpy.context.scene.collection.objects.link(ob)
+    bpy.context.scene.collection.objects.link(ob); __import__('lib').REG.append(ob)
     if "m" not in _FP:
         _FP["m"] = mat_footpath("footpath")
     me.materials.append(_FP["m"])
@@ -853,3 +879,39 @@ def plan_path(start, goal, blockers, rng, step=1.5):
         cur = nxt
     pts.append(goal)
     return pts
+
+
+def mat_patch(name, hx, hy, stops, scale=4.0):
+    """Ground-cover decal (lawn, gravel, dirt yard): colour from noise, alpha fading out over a ragged band at
+    the edges so it melts into the terrain instead of sitting on it like a mat."""
+    m, nt, bs = _nodes(name)
+    tc = nt.nodes.new("ShaderNodeTexCoord"); co = tc.outputs["Object"]
+    xyz = _sep(nt, co)
+    n1 = _noise(nt, co, 0.9, 6.0, 0.7).outputs[0]
+    n2 = _noise(nt, co, 4.0, 4.0, 0.6).outputs[0]
+    e = _math(nt, 'MAXIMUM', _math(nt, 'DIVIDE', _math(nt, 'ABSOLUTE', xyz[0]), hx), _math(nt, 'DIVIDE', _math(nt, 'ABSOLUTE', xyz[1]), hy))
+    e = _math(nt, 'ADD', e, _math(nt, 'MULTIPLY', _math(nt, 'SUBTRACT', n1, 0.5), 0.35))
+    e = _math(nt, 'ADD', e, _math(nt, 'MULTIPLY', _math(nt, 'SUBTRACT', n2, 0.5), 0.15))
+    alpha = _ramp(nt, e, [(0.62, '#ffffff'), (0.82, '#7a7a7a'), (0.97, '#000000')])
+    # patchy inside too: bald spots where the dirt shows through
+    bald = _ramp(nt, _noise(nt, co, 1.6, 5.0, 0.6).outputs[0], [(0.3, '#000000'), (0.42, '#ffffff')])
+    alpha = _math(nt, 'MULTIPLY', _sep(nt, alpha)[0], _sep(nt, bald)[0])
+    col = _ramp(nt, _noise(nt, co, scale, 8.0, 0.65).outputs[0], stops)
+    nt.links.new(grit(nt, col, co, 0.4, 120.0), bs.inputs["Base Color"])
+    bs.inputs["Roughness"].default_value = 1.0
+    _alpha_out(m, nt, bs, alpha)
+    return m
+
+
+def patch(x0, y0, x1, y1, stops, z=0.004, name="patch"):
+    pad = 0.6
+    cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
+    hx, hy = (x1 - x0) / 2 + pad, (y1 - y0) / 2 + pad
+    m = mat_patch(name + str(R.randint(0, 99999)), hx, hy, stops)
+    ob = mesh([(x0 - pad, y0 - pad, z), (x1 + pad, y0 - pad, z), (x1 + pad, y1 + pad, z), (x0 - pad, y1 + pad, z)], [(0, 1, 2, 3)], m, name)
+    c = g2b(cx, cy, 0)
+    for v in ob.data.vertices:
+        v.co.x -= c.x; v.co.y -= c.y
+    ob.location = (c.x, c.y, 0)
+    ob.visible_shadow = False
+    return ob

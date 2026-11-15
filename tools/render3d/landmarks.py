@@ -122,9 +122,7 @@ def shop_window(M, x0, y, t0, t1, z0, z1, rng, state=None):
             box(x0 + s0, y - 0.06, z0, x0 + s1, y - 0.05, z1, M["black"])
         box(x0 + s1, y - .03, z0, x0 + s1 + 0.04, y + .03, z1, M["frame"])
     if state == "boarded":
-        for k in range(int((t1 - t0) / 0.35)):
-            o = box(x0 + t0 + k * 0.35, y + 0.13, z0 - 0.05, x0 + t0 + k * 0.35 + 0.28, y + 0.15, z1 + 0.05, M["board"])
-            o.rotation_euler.y = math.radians(rng.uniform(-6, 6))
+        kit.board_up(lambda p0, p1, za, zb: box(x0 + p0, y + 0.13, za, x0 + p1, y + 0.15, zb, M["board"]), t0, t1, z0, z1, 'Y')
     box(x0 + t0 - 0.06, y - 0.15, z0 - 0.08, x0 + t1 + 0.06, y + 0.15, z0, M["trim"])        # sill
 
 
@@ -234,7 +232,55 @@ def jail(M, x0, y0, rng):
     P.sandbags(x0 + 6.0, y0 + h + 1.6, 0, rng)
 
 
-def mall(M, x0, y0, rng, lot_rows=2):
+# real-world sizing for lots, in tiles (a car wreck is ~2.7 x 1.1)
+BAY_W, BAY_D, AISLE, FIRE_LANE = 1.6, 3.1, 4.2, 3.4
+
+
+def parking_lot(M, x0, y0, x1, rng, pairs=1, road_y=None, entry_x=None, wrecks=None):
+    """Parking lot south of a building front at y0. Rows run along x:
+       fire lane | (bays facing north, bays facing south, aisle) x pairs
+    Every bay is reachable from an aisle; the last aisle connects to the road at road_y by a driveway.
+    Returns (lot far edge y, driveway rect or None)."""
+    ys = [y0, y0 + FIRE_LANE]
+    rows = []
+    y = y0 + FIRE_LANE
+    for p in range(pairs):
+        rows.append((y, y + BAY_D, "n")); y += BAY_D
+        rows.append((y, y + BAY_D, "s")); y += BAY_D
+        y += AISLE
+    y1 = y
+    kit.road(x0, y0, x1, y1, z=0.007, name="lot", lot=True)
+    paint = MAT("flat:#c8c0a0:0.85")
+    nb = int((x1 - x0 - 1.0) / BAY_W)
+    bx0 = x0 + (x1 - x0 - nb * BAY_W) / 2
+    bays = []
+    for (r0, r1, face) in rows:
+        for k in range(nb + 1):
+            if rng.random() < 0.85:                     # faded paint, some lines gone
+                xx = bx0 + k * BAY_W
+                box(xx - 0.025, r0 + 0.15, 0.007, xx + 0.025, r1 - 0.1, 0.0085, paint)
+        bays += [(bx0 + (k + 0.5) * BAY_W, (r0 + r1) / 2) for k in range(nb)]
+    for p in range(pairs):                               # divider between back-to-back rows + light poles
+        yd = rows[2 * p][1]
+        box(bx0, yd - 0.03, 0.007, bx0 + nb * BAY_W, yd + 0.03, 0.0085, paint)
+        with P.zone(prio=2):
+            for k in range(0, nb + 1, 5):
+                P.lamp_post(bx0 + k * BAY_W, yd, 0, rng)
+    drive = None
+    if road_y is not None:
+        ex = entry_x if entry_x is not None else (x0 + x1) / 2
+        drive = (ex - 2.2, y1 - 0.6, ex + 2.2, road_y + 0.4)
+        kit.road(*drive, z=0.0072, name="drive")
+    with P.zone(prio=1):
+        for (bx, by) in rng.sample(bays, min(len(bays), wrecks if wrecks is not None else max(2, len(bays) // 6))):
+            P.car_wreck(bx + rng.uniform(-0.1, 0.1), by, 90 + rng.uniform(-6, 6), rng)
+        for k in range(rng.randint(3, 7)):
+            P.shopping_cart(rng.uniform(x0, x1), rng.uniform(y0, y1), rng.uniform(0, 360), rng)
+    P.litter((x0 + x1) / 2, (y0 + y1) / 2, 0, rng, n=30, r=(x1 - x0) / 2.5)
+    return y1, drive
+
+
+def mall(M, x0, y0, rng, lot_rows=1, road_y=None, entry_x=None):
     """Big flat-roofed mall: a long glass-fronted facade, entrance canopy, parking lot in front."""
     w, h = 14, 7
     wall = kit.mat_stucco("mall_w", '#c8b898', '#8a7a60')
@@ -258,50 +304,101 @@ def mall(M, x0, y0, rng, lot_rows=2):
     for k in range(5):
         box(x0 + 3.6 + k * 1.5, y0 + h + 0.2, 3.0, x0 + 4.6 + k * 1.5, y0 + h + 0.21, 3.5, MAT("flat:#e8e0c8:0.6"))
     P.roof_units(x0, y0, x0 + w, y0 + h, H + 0.06, rng)
-    # parking lot: asphalt, painted bays, light poles, wrecks and carts
-    lot_y0, lot_y1 = y0 + h + 1.8, y0 + h + 1.8 + 3.2 * lot_rows
-    box(x0 - 1, lot_y0, 0.0, x0 + w + 1, lot_y1, 0.007, M["asphalt"])
-    kit.PAVED.append((x0 - 1, lot_y0, x0 + w + 1, lot_y1))
-    paint = MAT("flat:#c8c0a0:0.8")
-    for r in range(lot_rows):
-        yy = lot_y0 + 0.3 + r * 3.2
-        for k in range(12):
-            box(x0 + k * 1.2, yy, 0.007, x0 + k * 1.2 + 0.05, yy + 1.9, 0.009, paint)
-    for k in range(int(w / 4.5) + 1):
-        P.lamp_post(x0 + 1 + k * 4.5, lot_y0 + 2.6, 0, rng)
-    with P.zone(prio=1):
-        for k in range(5):
-            P.car_wreck(x0 + rng.uniform(0.5, w - 0.5), lot_y0 + 1.25 + 3.2 * rng.randint(0, lot_rows - 1), 90 + rng.uniform(-8, 8), rng)
-        for k in range(4):
-            P.shopping_cart(x0 + rng.uniform(0, w), rng.uniform(lot_y0, lot_y1), rng.uniform(0, 360), rng)
-    P.litter(x0 + w / 2, (lot_y0 + lot_y1) / 2, 0, rng, n=30, r=6)
+    lot_y0 = y0 + h + 1.8
+    box(x0 - 0.5, y0 + h, 0.0, x0 + w + 0.5, lot_y0, 0.07, M["conc"], bevel=0.02)      # front walk
+    kit.PAVED.append((x0 - 0.5, y0 + h, x0 + w + 0.5, lot_y0))
+    lot_y1, drive = parking_lot(M, x0 - 1, lot_y0, x0 + w + 1, rng, pairs=lot_rows, road_y=road_y, entry_x=entry_x)
     return lot_y1
 
 
 def park(M, x0, y0, w, h, rng):
-    """Overgrown city park: dead lawn, paths, dry fountain, playground, benches, a statue."""
-    grass = kit.mat_ground("parkgrass", '#6a6a3e', '#4e4e2e', '#7e7a4e', 4.0)
-    box(x0, y0, 0.0, x0 + w, y0 + h, 0.012, grass)
-    cx, cy = x0 + w / 2, y0 + h / 2
-    kit.footpath([(x0, cy), (cx - 1.5, cy + 0.2), (cx, cy), (cx + 1.6, cy - 0.2), (x0 + w, cy)], width=0.9, z=0.016, seed=1)
-    kit.footpath([(cx, y0), (cx + 0.2, cy - 1.5), (cx, cy), (cx - 0.3, cy + 1.6), (cx, y0 + h)], width=0.9, z=0.017, seed=2)
-    # dry fountain
-    conc = kit.mat_concrete("fount", '#9a968a')
-    cyl(cx, cy, 0.0, 0.4, 1.0, conc, 24)
-    cyl(cx, cy, 0.25, 0.42, 0.88, MAT("flat:#3a3428:1.0"), 24)
-    cyl(cx, cy, 0.4, 1.2, 0.12, conc, 10)
-    cyl(cx, cy, 1.2, 1.3, 0.4, conc, 16)
-    # statue on a plinth
-    sx, sy = x0 + 1.6, y0 + 1.6
-    box(sx - .45, sy - .45, 0, sx + .45, sy + .45, 1.0, conc)
-    bronze = MAT("paint:#5a6a4a:0.3")
-    body, head, wr = kit.humanoid(bronze, 1.0)
-    for o in [body]:
-        o.location += g2b(sx, sy, 1.0)
-    sphere(sx, sy, 2.14, 0.1, bronze)
-    # playground: swing frame + slide
-    px, py = x0 + w - 2.5, y0 + 1.5
-    m = MAT("paint:%s:0.6" % rng.choice(["#c84a2a", "#3e6a8a", "#c8a040"]))
+    """Overgrown city park. Every park is assembled differently: path layout, centrepiece and corner
+    features are drawn at random, so no two read as the same copy-pasted block."""
+    kit.patch(x0, y0, x0 + w, y0 + h, rng.choice([[(0.3, '#5a5a34'), (0.5, '#6e6e3e'), (0.7, '#7e7a4e')],
+                                                  [(0.3, '#62603a'), (0.5, '#747046'), (0.7, '#8a8256')],
+                                                  [(0.3, '#545a36'), (0.5, '#666c40'), (0.7, '#78784c')]]))
+    cx, cy = x0 + w * rng.uniform(0.4, 0.6), y0 + h * rng.uniform(0.4, 0.6)
+    layout = rng.choice(["cross", "diag", "curve", "loop"])
+    sd = rng.randint(0, 999)
+    if layout == "cross":
+        kit.footpath([(x0, cy), (cx, cy + rng.uniform(-.3, .3)), (x0 + w, cy + rng.uniform(-.5, .5))], width=0.9, z=0.016, seed=sd)
+        kit.footpath([(cx + rng.uniform(-.5, .5), y0), (cx, cy), (cx + rng.uniform(-.5, .5), y0 + h)], width=0.9, z=0.017, seed=sd + 1)
+    elif layout == "diag":
+        kit.footpath([(x0, y0), (cx, cy), (x0 + w, y0 + h)], width=0.8, z=0.016, seed=sd)
+        kit.footpath([(x0 + w, y0), (cx, cy), (x0, y0 + h)], width=0.8, z=0.017, seed=sd + 1)
+    elif layout == "curve":
+        kit.footpath([(x0, y0 + h * 0.8), (x0 + w * 0.3, cy + 1.2), (cx, cy), (x0 + w * 0.7, cy - 1.0), (x0 + w, y0 + h * 0.2)], width=0.9, z=0.016, seed=sd)
+    else:
+        r = min(w, h) * 0.32
+        pts = [(cx + math.cos(t / 8 * 6.283) * r * 1.3, cy + math.sin(t / 8 * 6.283) * r) for t in range(9)]
+        kit.footpath(pts, width=0.8, z=0.016, seed=sd)
+        kit.footpath([(cx, y0 + h), (cx, cy + r)], width=0.8, z=0.017, seed=sd + 1)
+    conc = kit.mat_concrete("fount%d" % sd, rng.choice(['#9a968a', '#8a8478', '#a8a090']))
+    centre = rng.choice(["fountain", "fountain", "statue", "tree", "gazebo"])
+    if centre == "fountain":
+        r = rng.uniform(0.8, 1.2)
+        cyl(cx, cy, 0.0, 0.4, r, conc, 24)
+        cyl(cx, cy, 0.25, 0.42, r - 0.12, MAT("flat:#3a3428:1.0"), 24)
+        if rng.random() < 0.7:
+            cyl(cx, cy, 0.4, 1.2, 0.12, conc, 10); cyl(cx, cy, 1.2, 1.3, 0.4, conc, 16)
+    elif centre == "statue":
+        _statue(cx, cy, conc, rng)
+    elif centre == "tree":
+        with P.zone(prio=2):
+            P.tree(cx, cy, 0, random.Random(rng.random()), kind="dead")
+        cyl(cx, cy, 0, 0.25, 0.9, conc, 20)
+    else:
+        _gazebo(cx, cy, rng)
+    corners = [(x0 + 1.8, y0 + 1.8), (x0 + w - 2.2, y0 + 1.6), (x0 + 1.8, y0 + h - 2.0), (x0 + w - 1.9, y0 + h - 2.0)]
+    rng.shuffle(corners)
+    feats = rng.sample(["statue", "swings", "slide", "picnic", "picnic", "none", "planter"], 4)
+    m = MAT("paint:%s:0.6" % rng.choice(["#c84a2a", "#3e6a8a", "#c8a040", "#5a8a4a"]))
+    for (fx, fy), f in zip(corners, feats):
+        if f == "statue" and centre != "statue":
+            _statue(fx, fy, conc, rng)
+        elif f == "swings":
+            _swings(fx, fy, m, rng)
+        elif f == "slide":
+            _slide(fx, fy, m)
+        elif f == "picnic":
+            with P.zone(prio=2):
+                P.table(fx, fy, rng.uniform(0, 90), rng)
+                P.bench(fx, fy + 0.75, 0, rng)
+        elif f == "planter":
+            with P.zone(prio=2):
+                P.planter(fx, fy, 0, rng, r=0.6)
+    with P.zone(prio=1):
+        for k in range(rng.randint(2, 4)):
+            P.bench(cx + rng.uniform(-3, 3), cy + rng.uniform(-2.5, 2.5), rng.choice([0, 90, 180, 270]), rng)
+        for k in range(rng.randint(3, 8)):
+            P.tree(x0 + rng.uniform(0.5, w - 0.5), y0 + rng.uniform(0.5, h - 0.5), 0, random.Random(rng.random()), kind=rng.choice(["dead", "sparse", "sparse", "pine"]))
+        for k in range(rng.randint(1, 3)):
+            P.trash_can(x0 + rng.uniform(0.5, w - 0.5), y0 + rng.uniform(0.5, h - 0.5), 0, rng)
+    P.scatter(x0, y0, x0 + w, y0 + h, rng.uniform(5, 10), "wild", rng, avoid=[(cx - 1.4, cy - 1.4, cx + 1.4, cy + 1.4)])
+    # fence on a random side or two, with gaps where it rotted away
+    for side in rng.sample(["s", "n", "e", "w"], rng.randint(0, 2)):
+        n = int((w if side in "ns" else h) / 0.9) - 1
+        if side == "s": P.wood_fence(x0, y0 + h, 0, rng, n=n)
+        elif side == "n": P.wood_fence(x0, y0, 0, rng, n=n)
+        elif side == "e": P.wood_fence(x0 + w, y0, 90, rng, n=n)
+        else: P.wood_fence(x0, y0, 90, rng, n=n)
+
+
+def _statue(sx, sy, conc, rng):
+    z = rng.uniform(0.8, 1.2)
+    box(sx - .45, sy - .45, 0, sx + .45, sy + .45, z, conc)
+    bronze = MAT("paint:%s:0.3" % rng.choice(["#5a6a4a", "#4a5a50", "#6a6a58"]))
+    if rng.random() < 0.75:
+        body, head, wr = kit.humanoid(bronze, rng.uniform(0.9, 1.1))
+        body.location += g2b(sx, sy, z)
+        sphere(sx, sy, z + 1.14, 0.1, bronze)
+    else:            # toppled: just the boots left on the plinth, the rest lying in the grass
+        body, head, wr = kit.humanoid(bronze, 1.0)
+        body.location += g2b(sx + 0.8, sy + 0.3, 0.15)
+        body.rotation_euler.y = math.radians(88)
+
+
+def _swings(px, py, m, rng):
     for s in (-1, 1):
         for d in (-1, 1):
             o = cyl(px + s * 1.0, py + d * 0.35, 0, 2.0, 0.035, m, 6)
@@ -312,19 +409,24 @@ def park(M, x0, y0, w, h, rng):
             for c in (-0.12, 0.12):
                 B(px + s + c - .005, py - .005, 0.45, px + s + c + .005, py + .005, 1.95, MAT("metal:#8a8a84"))
             B(px + s - .15, py - .08, 0.42, px + s + .15, py + .08, 0.46, MAT("wood:#6a5034:#5a4028"))
-    sx2, sy2 = x0 + w - 1.5, y0 + h - 2.0
+
+
+def _slide(sx2, sy2, m):
     for k in range(6):
         B(sx2 - .3, sy2 + 0.6 + k * 0.08, 0.2 + k * 0.25, sx2 + .3, sy2 + 0.66 + k * 0.08, 0.24 + k * 0.25, m)
     mesh([(sx2 - .3, sy2 + 0.5, 1.5), (sx2 + .3, sy2 + 0.5, 1.5), (sx2 + .3, sy2 - 1.2, 0.1), (sx2 - .3, sy2 - 1.2, 0.1)], [(0, 1, 2, 3)], MAT("metal:#a8a8a0"), "slide", solidify=0.03)
-    for (bx, by, r) in ((cx - 2.2, cy - 1.0, 0), (cx + 2.2, cy + 1.0, 180), (cx - 1.0, cy + 2.4, 90)):
-        P.bench(bx, by, r, rng)
-    for k in range(6):
-        P.tree(x0 + rng.uniform(0.5, w - 0.5), y0 + rng.uniform(0.5, h - 0.5), 0, random.Random(rng.random()), kind=rng.choice(["dead", "sparse", "sparse"]))
-    for k in range(3):
-        P.trash_can(x0 + rng.uniform(0.5, w - 0.5), y0 + rng.uniform(0.5, h - 0.5), 0, rng)
-    P.scatter(x0, y0, x0 + w, y0 + h, 8, "wild", rng, avoid=[(cx - 1.2, cy - 1.2, cx + 1.2, cy + 1.2)])
-    barbed = False
-    P.wood_fence(x0, y0 + h, 0, rng, n=int(w / 0.9) - 1)
+
+
+def _gazebo(cx, cy, rng):
+    wd = MAT("paint:%s:0.5" % rng.choice(["#d8d0bc", "#a8b0a0", "#c8b898"]))
+    r = 1.3
+    cyl(cx, cy, 0, 0.18, r + 0.1, MAT("wood:#6a5034:#5a4028"), 8)
+    for k in range(8):
+        a = k / 8 * 6.283
+        if rng.random() < 0.9:
+            cyl(cx + math.cos(a) * r, cy + math.sin(a) * r, 0.18, 2.0, 0.05, wd, 6)
+    pts = [(cx + math.cos(k / 8 * 6.283) * (r + 0.25), cy + math.sin(k / 8 * 6.283) * (r + 0.25), 2.0) for k in range(8)] + [(cx, cy, 2.7)]
+    mesh(pts, [(k, (k + 1) % 8, 8) for k in range(8)], MAT("paint:#7a3a2a:0.6"), "gazebo_roof", solidify=0.04)
 
 
 def clinic(M, x0, y0, rng):
@@ -469,7 +571,7 @@ def crater(cx, cy, r, rng):
         for j in range(segs):
             bm.faces.new((vs[i][j], vs[i][(j + 1) % segs], vs[i + 1][(j + 1) % segs], vs[i + 1][j]))
     me = bpy.data.meshes.new("crater"); bm.to_mesh(me); bm.free()
-    ob = bpy.data.objects.new("crater", me); bpy.context.scene.collection.objects.link(ob)
+    ob = bpy.data.objects.new("crater", me); bpy.context.scene.collection.objects.link(ob); __import__('lib').REG.append(ob)
     me.materials.append(MAT("rock:#3a332c:#221e1a"))
     for p in me.polygons: p.use_smooth = True
     for k in range(10):
@@ -488,3 +590,74 @@ def graffiti_on(out_dir, x0, y_face, w, rng, facing="s", n=None, zmax=1.6):
             graffiti.place(out_dir, gx, y_face, gz, gw, gw * 0.5, "s", rng.randint(0, 400), offset=0.05)
         else:
             graffiti.place(out_dir, y_face, gx, gz, gw, gw * 0.5, "e", rng.randint(0, 400), offset=0.05)
+
+
+# ------------------------------------------------------------------ roadside + rural
+def gas_station(M, x0, y0, rng, road_y=None):
+    """Atomic-age filling station: small kiosk, canopy over two pump islands, tall sign, apron to the road."""
+    wall = kit.mat_stucco("gas_w%d" % rng.randint(0, 999), '#d8d0bc', '#8a8270')
+    ops = [(1.1, 1.9, 0.0, 1.6, "door"), (2.3, 3.7, 0.4, 1.6, "win")]
+    H = _flat_box_building(M, x0, y0, 4, 3, wall, 1, ops, [])
+    shop_window(M, x0, y0 + 3, 2.3, 3.7, 0.4, 1.6, rng)
+    kit.door(M, (x0, y0 + 3), (x0 + 4, y0 + 3), 1.1, 1.9, (0, 1), rng.choice(["open", "broken", "closed"]))
+    apron_y1 = road_y + 0.3 if road_y is not None else y0 + 10
+    kit.road(x0 - 2, y0 + 3.0, x0 + 11, apron_y1, z=0.0071, name="apron", lot=True)
+    col = rng.choice(["#b84a3a", "#3a6a9a", "#c8a040"])
+    cx0, cy0, cx1, cy1 = x0 + 4.8, y0 + 3.8, x0 + 10.4, y0 + 7.4
+    box(cx0, cy0, 2.4, cx1, cy1, 2.62, MAT("paint:#e0d8c8:0.4"))
+    box(cx0 - 0.02, cy1 - 0.02, 2.4, cx1 + 0.02, cy1 + 0.02, 2.62, MAT("paint:%s:0.5" % col))
+    for (px, py) in ((cx0 + 0.6, cy0 + 0.6), (cx1 - 0.6, cy0 + 0.6), (cx0 + 0.6, cy1 - 0.6), (cx1 - 0.6, cy1 - 0.6)):
+        box(px - 0.1, py - 0.1, 0, px + 0.1, py + 0.1, 2.4, MAT("paint:#d8d0bc:0.4"))
+    kit.solid(cx0 + 0.4, cy0 + 0.4, cx0 + 0.8, cy0 + 0.8, 2.4, "post"); kit.solid(cx1 - 0.8, cy1 - 0.8, cx1 - 0.4, cy1 - 0.4, 2.4, "post")
+    for iy in (cy0 + 1.3, cy1 - 1.3):
+        box(cx0 + 1.2, iy - 0.3, 0, cx1 - 1.2, iy + 0.3, 0.15, M["conc"])
+        for px in (cx0 + 1.8, cx1 - 1.8):
+            if rng.random() < 0.85:
+                box(px - 0.2, iy - 0.15, 0.15, px + 0.2, iy + 0.15, 1.15, MAT("paint:%s:0.5" % col), bevel=0.02)
+                box(px - 0.16, iy + 0.15, 0.7, px + 0.16, iy + 0.16, 1.0, MAT("flat:#d8d0b8:0.5"))
+            else:
+                o = box(px - 0.2, iy - 0.15, 0.0, px + 0.2, iy + 0.15, 1.0, MAT("paint:%s:0.5" % col), bevel=0.02)
+                o.rotation_euler.x = math.radians(80); o.location.z = 0.2
+        kit.solid(cx0 + 1.2, iy - 0.3, cx1 - 1.2, iy + 0.3, 1.2, "island")
+    sx, sy = x0 + 11.6, y0 + 8.5
+    box(sx - 0.1, sy - 0.1, 0, sx + 0.1, sy + 0.1, 4.0, MAT("metal:#6a6a64"))
+    cyl(sx, sy, 4.0, 4.25, 0.9, MAT("paint:%s:0.5" % col), 24, rot=(math.radians(90), 0, 0))
+    kit.solid(sx - 0.15, sy - 0.15, sx + 0.15, sy + 0.15, 4.0, "post")
+    with P.zone(prio=2):
+        P.tire_stack(x0 - 0.6, y0 + 0.6, 0, rng); P.barrel(x0 + 4.5, y0 + 0.4, 0, rng); P.vending(x0 + 4.4, y0 + 2.4, -90, rng)
+    with P.zone(prio=1):
+        P.car_wreck(cx0 + 2.8, cy0 + 2.2, rng.uniform(-6, 6), rng)
+
+
+def barn(M, x0, y0, rng):
+    """Big red gambrel-ish barn (tall gable), hay loft door, open front."""
+    red = kit.mat_planks("barn%d" % rng.randint(0, 999), rng.choice(['#8a3a2a', '#7a4a3a', '#6a5a4a']), '#5a2a1e')
+    house(M, x0, y0, [(0, 0, 5, 7, 2)], red, "gable", rng.choice(["sh_slate", "sh_brown"]), door=("s", 7, 2.5, "open"), win_state="boarded")
+    box(x0 + 2.0, y0 + 7 + 0.07, 2.4, x0 + 3.0, y0 + 7 + 0.09, 3.2, M["black"])
+    with P.zone(prio=2):
+        for k in range(rng.randint(2, 5)):
+            P.crate(x0 + 5.8 + rng.uniform(0, 1.5), y0 + rng.uniform(1, 6), rng.uniform(0, 90), rng)
+
+
+def silo(M, x, y, rng):
+    m = kit.mat_paint_rust("silo%d" % rng.randint(0, 999), '#a8a8a0', 0.6) if hasattr(kit, "mat_paint_rust") else MAT("metal:#a8a8a0")
+    cyl(x, y, 0, 5.0, 1.0, m, 24)
+    sphere(x, y, 5.0, 1.0, m, scale=(1, 1, 0.6))
+    kit.solid(x - 1, y - 1, x + 1, y + 1, 5.6, "silo")
+
+
+def field(x0, y0, x1, y1, rng, crop=None):
+    """Abandoned crop field: furrow rows (dark/light stripes) under a soft-edged patch, dead stalks."""
+    crop = crop or rng.choice(["furrow", "stubble", "dead"])
+    stops = {"furrow": [(0.3, '#4a3e30'), (0.5, '#5e4e3a'), (0.7, '#6e5c44')],
+             "stubble": [(0.3, '#8a7a4e'), (0.5, '#9a8a5a'), (0.7, '#aa9a66')],
+             "dead": [(0.3, '#6a6640'), (0.5, '#7a744a'), (0.7, '#8a8256')]}[crop]
+    kit.patch(x0, y0, x1, y1, stops)
+    dark = MAT("flat:#3e3428:1.0")
+    y = y0 + 0.3
+    while y < y1 - 0.3:
+        box(x0 + 0.3, y, 0.0045, x1 - 0.3, y + 0.12, 0.0055, dark)
+        y += 0.55
+    with P.zone(prio=1):
+        for k in range(int((x1 - x0) * (y1 - y0) / 3)):
+            P.grass_tuft(rng.uniform(x0, x1), rng.uniform(y0, y1), 0, rng, n=rng.randint(3, 8))

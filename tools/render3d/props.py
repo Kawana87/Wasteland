@@ -144,13 +144,19 @@ def prop(fn):
     """Decorator: collects the objects a builder makes and rotates them around (x, y)."""
     def wrap(x, y, rot=0.0, rng=None, **kw):
         rng = rng or random.Random()
-        before = {o.name for o in bpy.data.objects}
+        import lib as _lib
+        n0 = len(_lib.REG)
         _DEPTH[0] += 1
         try:
             fn(x, y, rng, **kw)
         finally:
             _DEPTH[0] -= 1
-        obs = _new_since(before)
+        obs = []
+        for o in _lib.REG[n0:]:
+            try:
+                o.name; obs.append(o)
+            except ReferenceError:
+                pass
         if rot:
             for o in obs:
                 rot_z(o, rot, (x, y))
@@ -538,7 +544,7 @@ def lamp(x, y, rng):
     cyl(x, y, 0.03, 1.4, 0.015, MAT("metal:#8a8a84"), 6)
     sh = MAT("fab:%s" % rng.choice(["#d8c8a0", "#c8a878", "#a88a6a"]))
     FAST.primitive_cone_add(vertices=12, radius1=0.2, radius2=0.12, depth=0.25, location=g2b(x, y, 1.45))
-    o = bpy.context.active_object; o.data.materials.append(sh)
+    o = FAST.LAST[0]; o.data.materials.append(sh)
     if rng.random() < 0.3:
         o.rotation_euler.x = math.radians(25)
 
@@ -672,21 +678,30 @@ def trash_bags(x, y, rng, n=None):
         c.data.materials.append(m)
 
 
+def _in_building(px, py, pad=0.12):
+    import kit as _k
+    return any(s[0] - pad < px < s[2] + pad and s[1] - pad < py < s[3] + pad for s in _k.SOLIDS if s[5] != "doorway")
+
+
 @prop
 def litter(x, y, rng, n=None, r=1.5):
-    """Papers, cans, bottles, wrappers scattered flat on the ground."""
+    """Papers, cans, bottles, wrappers scattered flat on the ground (one batched object)."""
+    bt = FAST.Batch("litter")
     for k in range(n or rng.randint(6, 14)):
         px, py = x + rng.uniform(-r, r), y + rng.uniform(-r, r)
+        if ZONE != "int" and _in_building(px, py):
+            continue
         t = rng.random()
         if t < 0.5:
-            o = B(px - .07, py - .05, 0.0, px + .07, py + .05, 0.006, MAT("flat:%s" % rng.choice(["#d8d0b8", "#c8c0a0", "#e0d8c8", "#b8b098"])))
-            o.rotation_euler = (math.radians(rng.uniform(-6, 6)), 0, rng.uniform(0, 6.3))
+            bt.cube(g2b(px, py, 0.003), (0.14, 0.10, 0.006), MAT("flat:%s" % rng.choice(["#d8d0b8", "#c8c0a0", "#e0d8c8", "#b8b098"])),
+                    rot=(math.radians(rng.uniform(-6, 6)), 0, rng.uniform(0, 6.3)))
         elif t < 0.75:
-            o = cyl(px, py, 0.03, 0.03 + 0.1, 0.028, MAT("metal:%s" % rng.choice(["#9a9a90", "#b83a2a", "#c8a040", "#4a6a8a"])), 8)
-            o.rotation_euler = (math.radians(90), 0, rng.uniform(0, 6.3)); o.location.z = 0.03
+            bt.cone(g2b(px, py, 0.03), 0.028, 0.028, 0.1, 8, MAT("metal:%s" % rng.choice(["#9a9a90", "#b83a2a", "#c8a040", "#4a6a8a"])),
+                    rot=(math.radians(90), 0, rng.uniform(0, 6.3)))
         else:
-            o = cyl(px, py, 0.035, 0.035 + 0.18, 0.035, MAT("flat:%s:0.2" % rng.choice(["#3a5a3a", "#5a3a20", "#2e4a4a"])), 8)
-            o.rotation_euler = (math.radians(90), 0, rng.uniform(0, 6.3)); o.location.z = 0.035
+            bt.cone(g2b(px, py, 0.035), 0.035, 0.035, 0.18, 8, MAT("flat:%s:0.2" % rng.choice(["#3a5a3a", "#5a3a20", "#2e4a4a"])),
+                    rot=(math.radians(90), 0, rng.uniform(0, 6.3)))
+    bt.done()
 
 
 @prop
@@ -730,7 +745,7 @@ def barrel(x, y, rng, kind=None):
 def tire_stack(x, y, rng, n=None):
     for k in range(n or rng.randint(1, 4)):
         FAST.primitive_torus_add(major_radius=0.22, minor_radius=0.09, location=g2b(x + rng.uniform(-.06, .06), y + rng.uniform(-.06, .06), 0.09 + k * 0.17))
-        o = bpy.context.active_object; o.data.materials.append(MAT("flat:#1e1c1a:0.9"))
+        o = FAST.LAST[0]; o.data.materials.append(MAT("flat:#1e1c1a:0.9"))
         o.rotation_euler = (rng.uniform(-.1, .1), rng.uniform(-.1, .1), 0)
 
 
@@ -819,7 +834,7 @@ def street_sign(x, y, rng):
     kind = rng.choice(["stop", "street", "rad"])
     if kind == "stop":
         FAST.primitive_cylinder_add(vertices=8, radius=0.25, depth=0.02, location=g2b(x, y + 0.03, 2.0), rotation=(math.radians(90), 0, math.radians(22.5)))
-        bpy.context.active_object.data.materials.append(MAT("paint:#b83a2a:0.35"))
+        FAST.LAST[0].data.materials.append(MAT("paint:#b83a2a:0.35"))
     elif kind == "street":
         B(x - .35, y - .01, 2.05, x + .35, y + .01, 2.2, MAT("paint:#3e6a4a:0.35"))
         B(x - .01, y - .35, 2.22, x + .01, y + .35, 2.37, MAT("paint:#3e6a4a:0.35"))
@@ -1023,7 +1038,7 @@ def car_wreck(x, y, rng, style=None):
         if style == "burned" or rng.random() < 0.15:
             continue   # wheel missing, sits on the axle
         FAST.primitive_cylinder_add(vertices=16, radius=0.22, depth=0.16, location=g2b(x + a, y + b, 0.22), rotation=(math.radians(90), 0, 0))
-        w = bpy.context.active_object; w.data.materials.append(MAT("flat:#1e1c1a:0.9"))
+        w = FAST.LAST[0]; w.data.materials.append(MAT("flat:#1e1c1a:0.9"))
     if style == "burned":
         for o in bpy.context.scene.objects:
             pass
@@ -1059,7 +1074,7 @@ def _branch(x, y, z, dirv, length, r, depth, rng, bark, tips, leafy):
     end = (x + d.x * length, y + d.y * length, z + d.z * length)
     mid = ((x + end[0]) / 2, (y + end[1]) / 2, (z + end[2]) / 2)
     FAST.primitive_cone_add(vertices=7, radius1=r, radius2=r * 0.68, depth=length, location=g2b(*mid))
-    o = bpy.context.active_object
+    o = FAST.LAST[0]
     o.data.materials.append(bark)
     bd = mathutils.Vector((d.x, -d.y, d.z))
     o.rotation_euler = bd.to_track_quat('Z', 'Y').to_euler()
@@ -1091,7 +1106,7 @@ def tree(x, y, rng, kind=None):
             z = h * 0.22 + k * h * 0.15
             rr = (5 - k) * 0.17 * rng.uniform(0.85, 1.15)
             FAST.primitive_cone_add(vertices=9, radius1=rr, depth=h * 0.3, location=g2b(x + rng.uniform(-.04, .04), y, z + h * 0.12))
-            o = bpy.context.active_object; o.data.materials.append(leaf)
+            o = FAST.LAST[0]; o.data.materials.append(leaf)
             o.rotation_euler.z = rng.uniform(0, 6.3)
         return
     h = rng.uniform(0.9, 1.5) if kind != "scrub" else rng.uniform(0.3, 0.6)
@@ -1102,7 +1117,7 @@ def tree(x, y, rng, kind=None):
         for t in tips:
             if rng.random() < (0.55 if kind == "sparse" else 0.8):
                 FAST.primitive_ico_sphere_add(subdivisions=1, radius=rng.uniform(0.12, 0.24), location=g2b(*t))
-                o = bpy.context.active_object; o.data.materials.append(leaf)
+                o = FAST.LAST[0]; o.data.materials.append(leaf)
                 o.scale = (1, 1, rng.uniform(0.6, 0.9))
                 o.rotation_euler = (rng.uniform(0, 3), rng.uniform(0, 3), rng.uniform(0, 3))
 
@@ -1117,7 +1132,7 @@ def joshua_tree(x, y, rng):
         for k in range(22):
             a, b = rng.uniform(0, 6.3), rng.uniform(-1.0, 1.6)
             FAST.primitive_cone_add(vertices=4, radius1=0.03, depth=0.38, location=g2b(t[0], t[1], t[2] + 0.05))
-            o = bpy.context.active_object; o.data.materials.append(spikes)
+            o = FAST.LAST[0]; o.data.materials.append(spikes)
             o.rotation_euler = (b, 0, a)
 
 
@@ -1142,7 +1157,7 @@ def shrub(x, y, rng):
     for k in range(rng.randint(4, 8)):
         FAST.primitive_ico_sphere_add(subdivisions=1, radius=rng.uniform(0.12, 0.22),
                                               location=g2b(x + rng.uniform(-.25, .25), y + rng.uniform(-.25, .25), rng.uniform(0.08, 0.25)))
-        o = bpy.context.active_object; o.data.materials.append(leaf)
+        o = FAST.LAST[0]; o.data.materials.append(leaf)
         o.scale = (1, 1, 0.75)
 
 
@@ -1165,25 +1180,25 @@ def tumbleweed(x, y, rng):
         bpy.data.objects.remove(o, do_unlink=True)
         FAST.primitive_torus_add(major_radius=r * rng.uniform(0.6, 1.0), minor_radius=0.006, major_segments=10, minor_segments=3,
                                          location=g2b(x + rng.uniform(-.05, .05), y + rng.uniform(-.05, .05), r))
-        o = bpy.context.active_object; o.data.materials.append(m)
+        o = FAST.LAST[0]; o.data.materials.append(m)
         o.rotation_euler = (a, b, rng.uniform(0, 6.3))
 
 
 @prop
 def grass_tuft(x, y, rng, n=None):
     m = MAT("leaf:%s:%s" % rng.choice([("#8a8a4a", "#6a6a34"), ("#7a7a44", "#5a5a30"), ("#9a8a5a", "#7a6a40"), ("#6a7a40", "#4a5a2e")]))
+    bt = FAST.Batch("tuft")
     for k in range(n or rng.randint(12, 22)):
         h = rng.uniform(0.18, 0.42)
-        FAST.primitive_cone_add(vertices=3, radius1=0.018, depth=h, location=g2b(x + rng.uniform(-.12, .12), y + rng.uniform(-.12, .12), h / 2))
-        o = bpy.context.active_object; o.data.materials.append(m)
-        o.rotation_euler = (rng.uniform(-.5, .5), rng.uniform(-.5, .5), 0)
+        bt.cone(g2b(x + rng.uniform(-.12, .12), y + rng.uniform(-.12, .12), h / 2), 0.018, 0.0, h, 3, m, rot=(rng.uniform(-.5, .5), rng.uniform(-.5, .5), 0))
+    bt.done()
 
 
 @prop
 def rock(x, y, rng, size=None):
     size = size or rng.uniform(0.15, 0.7)
     FAST.primitive_ico_sphere_add(subdivisions=3, radius=size, location=g2b(x, y, size * 0.3))
-    o = bpy.context.active_object
+    o = FAST.LAST[0]
     o.data.materials.append(MAT("rock:%s:%s" % rng.choice([("#7a7266", "#5a544a"), ("#8a7a64", "#6a5a46"), ("#6a6660", "#4a4844"), ("#9a8a70", "#7a6a52")])))
     tex = bpy.data.textures.new("rn%d" % rng.randint(0, 99999), 'CLOUDS')
     tex.noise_scale = rng.uniform(0.3, 0.6)
@@ -1195,10 +1210,14 @@ def rock(x, y, rng, size=None):
 
 @prop
 def pebbles(x, y, rng, n=None, r=0.6):
+    bt = FAST.Batch("pebbles")
+    m = MAT("rock:#7a7266:#5a544a")
     for k in range(n or rng.randint(4, 10)):
-        s = rng.uniform(0.03, 0.08)
-        FAST.primitive_ico_sphere_add(subdivisions=1, radius=s, location=g2b(x + rng.uniform(-r, r), y + rng.uniform(-r, r), s * 0.3))
-        o = bpy.context.active_object; o.data.materials.append(MAT("rock:#7a7266:#5a544a")); o.scale = (1, 1, 0.6)
+        s_ = rng.uniform(0.03, 0.08)
+        if ZONE != "int" and _in_building(x, y):
+            break
+        bt.ico(g2b(x + rng.uniform(-r, r), y + rng.uniform(-r, r), s_ * 0.3), s_, m, scale=(1, 1, 0.6))
+    bt.done()
 
 
 @prop

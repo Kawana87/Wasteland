@@ -83,9 +83,11 @@ def _base_xy(g):
     return (sum(p[0] for p in pts) / len(pts), sum(p[1] for p in pts) / len(pts))
 
 
+_PENDING = []
+
+
 def _remove(g):
-    for o in g["obs"]:
-        bpy.data.objects.remove(o, do_unlink=True)
+    _PENDING.extend(g["obs"])
     g["dead"] = True
 
 
@@ -109,9 +111,11 @@ def run(scene_name=""):
             # scattered decals (litter, stains): drop only the pieces that land in a building or wall
             keep = []
             for o in g["obs"]:
+                if o.get("batch"):
+                    keep.append(o); continue
                 ob = _obj_bb(o)
                 if any(_hits_solid(ob, s, WALL_HALF) for s in solids):
-                    bpy.data.objects.remove(o, do_unlink=True); log["decal_bits"] += 1
+                    _PENDING.append(o); log["decal_bits"] += 1
                 else:
                     keep.append(o)
             g["obs"] = keep
@@ -146,10 +150,25 @@ def run(scene_name=""):
                 log["roof"].append(a["name"]); _remove(a); break
     # 3: outdoor props vs each other
     solid_g = [(gid, g) for gid, g in order if g["zone"] == "ext" and not g.get("dead") and g["name"] not in P.DECALS]
+    # spatial hash (4-tile cells) so big worlds don't need every pair compared
+    CELL = 4.0
+    grid = {}
+    def cells(B):
+        for cx in range(int(B[0] // CELL), int(B[3] // CELL) + 1):
+            for cy in range(int(B[1] // CELL), int(B[4] // CELL) + 1):
+                yield (cx, cy)
+    for i, (gid, a) in enumerate(solid_g):
+        a["_i"] = i
     for i, (gid, a) in enumerate(solid_g):
         if a.get("dead"): continue
         A = a["bb"]
-        for gid2, c in solid_g[:i]:
+        near = {}
+        for c_ in cells(A):
+            for (gid2, c) in grid.get(c_, []):
+                near[gid2] = c
+        for c_ in cells(A):
+            grid.setdefault(c_, []).append((gid, a))
+        for gid2, c in sorted(near.items()):
             if c.get("dead"): continue
             C = c["bb"]
             ox, oy, oz = _ov(A[0], A[3], C[0], C[3]), _ov(A[1], A[4], C[1], C[4]), _ov(A[2], A[5], C[2], C[5])
@@ -179,6 +198,9 @@ def run(scene_name=""):
                 for o in g["obs"]:
                     o.location.z += gz
                 log["grounded"] += 1
+    if _PENDING:
+        bpy.data.batch_remove(ids=list({o.name: o for o in _PENDING}.values()))
+        _PENDING.clear()
     from collections import Counter
     print("[validate %s] groups=%d removed: in-building %d %s | roof %d %s | overlap %d %s | decal bits %d | grounded %d"
           % (scene_name, len(G), len(log["in_building"]), dict(Counter(log["in_building"])), len(log["roof"]), dict(Counter(log["roof"])),

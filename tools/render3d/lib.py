@@ -17,6 +17,7 @@ def g2b(x, y, z=0.0):
 
 
 def reset():
+    REG.clear()
     bpy.ops.wm.read_factory_settings(use_empty=True)
     sc = bpy.context.scene
     sc.render.engine = 'CYCLES'
@@ -312,8 +313,12 @@ def mat_flat(name, col, rough=0.8, metal=0.0, emit=None, noise=0.15):
 _COLL = None
 
 
+REG = []          # every object in creation order (props.prop slices this instead of scanning the scene)
+
+
 def _link(ob):
     bpy.context.scene.collection.objects.link(ob)
+    REG.append(ob)
     return ob
 
 
@@ -329,7 +334,6 @@ def box(x0, y0, z0, x1, y1, z1, mat, bevel=0.0, name="box"):
     ob.location = g2b((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2)
     me.materials.append(mat)
     if bevel > 0:
-        bpy.context.view_layer.objects.active = ob
         md = ob.modifiers.new("bev", 'BEVEL')
         md.width = bevel
         md.segments = 2

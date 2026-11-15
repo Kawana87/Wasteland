@@ -3,7 +3,7 @@ builders + scatter + validator, rendered big so it can be inspected tile by tile
 python3 map_scene.py OUT [seed]"""
 import sys, os, math, random
 OUT = sys.argv[1] if len(sys.argv) > 1 else "/tmp/r3d"
-SEED = int(sys.argv[2]) if len(sys.argv) > 2 else 5
+SEED = int(sys.argv[2]) if len(sys.argv) > 2 and sys.argv[2].isdigit() else 5
 sys.argv = [sys.argv[0], OUT, "none"]          # import scenes without running its scenes
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from lib import *
@@ -27,15 +27,16 @@ def build(rng):
     roads = [main, avenue, lane]
     asphalt, conc = M["asphalt"], M["conc"]
     # ---- downtown (north-west): storefronts on main street, jail and a bombed block behind
-    for (a, b, c, d) in ((-6, 19.2, 28.0, 20.0), (31.0, 19.2, 66, 20.0), (-6, 23.0, 28.0, 23.8), (27.2, -6, 28.0, 19.2), (31.0, -6, 31.8, 19.2)):
+    ENTRY = 41.0     # mall driveway: curb cut through the north sidewalk
+    for (a, b, c, d) in ((-6, 19.2, 28.0, 20.0), (31.0, 19.2, ENTRY - 2.3, 20.0), (ENTRY + 2.3, 19.2, 66, 20.0), (-6, 23.0, 28.0, 23.8), (27.2, -6, 28.0, 19.2), (31.0, -6, 31.8, 2.0)):
         box(a, b, 0.0, c, d, 0.07, conc, bevel=0.02); kit.PAVED.append((a, b, c, d))
-    kit.PAVED.extend([main, avenue])
+    kit.PAVED.extend([main])
     LM.storefront_row(M, 1.0, 14.2, 6, rng)
     LM.jail(M, 2.0, 3.0, rng)
     LM.ruin_building(M, 19.0, 5.0, 5, 4, rng, "bombed", '#8a4434')
     house(M, 19, 11, [(0, 0, 6, 2, 2)], kit.mat_stucco("ofc", '#b0a48c', '#7a6e5a'), "flat", door=("s", 2, 3.0, "locked"), win_state="broken")
     # ---- north-east: mall + lot, clinic on the corner
-    lot_end = LM.mall(M, 36.0, 1.0, rng, lot_rows=1)
+    lot_end = LM.mall(M, 36.0, -4.5, rng, lot_rows=1, road_y=20.0, entry_x=ENTRY)
     LM.clinic(M, 52.0, 12.6, rng)
     # ---- south-west: park, church, a burnt house, two homes on a dirt trail
     LM.park(M, 2.0, 25.0, 10.0, 7.0, rng)
@@ -50,17 +51,18 @@ def build(rng):
     return M, roads, doors, blockers, lot_end
 
 
-def dress(M, roads, doors, blockers, rng):
+def dress(M, roads, doors, blockers, rng, bounds=(-8, -8, 68, 56)):
     main, avenue, lane = roads
-    flats = [(s[0] - 0.8, s[1] - 0.8, s[2] + 0.8, s[3] + 0.8) for s in kit.SOLIDS] + [
-        (-6, 19.2, 66, 23.8), (27.2, -6, 31.8, 54), (35, 8, 51, 13.5), (2, 25, 12, 32)]
-    kit.terrain(-8, -8, 68, 56, kit.mat_terrain(), amp=0.22, scale=0.45, res=2, flat=flats + [lane])
-    box(main[0], main[1], 0.0, main[2], main[3], 0.006, M["asphalt"])
-    box(avenue[0], avenue[1], 0.0062, avenue[2], avenue[3], 0.0066, M["asphalt"])
+    # roads with soft eroded edges; the avenue is split at main street so its edges never cross the junction
+    kit.road(*main, z=0.006, name="main")
+    kit.road(avenue[0], avenue[1], avenue[2], main[1] + 0.3, z=0.0064, name="ave_n")
+    kit.road(avenue[0], main[3] - 0.3, avenue[2], avenue[3], z=0.0064, name="ave_s")
     kit.road(*lane, ends=(False, True), z=0.0095)
+    flats = [(s[0] - 0.8, s[1] - 0.8, s[2] + 0.8, s[3] + 0.8) for s in kit.SOLIDS] + [(p[0] - 0.6, p[1] - 0.6, p[2] + 0.6, p[3] + 0.6) for p in kit.PAVED]
+    kit.terrain(bounds[0], bounds[1], bounds[2], bounds[3], kit.mat_terrain(), amp=0.22, scale=0.45, res=2, flat=flats)
     for k in range(-6, 66, 6):
         if not (26 < k < 32):
-            box(k, 21.47, 0.006, k + 2.5, 21.53, 0.0075, P.MAT("flat:#a89a6a:0.8"))
+            box(k, 21.47, 0.0066, k + 2.5, 21.53, 0.0075, P.MAT("flat:#a89a6a:0.8"))
     # footpaths from every house door to the nearest road edge
     for out in doors:
         if out[0] < 27:          # south-west homes: trail up to main street
@@ -113,11 +115,12 @@ def render(name, cx, cy, W, H, samples=36):
     print("scene", name)
 
 
-rng = random.Random(SEED)
-M, roads, doors, blockers, lot_end = build(rng)
-dress(M, roads, doors, blockers, rng)
-if os.environ.get("CROP"):
-    cx, cy, w, h = [float(v) for v in os.environ["CROP"].split(",")]
-    render("town_crop", cx, cy, int(w), int(h))
-else:
-    render("town_map", 30.0, 24.0, 3600, 2000)
+if __name__ == "__main__":
+    rng = random.Random(SEED)
+    M, roads, doors, blockers, lot_end = build(rng)
+    dress(M, roads, doors, blockers, rng)
+    if os.environ.get("CROP"):
+        cx, cy, w, h = [float(v) for v in os.environ["CROP"].split(",")]
+        render("town_crop", cx, cy, int(w), int(h))
+    else:
+        render("town_map", 30.0, 24.0, 3600, 2000)
