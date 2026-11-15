@@ -31,7 +31,8 @@ func setup(w: World, bld: World.Bld) -> void:
 		var depth: float = (s.a.x + s.b.x) * 0.5 + (s.a.y + s.b.y) * 0.5
 		var full: Sprite2D
 		if s.mode == "stub":
-			full = _spr("stub_%s%d" % [ax, pal], pos, depth, 2 + s.fl * 2)
+			var sv: int = posmod(s.cell.x * 7 + s.cell.y * 13 + s.axis * 5, 3)
+			full = _spr("stub_%s%d%s" % [ax, pal, "" if sv == 0 else "_%d" % sv], pos, depth, 2 + s.fl * 2)
 		else:
 			var mode: String = s.mode if s.side != "i" else "plain"
 			full = _spr("wall_%s%d%s" % [ax, pal, "" if mode == "plain" else "_" + mode], pos, depth, 2 + s.fl * 2)

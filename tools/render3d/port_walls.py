@@ -238,19 +238,22 @@ def build_wall(axis, pi, mode, mats, hh=None, rng=None):
     elif mode == "garage":
         opening = (0.06, 0.94, 0.0, gz(21))
     if mode == "stub":
-        # broken-off wall: a few chunky steps, chipped corners, all in the wall's own material
-        n = 7
-        hts = []
-        h = rng.uniform(8, 14)
+        # broken-off wall: an irregular ragged top (random walk over many thin steps, smoothed so it
+        # reads as crumbled masonry, not battlements), one or two loose chunks
+        n = 18
+        h = rng.uniform(6, 16)
+        raw = []
         for k in range(n):
-            h = max(4, min(19, h + rng.uniform(-5, 5)))
-            hts.append(h)
+            h = max(3, min(20, h + rng.uniform(-3.5, 3.5)))
+            raw.append(h)
+        hts = [(raw[max(0, k - 1)] + raw[k] * 2 + raw[min(n - 1, k + 1)]) / 4 for k in range(n)]
         for k in range(n):
             u0, u1 = k / n - (E if k == 0 else 0), (k + 1) / n + (E if k == n - 1 else 0)
-            W.box(u0, u1, -T, T, 0, gz(hts[k]), wm)
-            if rng.random() < 0.6:     # a chipped block sitting on the step
-                cu = rng.uniform(k / n, (k + 1) / n - 0.06)
-                W.box(cu, cu + 0.06, -T * 0.9, T * 0.9, gz(hts[k]), gz(hts[k] + rng.uniform(1.5, 3)), wm)
+            W.box(u0, u1, -T, T, 0, gz(hts[k] + rng.uniform(-0.6, 0.6)), wm)
+        for j in range(rng.randint(1, 2)):
+            k = rng.randrange(n)
+            cu = k / n
+            W.box(cu, cu + 0.07, -T * 0.9, T * 0.9, gz(hts[k]), gz(hts[k] + rng.uniform(1.5, 3)), wm, tilt=rng.uniform(-0.4, 0.4))
         return W.done()
     if opening is None:
         W.box(-E, 1 + E, -T, T, 0, hh, wm)
@@ -351,9 +354,10 @@ def main(pals):
                 if mode == "low":
                     ob = build_wall(axis, pi, "plain", mats, hh=gz(5))
                     name = "low_%s%d" % (axis, pi)
-                elif mode == "stub":
-                    ob = build_wall(axis, pi, "stub", mats)
-                    name = "stub_%s%d" % (axis, pi)
+                elif mode.startswith("stub"):
+                    v = int(mode[4:] or 0)
+                    ob = build_wall(axis, pi, "stub", mats, rng=random.Random(pi * 97 + v * 31 + (axis == "x")))
+                    name = "stub_%s%d" % (axis, pi) + ("" if v == 0 else "_%d" % v)
                 else:
                     ob = build_wall(axis, pi, mode, mats)
                     name = "wall_%s%d%s" % (axis, pi, "" if mode == "plain" else "_" + mode)
