@@ -474,8 +474,12 @@ func generate(sd: int) -> void:
 	for k in 4:
 		for t in 60:
 			var p := road_point() + Vector2(rf(-2.5, 2.5), rf(-2.5, 2.5))
-			if _free_spot(p) and T[idx(int(p.x), int(p.y))] == GRASS and not near_road(int(p.x), int(p.y), 0) and _clear_of_buildings(p, 1.6):
-				add_decor("billboard_" + ["x", "y"][ri(0, 1)], p, true, Vector2(0.2, 0.2))
+			var axb := ri(0, 1)
+			var far := true
+			for d0 in decor:
+				if d0.name.begins_with("billboard") and d0.pos.distance_to(p) < 8.0: far = false
+			if far and _free_spot(p) and T[idx(int(p.x), int(p.y))] == GRASS and not near_road(int(p.x), int(p.y), 0) and _clear_of_buildings(p, 1.6):
+				add_decor("billboard_" + ["x", "y"][axb], p, true, Vector2(1.0, 0.2) if axb == 0 else Vector2(0.2, 1.0))
 				break
 	# trees
 	for y in N:

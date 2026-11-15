@@ -118,7 +118,9 @@ void fragment() {
 	vec3 col = base * f;
 	// cast + contact shadows, dithered at the edges, slightly blue
 	float s = texture(shade_map, uv).r;
-	if (!floor_mat && s > th * 0.96 + 0.02) {
+	// cliff faces (steep rock) don't take the flat cast shadows: stamped in world xy they would smear
+	// into tall dark wedges down the slope
+	if (!floor_mat && mat != 4.0 && s > th * 0.96 + 0.02) {
 		col *= mix(vec3(1.0), vec3(0.6, 0.63, 0.74), shadow_strength * (s > 0.7 ? 1.0 : 0.75));
 	}
 	COLOR = vec4(col, 1.0);
