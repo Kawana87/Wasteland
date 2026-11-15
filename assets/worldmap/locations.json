@@ -1,0 +1,3615 @@
+{
+ "region": "The Sundown Basin",
+ "size": [
+  1600,
+  1200
+ ],
+ "grid": 50,
+ "locations": [
+  {
+   "id": "haven_flats",
+   "name": "Haven Flats",
+   "type": "town",
+   "pos": [
+    0.44,
+    0.445
+   ],
+   "biome": "plains",
+   "faction": "Settlers",
+   "danger": 1,
+   "size": 128,
+   "pitch": "Where you start: a settlement of shacks and gardens beside the interstate, the ruins of Comet Junction just east.",
+   "px": [
+    704,
+    712
+   ]
+  },
+  {
+   "id": "comet_junction",
+   "name": "Comet Junction",
+   "type": "landmark",
+   "pos": [
+    0.495,
+    0.452
+   ],
+   "biome": "ruins",
+   "faction": "Ghouls",
+   "danger": 2,
+   "size": 96,
+   "pitch": "A gutted crossroads town with the Orbit Diner and the Comet filling station; ghouls nest in the ruins.",
+   "px": [
+    792,
+    723
+   ]
+  },
+  {
+   "id": "halcyon_downtown",
+   "name": "New Halcyon - Downtown",
+   "type": "city",
+   "pos": [
+    0.735,
+    0.415
+   ],
+   "biome": "ruins",
+   "faction": "Ghouls / Brotherhood of the Dial",
+   "danger": 4,
+   "size": 160,
+   "pitch": "The bombed metropolis on the Kettle River: towers, barricaded avenues, City Hall and the Dial radio cult holding the Atlas Building.",
+   "px": [
+    1176,
+    664
+   ]
+  },
+  {
+   "id": "halcyon_docks",
+   "name": "Halcyon Docks",
+   "type": "district",
+   "pos": [
+    0.705,
+    0.462
+   ],
+   "biome": "ruins",
+   "faction": "River traders",
+   "danger": 3,
+   "size": 128,
+   "pitch": "Warehouses and rusting barges; river traders run a fortified market on a beached ferry.",
+   "px": [
+    1128,
+    739
+   ]
+  },
+  {
+   "id": "halcyon_heights",
+   "name": "Halcyon Heights",
+   "type": "district",
+   "pos": [
+    0.79,
+    0.37
+   ],
+   "biome": "suburbs",
+   "faction": "Scavengers",
+   "danger": 2,
+   "size": 128,
+   "pitch": "Endless cul-de-sacs of picked-over houses; scavenger families and feral dogs.",
+   "px": [
+    1264,
+    592
+   ]
+  },
+  {
+   "id": "halcyon_general",
+   "name": "Halcyon General Hospital",
+   "type": "dungeon",
+   "pos": [
+    0.757,
+    0.445
+   ],
+   "biome": "ruins",
+   "faction": "Ghouls",
+   "danger": 4,
+   "size": 96,
+   "pitch": "Eight storeys of ghouls; the pharmacy vault on the top floor is still sealed.",
+   "px": [
+    1211,
+    712
+   ]
+  },
+  {
+   "id": "halcyon_stadium",
+   "name": "Halcyon Stadium",
+   "type": "landmark",
+   "pos": [
+    0.765,
+    0.398
+   ],
+   "biome": "ruins",
+   "faction": "Raiders (Pit Kings)",
+   "danger": 3,
+   "size": 96,
+   "pitch": "Raiders run fight nights in the collapsed bowl; win and you're a legend, lose and you're dinner.",
+   "px": [
+    1224,
+    637
+   ]
+  },
+  {
+   "id": "big_sky_mall",
+   "name": "Big Sky Mall",
+   "type": "dungeon",
+   "pos": [
+    0.808,
+    0.342
+   ],
+   "biome": "suburbs",
+   "faction": "Raiders",
+   "danger": 3,
+   "size": 128,
+   "pitch": "The shopping mall with the run-down parking lot; raiders hold the department store, rats the food court.",
+   "px": [
+    1293,
+    547
+   ]
+  },
+  {
+   "id": "halcyon_railyard",
+   "name": "Halcyon Rail Yard",
+   "type": "landmark",
+   "pos": [
+    0.7,
+    0.372
+   ],
+   "biome": "industrial",
+   "faction": "none",
+   "danger": 2,
+   "size": 96,
+   "pitch": "Freight cars in rows; one locomotive still has fuel.",
+   "px": [
+    1120,
+    595
+   ]
+  },
+  {
+   "id": "halcyon_airfield",
+   "name": "Halcyon Airfield",
+   "type": "landmark",
+   "pos": [
+    0.825,
+    0.475
+   ],
+   "biome": "plains",
+   "faction": "Robots",
+   "danger": 3,
+   "size": 128,
+   "pitch": "Crashed bombers on a cracked runway, guarded by security robots that never got the stand-down order.",
+   "px": [
+    1320,
+    760
+   ]
+  },
+  {
+   "id": "millbrook",
+   "name": "Millbrook",
+   "type": "town",
+   "pos": [
+    0.4,
+    0.29
+   ],
+   "biome": "farmland",
+   "faction": "Farmers' Grange",
+   "danger": 1,
+   "size": 128,
+   "pitch": "The breadbasket: a farming town on the river with a grain elevator, a mill and a weekly market.",
+   "px": [
+    640,
+    464
+   ]
+  },
+  {
+   "id": "cedar_falls",
+   "name": "Cedar Falls",
+   "type": "town",
+   "pos": [
+    0.255,
+    0.155
+   ],
+   "biome": "forest",
+   "faction": "Loggers",
+   "danger": 2,
+   "size": 128,
+   "pitch": "A lumber town at the falls; the sawmill still runs on the water wheel.",
+   "px": [
+    408,
+    248
+   ]
+  },
+  {
+   "id": "prospect",
+   "name": "Prospect",
+   "type": "town",
+   "pos": [
+    0.205,
+    0.545
+   ],
+   "biome": "badlands",
+   "faction": "Mine Company",
+   "danger": 2,
+   "size": 128,
+   "pitch": "A mining boomtown at the foot of the mountains; saloon, assay office, company scrip.",
+   "px": [
+    328,
+    872
+   ]
+  },
+  {
+   "id": "dustwater",
+   "name": "Dustwater",
+   "type": "town",
+   "pos": [
+    0.505,
+    0.618
+   ],
+   "biome": "desert",
+   "faction": "Water Barons",
+   "danger": 2,
+   "size": 128,
+   "pitch": "A desert town built around the last deep well; the Water Barons sell every drop.",
+   "px": [
+    808,
+    989
+   ]
+  },
+  {
+   "id": "lakeview",
+   "name": "Lakeview",
+   "type": "town",
+   "pos": [
+    0.79,
+    0.598
+   ],
+   "biome": "lakeshore",
+   "faction": "Fishers",
+   "danger": 1,
+   "size": 96,
+   "pitch": "A lakeside resort town turned fishing village on the reservoir.",
+   "px": [
+    1264,
+    957
+   ]
+  },
+  {
+   "id": "harmony_ridge",
+   "name": "Harmony Ridge",
+   "type": "settlement",
+   "pos": [
+    0.885,
+    0.215
+   ],
+   "biome": "hills",
+   "faction": "Children of the Sun",
+   "danger": 2,
+   "size": 96,
+   "pitch": "A commune on the hill that worships the bomb's light; friendly, a little too friendly.",
+   "px": [
+    1416,
+    344
+   ]
+  },
+  {
+   "id": "gallows_pass",
+   "name": "Gallows Pass",
+   "type": "settlement",
+   "pos": [
+    0.115,
+    0.445
+   ],
+   "biome": "mountains",
+   "faction": "Toll Raiders",
+   "danger": 3,
+   "size": 96,
+   "pitch": "The only road through the mountains, and the raiders who charge for it.",
+   "px": [
+    184,
+    712
+   ]
+  },
+  {
+   "id": "fort_liberty",
+   "name": "Fort Liberty",
+   "type": "town",
+   "pos": [
+    0.305,
+    0.675
+   ],
+   "biome": "desert",
+   "faction": "Liberty Remnant (army)",
+   "danger": 3,
+   "size": 160,
+   "pitch": "A pre-war army base held by the descendants of its garrison; strict, well armed, recruiting.",
+   "px": [
+    488,
+    1080
+   ]
+  },
+  {
+   "id": "st_agnes",
+   "name": "St. Agnes Mission",
+   "type": "settlement",
+   "pos": [
+    0.605,
+    0.3
+   ],
+   "biome": "plains",
+   "faction": "Sisters of St. Agnes",
+   "danger": 1,
+   "size": 64,
+   "pitch": "Nuns run a clinic in an old adobe mission; they heal anyone who disarms at the gate.",
+   "px": [
+    968,
+    480
+   ]
+  },
+  {
+   "id": "tumbleweed_stop",
+   "name": "Tumbleweed Truck Stop",
+   "type": "settlement",
+   "pos": [
+    0.615,
+    0.468
+   ],
+   "biome": "plains",
+   "faction": "Caravaneers",
+   "danger": 1,
+   "size": 64,
+   "pitch": "Caravans park their brahmin wagons by the old diesel pumps; best rumours in the basin.",
+   "px": [
+    984,
+    749
+   ]
+  },
+  {
+   "id": "rustys_junkyard",
+   "name": "Rusty's Junkyard",
+   "type": "settlement",
+   "pos": [
+    0.548,
+    0.508
+   ],
+   "biome": "plains",
+   "faction": "Rusty",
+   "danger": 1,
+   "size": 64,
+   "pitch": "Rusty buys and sells anything metal; his dogs keep the peace.",
+   "px": [
+    877,
+    813
+   ]
+  },
+  {
+   "id": "copper_kettle",
+   "name": "Copper Kettle Landing",
+   "type": "settlement",
+   "pos": [
+    0.565,
+    0.365
+   ],
+   "biome": "river",
+   "faction": "River traders",
+   "danger": 1,
+   "size": 64,
+   "pitch": "A riverboat trading post on stilts; ferries cross here since the bridges fell.",
+   "px": [
+    904,
+    584
+   ]
+  },
+  {
+   "id": "ranger_station",
+   "name": "Ranger Station 7",
+   "type": "settlement",
+   "pos": [
+    0.455,
+    0.1
+   ],
+   "biome": "forest",
+   "faction": "Pine Rangers",
+   "danger": 2,
+   "size": 64,
+   "pitch": "Forest rangers who still patrol, still fight fires, still hand out maps.",
+   "px": [
+    728,
+    160
+   ]
+  },
+  {
+   "id": "sundial_ranch",
+   "name": "Sundial Ranch",
+   "type": "settlement",
+   "pos": [
+    0.355,
+    0.505
+   ],
+   "biome": "plains",
+   "faction": "Ranchers",
+   "danger": 1,
+   "size": 96,
+   "pitch": "A cattle ranch on the open range; always hiring hands to guard the herd from brutes.",
+   "px": [
+    568,
+    808
+   ]
+  },
+  {
+   "id": "cottonwood_motel",
+   "name": "Cottonwood Motor Court",
+   "type": "camp",
+   "pos": [
+    0.318,
+    0.452
+   ],
+   "biome": "plains",
+   "faction": "Drifters",
+   "danger": 2,
+   "size": 64,
+   "pitch": "A neon-signed motel strip on the interstate; drifters rent rooms, nobody asks questions.",
+   "px": [
+    509,
+    723
+   ]
+  },
+  {
+   "id": "thunder_mesa",
+   "name": "Thunder Mesa",
+   "type": "settlement",
+   "pos": [
+    0.585,
+    0.695
+   ],
+   "biome": "desert",
+   "faction": "Mesa Clans",
+   "danger": 2,
+   "size": 96,
+   "pitch": "Scavenger clans living in cliff dwellings cut into a mesa; they trade in salt and glass.",
+   "px": [
+    936,
+    1112
+   ]
+  },
+  {
+   "id": "hollister_dam",
+   "name": "Hollister Dam",
+   "type": "landmark",
+   "pos": [
+    0.86,
+    0.69
+   ],
+   "biome": "lakeshore",
+   "faction": "contested",
+   "danger": 3,
+   "size": 128,
+   "pitch": "The dam still makes power; whoever holds the turbine hall lights the basin.",
+   "px": [
+    1376,
+    1104
+   ]
+  },
+  {
+   "id": "the_glow",
+   "name": "The Glow",
+   "type": "dungeon",
+   "pos": [
+    0.625,
+    0.595
+   ],
+   "biome": "crater",
+   "faction": "none",
+   "danger": 5,
+   "size": 96,
+   "pitch": "The bomb's crater, still glowing green; something valuable waits at the bottom for anyone who can survive it.",
+   "px": [
+    1000,
+    952
+   ]
+  },
+  {
+   "id": "bright_flats",
+   "name": "Bright Flats",
+   "type": "landmark",
+   "pos": [
+    0.445,
+    0.695
+   ],
+   "biome": "salt",
+   "faction": "none",
+   "danger": 2,
+   "size": 128,
+   "pitch": "A blinding salt pan; rocket-car test track and the wreck of an atomic land-speed racer.",
+   "px": [
+    712,
+    1112
+   ]
+  },
+  {
+   "id": "shelter_17",
+   "name": "Civil Defense Shelter No. 17",
+   "type": "dungeon",
+   "pos": [
+    0.315,
+    0.35
+   ],
+   "biome": "hills",
+   "faction": "unknown",
+   "danger": 3,
+   "size": 96,
+   "pitch": "A sealed bomb shelter in the hills; the door opens for the first time in 80 years.",
+   "px": [
+    504,
+    560
+   ]
+  },
+  {
+   "id": "kettle_point",
+   "name": "Kettle Point Nuclear Plant",
+   "type": "dungeon",
+   "pos": [
+    0.66,
+    0.315
+   ],
+   "biome": "river",
+   "faction": "Ghouls",
+   "danger": 4,
+   "size": 128,
+   "pitch": "Cooling towers on the river; the reactor is cold, the ghouls inside are not.",
+   "px": [
+    1056,
+    504
+   ]
+  },
+  {
+   "id": "starlight_drivein",
+   "name": "Starlight Drive-In",
+   "type": "landmark",
+   "pos": [
+    0.53,
+    0.405
+   ],
+   "biome": "plains",
+   "faction": "Raiders",
+   "danger": 2,
+   "size": 96,
+   "pitch": "Raiders project scratched reels on the giant screen on Saturday nights.",
+   "px": [
+    848,
+    648
+   ]
+  },
+  {
+   "id": "silver_vein",
+   "name": "Silver Vein Mine",
+   "type": "dungeon",
+   "pos": [
+    0.145,
+    0.615
+   ],
+   "biome": "mountains",
+   "faction": "Mole rats",
+   "danger": 3,
+   "size": 96,
+   "pitch": "Deep shafts under the mountains; the miners dug too far.",
+   "px": [
+    232,
+    984
+   ]
+  },
+  {
+   "id": "red_canyon",
+   "name": "Red Canyon - the Bonepile",
+   "type": "dungeon",
+   "pos": [
+    0.245,
+    0.62
+   ],
+   "biome": "badlands",
+   "faction": "Raiders (Bonepile Gang)",
+   "danger": 4,
+   "size": 128,
+   "pitch": "The raiders' stronghold in a red sandstone canyon, decorated with what's left of their enemies.",
+   "px": [
+    392,
+    992
+   ]
+  },
+  {
+   "id": "ironback_tunnel",
+   "name": "Ironback Tunnel",
+   "type": "dungeon",
+   "pos": [
+    0.155,
+    0.325
+   ],
+   "biome": "mountains",
+   "faction": "Shellbacks",
+   "danger": 3,
+   "size": 96,
+   "pitch": "A two-mile rail tunnel through the mountains; derailed trains and shellback nests in the dark.",
+   "px": [
+    248,
+    520
+   ]
+  },
+  {
+   "id": "kettle_bridge",
+   "name": "Kettle River Bridge",
+   "type": "landmark",
+   "pos": [
+    0.665,
+    0.448
+   ],
+   "biome": "river",
+   "faction": "Toll raiders",
+   "danger": 2,
+   "size": 96,
+   "pitch": "The broken interstate bridge; a plank walkway across the gap and a toll gang at each end.",
+   "px": [
+    1064,
+    717
+   ]
+  },
+  {
+   "id": "blackwood_pen",
+   "name": "Blackwood Penitentiary",
+   "type": "dungeon",
+   "pos": [
+    0.375,
+    0.185
+   ],
+   "biome": "forest",
+   "faction": "Raiders (the Cons)",
+   "danger": 4,
+   "size": 128,
+   "pitch": "The prison where the inmates won; now a raider fortress with its own rules.",
+   "px": [
+    600,
+    296
+   ]
+  },
+  {
+   "id": "mount_vigil",
+   "name": "Mount Vigil Observatory",
+   "type": "landmark",
+   "pos": [
+    0.075,
+    0.24
+   ],
+   "biome": "mountains",
+   "faction": "Stargazers",
+   "danger": 2,
+   "size": 64,
+   "pitch": "A domed observatory on the peak; two old astronomers still chart the satellites.",
+   "px": [
+    120,
+    384
+   ]
+  },
+  {
+   "id": "radio_kbsn",
+   "name": "Radio KBSN",
+   "type": "landmark",
+   "pos": [
+    0.575,
+    0.215
+   ],
+   "biome": "plains",
+   "faction": "DJ Lucky Larry",
+   "danger": 1,
+   "size": 64,
+   "pitch": "The basin's only radio station; Lucky Larry plays records and reads the news you bring him.",
+   "px": [
+    920,
+    344
+   ]
+  },
+  {
+   "id": "black_gulch",
+   "name": "Black Gulch Refinery",
+   "type": "dungeon",
+   "pos": [
+    0.705,
+    0.665
+   ],
+   "biome": "desert",
+   "faction": "Raiders / fuel cult",
+   "danger": 4,
+   "size": 128,
+   "pitch": "Oil derricks and a burning refinery; whoever runs it controls the basin's fuel.",
+   "px": [
+    1128,
+    1064
+   ]
+  },
+  {
+   "id": "silo_delta9",
+   "name": "Missile Silo Delta-9",
+   "type": "dungeon",
+   "pos": [
+    0.375,
+    0.6
+   ],
+   "biome": "desert",
+   "faction": "Robots",
+   "danger": 5,
+   "size": 96,
+   "pitch": "One missile was never launched. The silo's robots are still waiting for orders.",
+   "px": [
+    600,
+    960
+   ]
+  },
+  {
+   "id": "starliner_wreck",
+   "name": "Wreck of the Starliner",
+   "type": "landmark",
+   "pos": [
+    0.265,
+    0.485
+   ],
+   "biome": "plains",
+   "faction": "none",
+   "danger": 2,
+   "size": 64,
+   "pitch": "A crashed atomic airliner in a field; the cargo hold was never found.",
+   "px": [
+    424,
+    776
+   ]
+  },
+  {
+   "id": "paradise_lake",
+   "name": "Paradise Lake Summer Camp",
+   "type": "dungeon",
+   "pos": [
+    0.555,
+    0.11
+   ],
+   "biome": "forest",
+   "faction": "unknown",
+   "danger": 3,
+   "size": 96,
+   "pitch": "Cabins on a forest lake; the campers never went home.",
+   "px": [
+    888,
+    176
+   ]
+  },
+  {
+   "id": "whitestone_quarry",
+   "name": "Whitestone Quarry",
+   "type": "landmark",
+   "pos": [
+    0.215,
+    0.39
+   ],
+   "biome": "hills",
+   "faction": "Scavengers",
+   "danger": 2,
+   "size": 96,
+   "pitch": "A flooded quarry with rusting machinery; good stone, bad water.",
+   "px": [
+    344,
+    624
+   ]
+  },
+  {
+   "id": "fire_lookout",
+   "name": "Pinewood Fire Lookout",
+   "type": "landmark",
+   "pos": [
+    0.665,
+    0.13
+   ],
+   "biome": "forest",
+   "faction": "Hermit",
+   "danger": 1,
+   "size": 64,
+   "pitch": "A lookout tower above the trees; the hermit inside sees everything that moves in the forest.",
+   "px": [
+    1064,
+    208
+   ]
+  },
+  {
+   "id": "little_eden",
+   "name": "Little Eden",
+   "type": "landmark",
+   "pos": [
+    0.095,
+    0.52
+   ],
+   "biome": "mountains",
+   "faction": "none",
+   "danger": 3,
+   "size": 96,
+   "pitch": "A ghost town in a mountain hollow; the church bell still rings at midnight.",
+   "px": [
+    152,
+    832
+   ]
+  },
+  {
+   "id": "helios_labs",
+   "name": "Helios Laboratories",
+   "type": "dungeon",
+   "pos": [
+    0.915,
+    0.31
+   ],
+   "biome": "hills",
+   "faction": "Robots / scientists",
+   "danger": 4,
+   "size": 128,
+   "pitch": "A pre-war research campus in the eastern hills; the experiments got out.",
+   "px": [
+    1464,
+    496
+   ]
+  },
+  {
+   "id": "sawtooth_camp",
+   "name": "Sawtooth Raider Camp",
+   "type": "camp",
+   "pos": [
+    0.47,
+    0.545
+   ],
+   "biome": "plains",
+   "faction": "Raiders",
+   "danger": 3,
+   "size": 64,
+   "pitch": "A raider camp on the plateau south of Haven Flats; they raid the interstate.",
+   "px": [
+    752,
+    872
+   ]
+  }
+ ],
+ "routes": [
+  {
+   "kind": "interstate",
+   "path": [
+    [
+     0,
+     717
+    ],
+    [
+     20,
+     716
+    ],
+    [
+     41,
+     715
+    ],
+    [
+     62,
+     715
+    ],
+    [
+     83,
+     715
+    ],
+    [
+     103,
+     715
+    ],
+    [
+     123,
+     714
+    ],
+    [
+     143,
+     713
+    ],
+    [
+     164,
+     713
+    ],
+    [
+     184,
+     713
+    ],
+    [
+     204,
+     715
+    ],
+    [
+     224,
+     717
+    ],
+    [
+     243,
+     718
+    ],
+    [
+     262,
+     721
+    ],
+    [
+     282,
+     725
+    ],
+    [
+     301,
+     727
+    ],
+    [
+     320,
+     727
+    ],
+    [
+     341,
+     727
+    ],
+    [
+     363,
+     727
+    ],
+    [
+     383,
+     727
+    ],
+    [
+     403,
+     726
+    ],
+    [
+     425,
+     725
+    ],
+    [
+     446,
+     725
+    ],
+    [
+     466,
+     725
+    ],
+    [
+     487,
+     724
+    ],
+    [
+     508,
+     723
+    ],
+    [
+     528,
+     722
+    ],
+    [
+     547,
+     722
+    ],
+    [
+     567,
+     720
+    ],
+    [
+     588,
+     719
+    ],
+    [
+     608,
+     718
+    ],
+    [
+     628,
+     717
+    ],
+    [
+     646,
+     715
+    ],
+    [
+     665,
+     714
+    ],
+    [
+     685,
+     713
+    ],
+    [
+     705,
+     713
+    ],
+    [
+     726,
+     714
+    ],
+    [
+     748,
+     717
+    ],
+    [
+     771,
+     721
+    ],
+    [
+     792,
+     724
+    ],
+    [
+     812,
+     726
+    ],
+    [
+     831,
+     728
+    ],
+    [
+     851,
+     731
+    ],
+    [
+     871,
+     734
+    ],
+    [
+     890,
+     737
+    ],
+    [
+     909,
+     739
+    ],
+    [
+     927,
+     742
+    ],
+    [
+     947,
+     744
+    ],
+    [
+     966,
+     746
+    ],
+    [
+     984,
+     746
+    ],
+    [
+     1004,
+     742
+    ],
+    [
+     1023,
+     734
+    ],
+    [
+     1043,
+     725
+    ],
+    [
+     1064,
+     720
+    ],
+    [
+     1086,
+     723
+    ],
+    [
+     1106,
+     732
+    ],
+    [
+     1128,
+     737
+    ],
+    [
+     1151,
+     737
+    ],
+    [
+     1172,
+     735
+    ],
+    [
+     1194,
+     734
+    ],
+    [
+     1215,
+     733
+    ],
+    [
+     1236,
+     732
+    ],
+    [
+     1257,
+     730
+    ],
+    [
+     1279,
+     732
+    ],
+    [
+     1299,
+     743
+    ],
+    [
+     1319,
+     755
+    ],
+    [
+     1339,
+     759
+    ],
+    [
+     1359,
+     759
+    ],
+    [
+     1379,
+     758
+    ],
+    [
+     1399,
+     756
+    ],
+    [
+     1419,
+     756
+    ],
+    [
+     1438,
+     757
+    ],
+    [
+     1459,
+     757
+    ],
+    [
+     1481,
+     756
+    ],
+    [
+     1502,
+     755
+    ],
+    [
+     1521,
+     755
+    ],
+    [
+     1540,
+     755
+    ],
+    [
+     1560,
+     753
+    ],
+    [
+     1580,
+     753
+    ],
+    [
+     1600,
+     752
+    ]
+   ]
+  },
+  {
+   "kind": "highway",
+   "path": [
+    [
+     896,
+     0
+    ],
+    [
+     898,
+     19
+    ],
+    [
+     899,
+     40
+    ],
+    [
+     899,
+     60
+    ],
+    [
+     899,
+     78
+    ],
+    [
+     902,
+     97
+    ],
+    [
+     904,
+     118
+    ],
+    [
+     903,
+     139
+    ],
+    [
+     905,
+     160
+    ],
+    [
+     906,
+     180
+    ],
+    [
+     907,
+     200
+    ],
+    [
+     910,
+     221
+    ],
+    [
+     909,
+     240
+    ],
+    [
+     909,
+     260
+    ],
+    [
+     912,
+     281
+    ],
+    [
+     915,
+     302
+    ],
+    [
+     917,
+     323
+    ],
+    [
+     921,
+     344
+    ],
+    [
+     928,
+     363
+    ],
+    [
+     936,
+     382
+    ],
+    [
+     943,
+     403
+    ],
+    [
+     947,
+     422
+    ],
+    [
+     955,
+     442
+    ],
+    [
+     963,
+     461
+    ],
+    [
+     966,
+     481
+    ],
+    [
+     967,
+     503
+    ],
+    [
+     967,
+     525
+    ],
+    [
+     964,
+     545
+    ],
+    [
+     961,
+     564
+    ],
+    [
+     961,
+     586
+    ],
+    [
+     962,
+     608
+    ],
+    [
+     964,
+     628
+    ],
+    [
+     967,
+     649
+    ],
+    [
+     970,
+     670
+    ],
+    [
+     974,
+     687
+    ],
+    [
+     977,
+     706
+    ],
+    [
+     979,
+     728
+    ],
+    [
+     978,
+     746
+    ],
+    [
+     966,
+     760
+    ],
+    [
+     949,
+     772
+    ],
+    [
+     933,
+     782
+    ],
+    [
+     915,
+     791
+    ],
+    [
+     896,
+     803
+    ],
+    [
+     881,
+     816
+    ],
+    [
+     877,
+     831
+    ],
+    [
+     878,
+     850
+    ],
+    [
+     879,
+     872
+    ],
+    [
+     877,
+     892
+    ],
+    [
+     875,
+     910
+    ],
+    [
+     868,
+     928
+    ],
+    [
+     854,
+     944
+    ],
+    [
+     839,
+     957
+    ],
+    [
+     824,
+     973
+    ],
+    [
+     816,
+     989
+    ],
+    [
+     823,
+     1003
+    ],
+    [
+     836,
+     1015
+    ],
+    [
+     847,
+     1029
+    ],
+    [
+     863,
+     1044
+    ],
+    [
+     881,
+     1060
+    ],
+    [
+     896,
+     1074
+    ],
+    [
+     908,
+     1086
+    ],
+    [
+     922,
+     1098
+    ],
+    [
+     935,
+     1113
+    ],
+    [
+     942,
+     1133
+    ],
+    [
+     946,
+     1155
+    ],
+    [
+     952,
+     1176
+    ],
+    [
+     960,
+     1200
+    ]
+   ]
+  },
+  {
+   "kind": "highway",
+   "path": [
+    [
+     704,
+     712
+    ],
+    [
+     687,
+     724
+    ],
+    [
+     671,
+     736
+    ],
+    [
+     655,
+     748
+    ],
+    [
+     637,
+     759
+    ],
+    [
+     620,
+     770
+    ],
+    [
+     602,
+     783
+    ],
+    [
+     585,
+     797
+    ],
+    [
+     569,
+     809
+    ],
+    [
+     554,
+     821
+    ],
+    [
+     540,
+     834
+    ],
+    [
+     529,
+     851
+    ],
+    [
+     517,
+     869
+    ],
+    [
+     505,
+     883
+    ],
+    [
+     492,
+     896
+    ],
+    [
+     483,
+     913
+    ],
+    [
+     481,
+     934
+    ],
+    [
+     484,
+     954
+    ],
+    [
+     486,
+     977
+    ],
+    [
+     487,
+     1000
+    ],
+    [
+     487,
+     1021
+    ],
+    [
+     487,
+     1041
+    ],
+    [
+     488,
+     1059
+    ],
+    [
+     487,
+     1079
+    ],
+    [
+     484,
+     1101
+    ],
+    [
+     480,
+     1123
+    ],
+    [
+     476,
+     1144
+    ],
+    [
+     472,
+     1163
+    ],
+    [
+     469,
+     1181
+    ],
+    [
+     464,
+     1200
+    ]
+   ]
+  },
+  {
+   "kind": "highway",
+   "path": [
+    [
+     1176,
+     664
+    ],
+    [
+     1184,
+     683
+    ],
+    [
+     1191,
+     702
+    ],
+    [
+     1197,
+     722
+    ],
+    [
+     1206,
+     741
+    ],
+    [
+     1218,
+     760
+    ],
+    [
+     1226,
+     780
+    ],
+    [
+     1232,
+     801
+    ],
+    [
+     1236,
+     821
+    ],
+    [
+     1239,
+     839
+    ],
+    [
+     1243,
+     856
+    ],
+    [
+     1246,
+     876
+    ],
+    [
+     1250,
+     896
+    ],
+    [
+     1256,
+     917
+    ],
+    [
+     1261,
+     939
+    ],
+    [
+     1266,
+     957
+    ],
+    [
+     1276,
+     975
+    ],
+    [
+     1290,
+     991
+    ],
+    [
+     1302,
+     1004
+    ],
+    [
+     1314,
+     1019
+    ],
+    [
+     1328,
+     1037
+    ],
+    [
+     1341,
+     1053
+    ],
+    [
+     1351,
+     1070
+    ],
+    [
+     1363,
+     1088
+    ],
+    [
+     1376,
+     1105
+    ],
+    [
+     1388,
+     1123
+    ],
+    [
+     1400,
+     1138
+    ],
+    [
+     1411,
+     1152
+    ],
+    [
+     1422,
+     1170
+    ],
+    [
+     1432,
+     1186
+    ],
+    [
+     1440,
+     1200
+    ]
+   ]
+  },
+  {
+   "kind": "highway",
+   "path": [
+    [
+     1264,
+     592
+    ],
+    [
+     1273,
+     575
+    ],
+    [
+     1284,
+     559
+    ],
+    [
+     1296,
+     543
+    ],
+    [
+     1307,
+     524
+    ],
+    [
+     1315,
+     506
+    ],
+    [
+     1322,
+     491
+    ],
+    [
+     1333,
+     479
+    ],
+    [
+     1347,
+     462
+    ],
+    [
+     1358,
+     443
+    ],
+    [
+     1366,
+     427
+    ],
+    [
+     1377,
+     411
+    ],
+    [
+     1388,
+     393
+    ],
+    [
+     1397,
+     377
+    ],
+    [
+     1406,
+     360
+    ],
+    [
+     1419,
+     347
+    ],
+    [
+     1435,
+     339
+    ],
+    [
+     1454,
+     333
+    ],
+    [
+     1475,
+     328
+    ],
+    [
+     1493,
+     324
+    ],
+    [
+     1510,
+     316
+    ],
+    [
+     1526,
+     309
+    ],
+    [
+     1544,
+     303
+    ],
+    [
+     1563,
+     297
+    ],
+    [
+     1581,
+     293
+    ],
+    [
+     1600,
+     288
+    ]
+   ]
+  },
+  {
+   "kind": "road",
+   "path": [
+    [
+     704,
+     712
+    ],
+    [
+     701,
+     696
+    ],
+    [
+     694,
+     676
+    ],
+    [
+     686,
+     654
+    ],
+    [
+     685,
+     632
+    ],
+    [
+     681,
+     611
+    ],
+    [
+     673,
+     591
+    ],
+    [
+     665,
+     570
+    ],
+    [
+     656,
+     549
+    ],
+    [
+     653,
+     529
+    ],
+    [
+     653,
+     505
+    ],
+    [
+     648,
+     482
+    ],
+    [
+     638,
+     466
+    ],
+    [
+     623,
+     450
+    ],
+    [
+     611,
+     436
+    ],
+    [
+     600,
+     427
+    ],
+    [
+     584,
+     415
+    ],
+    [
+     568,
+     399
+    ],
+    [
+     555,
+     385
+    ],
+    [
+     542,
+     369
+    ],
+    [
+     528,
+     352
+    ],
+    [
+     511,
+     336
+    ],
+    [
+     494,
+     323
+    ],
+    [
+     478,
+     313
+    ],
+    [
+     462,
+     301
+    ],
+    [
+     450,
+     286
+    ],
+    [
+     439,
+     273
+    ],
+    [
+     423,
+     261
+    ],
+    [
+     408,
+     248
+    ]
+   ]
+  },
+  {
+   "kind": "road",
+   "path": [
+    [
+     640,
+     464
+    ],
+    [
+     657,
+     472
+    ],
+    [
+     673,
+     481
+    ],
+    [
+     691,
+     491
+    ],
+    [
+     708,
+     500
+    ],
+    [
+     727,
+     507
+    ],
+    [
+     747,
+     513
+    ],
+    [
+     763,
+     522
+    ],
+    [
+     779,
+     528
+    ],
+    [
+     801,
+     535
+    ],
+    [
+     821,
+     544
+    ],
+    [
+     836,
+     552
+    ],
+    [
+     851,
+     561
+    ],
+    [
+     868,
+     568
+    ],
+    [
+     886,
+     575
+    ],
+    [
+     906,
+     581
+    ],
+    [
+     928,
+     583
+    ],
+    [
+     946,
+     583
+    ],
+    [
+     968,
+     582
+    ],
+    [
+     992,
+     579
+    ],
+    [
+     1015,
+     582
+    ],
+    [
+     1035,
+     586
+    ],
+    [
+     1053,
+     585
+    ],
+    [
+     1076,
+     586
+    ],
+    [
+     1100,
+     589
+    ],
+    [
+     1117,
+     598
+    ],
+    [
+     1130,
+     612
+    ],
+    [
+     1145,
+     626
+    ],
+    [
+     1161,
+     643
+    ],
+    [
+     1176,
+     664
+    ]
+   ]
+  },
+  {
+   "kind": "road",
+   "path": [
+    [
+     408,
+     248
+    ],
+    [
+     428,
+     251
+    ],
+    [
+     445,
+     256
+    ],
+    [
+     460,
+     262
+    ],
+    [
+     477,
+     265
+    ],
+    [
+     497,
+     269
+    ],
+    [
+     519,
+     277
+    ],
+    [
+     539,
+     282
+    ],
+    [
+     561,
+     288
+    ],
+    [
+     581,
+     292
+    ],
+    [
+     599,
+     291
+    ],
+    [
+     614,
+     279
+    ],
+    [
+     626,
+     264
+    ],
+    [
+     638,
+     253
+    ],
+    [
+     654,
+     237
+    ],
+    [
+     671,
+     218
+    ],
+    [
+     685,
+     200
+    ],
+    [
+     697,
+     186
+    ],
+    [
+     713,
+     174
+    ],
+    [
+     730,
+     164
+    ],
+    [
+     749,
+     162
+    ],
+    [
+     769,
+     165
+    ],
+    [
+     787,
+     169
+    ],
+    [
+     808,
+     171
+    ],
+    [
+     832,
+     169
+    ],
+    [
+     852,
+     169
+    ],
+    [
+     869,
+     174
+    ],
+    [
+     887,
+     177
+    ],
+    [
+     907,
+     180
+    ],
+    [
+     930,
+     183
+    ],
+    [
+     952,
+     186
+    ],
+    [
+     970,
+     190
+    ],
+    [
+     989,
+     196
+    ],
+    [
+     1008,
+     201
+    ],
+    [
+     1025,
+     204
+    ],
+    [
+     1043,
+     206
+    ],
+    [
+     1063,
+     210
+    ],
+    [
+     1080,
+     220
+    ],
+    [
+     1092,
+     233
+    ],
+    [
+     1103,
+     244
+    ],
+    [
+     1117,
+     255
+    ],
+    [
+     1132,
+     270
+    ],
+    [
+     1149,
+     283
+    ],
+    [
+     1167,
+     296
+    ],
+    [
+     1183,
+     309
+    ],
+    [
+     1197,
+     322
+    ],
+    [
+     1205,
+     340
+    ],
+    [
+     1208,
+     360
+    ],
+    [
+     1214,
+     379
+    ],
+    [
+     1220,
+     395
+    ],
+    [
+     1221,
+     413
+    ],
+    [
+     1224,
+     434
+    ],
+    [
+     1229,
+     453
+    ],
+    [
+     1232,
+     474
+    ],
+    [
+     1239,
+     496
+    ],
+    [
+     1249,
+     516
+    ],
+    [
+     1252,
+     534
+    ],
+    [
+     1256,
+     552
+    ],
+    [
+     1261,
+     572
+    ],
+    [
+     1264,
+     592
+    ]
+   ]
+  },
+  {
+   "kind": "road",
+   "path": [
+    [
+     328,
+     872
+    ],
+    [
+     313,
+     854
+    ],
+    [
+     304,
+     833
+    ],
+    [
+     299,
+     815
+    ],
+    [
+     288,
+     800
+    ],
+    [
+     272,
+     789
+    ],
+    [
+     254,
+     776
+    ],
+    [
+     236,
+     760
+    ],
+    [
+     222,
+     748
+    ],
+    [
+     211,
+     738
+    ],
+    [
+     198,
+     724
+    ],
+    [
+     184,
+     712
+    ]
+   ]
+  },
+  {
+   "kind": "road",
+   "path": [
+    [
+     328,
+     872
+    ],
+    [
+     334,
+     891
+    ],
+    [
+     344,
+     905
+    ],
+    [
+     358,
+     920
+    ],
+    [
+     365,
+     939
+    ],
+    [
+     371,
+     957
+    ],
+    [
+     382,
+     974
+    ],
+    [
+     392,
+     992
+    ]
+   ]
+  },
+  {
+   "kind": "road",
+   "path": [
+    [
+     808,
+     989
+    ],
+    [
+     797,
+     1004
+    ],
+    [
+     787,
+     1020
+    ],
+    [
+     775,
+     1032
+    ],
+    [
+     760,
+     1049
+    ],
+    [
+     748,
+     1067
+    ],
+    [
+     739,
+     1080
+    ],
+    [
+     727,
+     1095
+    ],
+    [
+     712,
+     1112
+    ]
+   ]
+  },
+  {
+   "kind": "road",
+   "path": [
+    [
+     808,
+     989
+    ],
+    [
+     829,
+     993
+    ],
+    [
+     845,
+     998
+    ],
+    [
+     863,
+     1004
+    ],
+    [
+     882,
+     1008
+    ],
+    [
+     899,
+     1012
+    ],
+    [
+     918,
+     1016
+    ],
+    [
+     940,
+     1019
+    ],
+    [
+     961,
+     1024
+    ],
+    [
+     980,
+     1028
+    ],
+    [
+     1000,
+     1029
+    ],
+    [
+     1021,
+     1032
+    ],
+    [
+     1039,
+     1039
+    ],
+    [
+     1059,
+     1049
+    ],
+    [
+     1084,
+     1056
+    ],
+    [
+     1107,
+     1061
+    ],
+    [
+     1128,
+     1062
+    ],
+    [
+     1150,
+     1064
+    ],
+    [
+     1174,
+     1066
+    ],
+    [
+     1193,
+     1063
+    ],
+    [
+     1208,
+     1056
+    ],
+    [
+     1226,
+     1054
+    ],
+    [
+     1248,
+     1057
+    ],
+    [
+     1269,
+     1064
+    ],
+    [
+     1286,
+     1071
+    ],
+    [
+     1302,
+     1075
+    ],
+    [
+     1324,
+     1081
+    ],
+    [
+     1344,
+     1090
+    ],
+    [
+     1358,
+     1097
+    ],
+    [
+     1376,
+     1104
+    ]
+   ]
+  },
+  {
+   "kind": "road",
+   "path": [
+    [
+     1264,
+     592
+    ],
+    [
+     1280,
+     566
+    ],
+    [
+     1293,
+     547
+    ]
+   ]
+  },
+  {
+   "kind": "road",
+   "path": [
+    [
+     1176,
+     664
+    ],
+    [
+     1202,
+     654
+    ],
+    [
+     1221,
+     637
+    ],
+    [
+     1235,
+     618
+    ],
+    [
+     1251,
+     603
+    ],
+    [
+     1264,
+     592
+    ]
+   ]
+  },
+  {
+   "kind": "road",
+   "path": [
+    [
+     1056,
+     504
+    ],
+    [
+     1034,
+     500
+    ],
+    [
+     1011,
+     492
+    ],
+    [
+     990,
+     486
+    ],
+    [
+     968,
+     480
+    ]
+   ]
+  },
+  {
+   "kind": "road",
+   "path": [
+    [
+     1464,
+     496
+    ],
+    [
+     1446,
+     499
+    ],
+    [
+     1427,
+     507
+    ],
+    [
+     1403,
+     519
+    ],
+    [
+     1377,
+     527
+    ],
+    [
+     1354,
+     531
+    ],
+    [
+     1335,
+     534
+    ],
+    [
+     1313,
+     540
+    ],
+    [
+     1293,
+     547
+    ]
+   ]
+  },
+  {
+   "kind": "track",
+   "path": [
+    [
+     704,
+     712
+    ],
+    [
+     709,
+     732
+    ],
+    [
+     714,
+     754
+    ],
+    [
+     716,
+     773
+    ],
+    [
+     719,
+     788
+    ],
+    [
+     730,
+     806
+    ],
+    [
+     742,
+     829
+    ],
+    [
+     749,
+     853
+    ],
+    [
+     752,
+     872
+    ]
+   ]
+  },
+  {
+   "kind": "track",
+   "path": [
+    [
+     792,
+     723
+    ],
+    [
+     812,
+     704
+    ],
+    [
+     826,
+     685
+    ],
+    [
+     837,
+     665
+    ],
+    [
+     850,
+     646
+    ],
+    [
+     864,
+     629
+    ],
+    [
+     879,
+     615
+    ],
+    [
+     893,
+     603
+    ],
+    [
+     904,
+     584
+    ]
+   ]
+  },
+  {
+   "kind": "track",
+   "path": [
+    [
+     328,
+     872
+    ],
+    [
+     313,
+     886
+    ],
+    [
+     300,
+     903
+    ],
+    [
+     285,
+     918
+    ],
+    [
+     271,
+     932
+    ],
+    [
+     260,
+     950
+    ],
+    [
+     248,
+     969
+    ],
+    [
+     232,
+     984
+    ]
+   ]
+  },
+  {
+   "kind": "track",
+   "path": [
+    [
+     184,
+     712
+    ],
+    [
+     178,
+     735
+    ],
+    [
+     171,
+     755
+    ],
+    [
+     163,
+     769
+    ],
+    [
+     158,
+     786
+    ],
+    [
+     155,
+     809
+    ],
+    [
+     152,
+     832
+    ]
+   ]
+  },
+  {
+   "kind": "track",
+   "path": [
+    [
+     509,
+     723
+    ],
+    [
+     492,
+     738
+    ],
+    [
+     475,
+     750
+    ],
+    [
+     462,
+     759
+    ],
+    [
+     444,
+     765
+    ],
+    [
+     424,
+     776
+    ]
+   ]
+  },
+  {
+   "kind": "track",
+   "path": [
+    [
+     568,
+     808
+    ],
+    [
+     571,
+     828
+    ],
+    [
+     576,
+     849
+    ],
+    [
+     582,
+     865
+    ],
+    [
+     583,
+     880
+    ],
+    [
+     583,
+     898
+    ],
+    [
+     591,
+     917
+    ],
+    [
+     598,
+     938
+    ],
+    [
+     604,
+     959
+    ],
+    [
+     616,
+     978
+    ],
+    [
+     626,
+     994
+    ],
+    [
+     634,
+     1007
+    ],
+    [
+     650,
+     1021
+    ],
+    [
+     666,
+     1042
+    ],
+    [
+     672,
+     1066
+    ],
+    [
+     682,
+     1084
+    ],
+    [
+     698,
+     1097
+    ],
+    [
+     712,
+     1112
+    ]
+   ]
+  },
+  {
+   "kind": "track",
+   "path": [
+    [
+     640,
+     464
+    ],
+    [
+     619,
+     477
+    ],
+    [
+     603,
+     485
+    ],
+    [
+     592,
+     495
+    ],
+    [
+     581,
+     507
+    ],
+    [
+     563,
+     522
+    ],
+    [
+     542,
+     540
+    ],
+    [
+     522,
+     552
+    ],
+    [
+     505,
+     560
+    ],
+    [
+     485,
+     567
+    ],
+    [
+     465,
+     574
+    ],
+    [
+     450,
+     585
+    ],
+    [
+     434,
+     596
+    ],
+    [
+     413,
+     603
+    ],
+    [
+     388,
+     611
+    ],
+    [
+     364,
+     619
+    ],
+    [
+     346,
+     620
+    ],
+    [
+     331,
+     612
+    ],
+    [
+     315,
+     596
+    ],
+    [
+     300,
+     577
+    ],
+    [
+     282,
+     565
+    ],
+    [
+     268,
+     554
+    ],
+    [
+     259,
+     537
+    ],
+    [
+     248,
+     520
+    ]
+   ]
+  },
+  {
+   "kind": "track",
+   "path": [
+    [
+     120,
+     384
+    ],
+    [
+     132,
+     400
+    ],
+    [
+     139,
+     418
+    ],
+    [
+     144,
+     436
+    ],
+    [
+     150,
+     458
+    ],
+    [
+     159,
+     475
+    ],
+    [
+     175,
+     484
+    ],
+    [
+     196,
+     495
+    ],
+    [
+     214,
+     505
+    ],
+    [
+     229,
+     510
+    ],
+    [
+     248,
+     520
+    ]
+   ]
+  },
+  {
+   "kind": "track",
+   "path": [
+    [
+     808,
+     989
+    ],
+    [
+     825,
+     988
+    ],
+    [
+     841,
+     985
+    ],
+    [
+     858,
+     982
+    ],
+    [
+     880,
+     980
+    ],
+    [
+     904,
+     977
+    ],
+    [
+     926,
+     971
+    ],
+    [
+     947,
+     963
+    ],
+    [
+     965,
+     961
+    ],
+    [
+     982,
+     957
+    ],
+    [
+     1000,
+     952
+    ]
+   ]
+  },
+  {
+   "kind": "rail",
+   "path": [
+    [
+     0,
+     544
+    ],
+    [
+     21,
+     542
+    ],
+    [
+     42,
+     541
+    ],
+    [
+     61,
+     539
+    ],
+    [
+     81,
+     536
+    ],
+    [
+     102,
+     534
+    ],
+    [
+     123,
+     533
+    ],
+    [
+     146,
+     531
+    ],
+    [
+     167,
+     528
+    ],
+    [
+     187,
+     525
+    ],
+    [
+     207,
+     524
+    ],
+    [
+     227,
+     522
+    ],
+    [
+     246,
+     524
+    ],
+    [
+     261,
+     534
+    ],
+    [
+     275,
+     548
+    ],
+    [
+     289,
+     563
+    ],
+    [
+     303,
+     579
+    ],
+    [
+     315,
+     595
+    ],
+    [
+     329,
+     609
+    ],
+    [
+     344,
+     617
+    ],
+    [
+     361,
+     612
+    ],
+    [
+     378,
+     600
+    ],
+    [
+     394,
+     588
+    ],
+    [
+     410,
+     576
+    ],
+    [
+     428,
+     564
+    ],
+    [
+     446,
+     552
+    ],
+    [
+     463,
+     540
+    ],
+    [
+     481,
+     531
+    ],
+    [
+     500,
+     528
+    ],
+    [
+     519,
+     529
+    ],
+    [
+     539,
+     530
+    ],
+    [
+     560,
+     531
+    ],
+    [
+     580,
+     530
+    ],
+    [
+     600,
+     531
+    ],
+    [
+     620,
+     533
+    ],
+    [
+     640,
+     533
+    ],
+    [
+     660,
+     534
+    ],
+    [
+     680,
+     534
+    ],
+    [
+     700,
+     535
+    ],
+    [
+     720,
+     536
+    ],
+    [
+     739,
+     538
+    ],
+    [
+     759,
+     540
+    ],
+    [
+     779,
+     541
+    ],
+    [
+     798,
+     543
+    ],
+    [
+     816,
+     545
+    ],
+    [
+     836,
+     546
+    ],
+    [
+     857,
+     548
+    ],
+    [
+     876,
+     550
+    ],
+    [
+     896,
+     553
+    ],
+    [
+     917,
+     555
+    ],
+    [
+     939,
+     557
+    ],
+    [
+     960,
+     560
+    ],
+    [
+     982,
+     562
+    ],
+    [
+     1003,
+     564
+    ],
+    [
+     1024,
+     568
+    ],
+    [
+     1044,
+     573
+    ],
+    [
+     1063,
+     579
+    ],
+    [
+     1082,
+     584
+    ],
+    [
+     1101,
+     590
+    ],
+    [
+     1120,
+     595
+    ],
+    [
+     1141,
+     600
+    ],
+    [
+     1160,
+     605
+    ],
+    [
+     1179,
+     610
+    ],
+    [
+     1199,
+     614
+    ],
+    [
+     1219,
+     618
+    ],
+    [
+     1240,
+     622
+    ],
+    [
+     1260,
+     627
+    ],
+    [
+     1280,
+     631
+    ],
+    [
+     1300,
+     633
+    ],
+    [
+     1319,
+     633
+    ],
+    [
+     1339,
+     633
+    ],
+    [
+     1359,
+     634
+    ],
+    [
+     1380,
+     634
+    ],
+    [
+     1401,
+     635
+    ],
+    [
+     1419,
+     634
+    ],
+    [
+     1438,
+     634
+    ],
+    [
+     1458,
+     636
+    ],
+    [
+     1480,
+     636
+    ],
+    [
+     1501,
+     638
+    ],
+    [
+     1521,
+     639
+    ],
+    [
+     1540,
+     640
+    ],
+    [
+     1560,
+     640
+    ],
+    [
+     1580,
+     640
+    ],
+    [
+     1600,
+     640
+    ]
+   ]
+  },
+  {
+   "kind": "rail",
+   "path": [
+    [
+     480,
+     528
+    ],
+    [
+     481,
+     548
+    ],
+    [
+     482,
+     567
+    ],
+    [
+     484,
+     586
+    ],
+    [
+     485,
+     606
+    ],
+    [
+     487,
+     626
+    ],
+    [
+     489,
+     645
+    ],
+    [
+     491,
+     664
+    ],
+    [
+     492,
+     682
+    ],
+    [
+     492,
+     701
+    ],
+    [
+     491,
+     723
+    ],
+    [
+     493,
+     743
+    ],
+    [
+     494,
+     762
+    ],
+    [
+     494,
+     781
+    ],
+    [
+     495,
+     800
+    ],
+    [
+     495,
+     819
+    ],
+    [
+     495,
+     839
+    ],
+    [
+     496,
+     858
+    ],
+    [
+     498,
+     876
+    ],
+    [
+     498,
+     895
+    ],
+    [
+     498,
+     914
+    ],
+    [
+     498,
+     934
+    ],
+    [
+     496,
+     953
+    ],
+    [
+     495,
+     972
+    ],
+    [
+     495,
+     992
+    ],
+    [
+     493,
+     1014
+    ],
+    [
+     492,
+     1036
+    ],
+    [
+     491,
+     1058
+    ],
+    [
+     488,
+     1080
+    ]
+   ]
+  }
+ ]
+}
