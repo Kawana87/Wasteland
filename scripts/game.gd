@@ -124,6 +124,8 @@ func _ready() -> void:
 			_debug_shots.call_deferred()
 		if "--soak" in args:
 			_debug_soak.call_deferred()
+		if "--char" in args:
+			_debug_char.call_deferred()
 		return
 	hud.show_title("A new world is generated every time: rolling hills and cliffs out west, a ruined city to the east.\nRaiders hold plateau camps; feral ghouls haunt the ruins; brutes and shellbacks roam the wilds.\nFriendly settlements trade gear for scrap. Set up camps anywhere and fast travel between them.\n\nPC: WASD move · mouse aim · left click shoot · F / right click melee · Space jump · C sneak\nE use / talk / chop / climb / stairs · I inventory · H heal · B camp menu · T fast travel · V CRT filter\nGamepad: left stick move · right stick aim · RT shoot · A jump · X use · B melee · Y sneak\nTouch: left thumb move · right thumb aim and shoot · buttons on the right", start_new_world)
 
@@ -1504,6 +1506,27 @@ func _debug_shots() -> void:
 			_snap(out + "/11_night_%s.png" % b.kind)
 			break
 	print("SHOTS DONE ", ProjectSettings.globalize_path(out))
+	get_tree().quit()
+
+func _debug_char() -> void:
+	# Player sprite check: every facing, idle / walk / crouch, snapped in the live scene.
+	var out := "user://shots"
+	DirAccess.make_dir_recursive_absolute(out)
+	await get_tree().create_timer(1.0).timeout
+	for e in enemies: e.visible = false; e.aw = 0.0
+	set_process(false)
+	player.set_process(false)
+	player.set_physics_process(false)
+	for mode in ["idle", "walk", "crouch"]:
+		for k in 8:
+			player.aim = Vector2.from_angle(k * PI / 4.0)
+			player.crouch = mode == "crouch"
+			player.moving = mode == "walk"
+			player.walk_i = k % 4
+			player._visual()
+			_update_camera()
+			await get_tree().process_frame
+			await _snap(out + "/char_%s_%d.png" % [mode, k])
 	get_tree().quit()
 
 func _snap(path: String) -> void:

@@ -48,10 +48,11 @@ func sync() -> void:
 		body.position.y = -round(jz)
 	queue_redraw()
 
-func make_body(tex_name: String, frames: int, fw: int, fh: int) -> void:
+func make_body(tex_name: String, frames: int, fw: int, fh: int, rows: int = 1) -> void:
 	body = Sprite2D.new()
 	body.texture = Assets.tex(tex_name)
 	body.hframes = frames
+	body.vframes = rows
 	body.centered = false
 	body.offset = Assets.off(tex_name)   # anchor = feet of the first frame
 	add_child(body)

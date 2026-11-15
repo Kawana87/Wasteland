@@ -15,6 +15,8 @@ var crouch := false
 var moving := false
 var walk_t := 0.0
 var walk_f := 0
+var walk_i := 0                # 0..3 step of the 4-frame walk cycle (rendered sprite)
+var rendered := false          # true when using the pre-rendered 8-direction sheet
 var carry := {"scrap": 0, "cloth": 0, "wood": 0}
 var kills := 0
 var regen := 0.0
@@ -23,7 +25,12 @@ var gun: Line2D
 var arc: Line2D
 
 func _ready() -> void:
-	make_body("player", 6, 16, 24)
+	# Pre-rendered 8-direction sheet from tools/render3d/character.py; falls back to the pixel-art sheet.
+	if ResourceLoader.exists("res://assets/sprites/player_r.png"):
+		make_body("player_r", 8, 32, 48, 8)
+		rendered = true
+	else:
+		make_body("player", 6, 16, 24)
 	radius = 0.28
 	gun = Line2D.new()
 	gun.width = 1.0
@@ -62,22 +69,36 @@ func step(delta: float, move_in: Vector2, aim_in: Vector2) -> void:
 			aim = move_in.normalized()
 	if moving:
 		walk_t += delta
-		if walk_t > 0.14:
+		if walk_t > (0.2 if crouch else 0.12):
 			walk_t = 0.0
 			walk_f ^= 1
+			walk_i = (walk_i + 1) % 4
 	_visual()
 
 func _visual() -> void:
-	var back := aim.y < -0.3
-	var f := 0
-	if crouch:
-		f = 5 if back else 4
+	if rendered:
+		# row = screen direction in 45deg steps (0 right, 2 down, 4 left, 6 up); columns:
+		# 0 idle | 1-4 walk | 5 crouch idle | 6-7 crouch walk
+		var row := posmod(int(round(aim.angle() / (PI / 4.0))), 8)
+		var col := 0
+		if crouch:
+			col = (6 + walk_f) if moving else 5
+		else:
+			col = (1 + walk_i) if moving else 0
+		body.frame = row * 8 + col
+		body.flip_h = false
 	else:
-		f = (2 if back else 0) + (walk_f if moving else 0)
-	body.frame = f
-	body.flip_h = aim.x < 0
+		var back := aim.y < -0.3
+		var f := 0
+		if crouch:
+			f = 5 if back else 4
+		else:
+			f = (2 if back else 0) + (walk_f if moving else 0)
+		body.frame = f
+		body.flip_h = aim.x < 0
 	body.visible = not (inv > 0.0 and int(Time.get_ticks_msec() / 80) % 2 == 0)
-	var base := Vector2(0, -14 + (5 if crouch else 0) - round(jz))
+	var chest := (-24 + (7 if crouch else 0)) if rendered else (-14 + (5 if crouch else 0))
+	var base := Vector2(0, chest - round(jz))
 	gun.visible = climb.is_empty()
 	gun.points = PackedVector2Array([(base + aim * 3).round(), (base + aim * (2 + gun_len * 1.5)).round()])
 	if swing > 0.0:

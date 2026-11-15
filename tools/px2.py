@@ -201,8 +201,12 @@ class Cv:
 
 
 def write_anchors():
+    out = dict(ANCHORS)
+    rp = os.path.join(OUT_DIR, "..", "rendered_anchors.json")    # sprites from the Blender pipeline (tools/render3d)
+    if os.path.exists(rp):
+        out.update(json.load(open(rp)))
     with open(os.path.join(OUT_DIR, "..", "anchors.json"), "w") as f:
-        json.dump(ANCHORS, f, separators=(",", ":"), sort_keys=True)
+        json.dump(out, f, separators=(",", ":"), sort_keys=True)
 
 
 def sheet(frames, name):
