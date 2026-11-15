@@ -131,3 +131,7 @@ Danger levels: 1 safe … 5 deadly. Each location's map size is in tiles, and ev
   - Plan: [ ] layout · [ ] key buildings · [ ] NPCs & quests · [ ] loot · [ ] encounters
 - **Prometheus Research Center**: A pre-war research campus in the eastern hills; the experiments got out. *(danger 4 · Robots / scientists · 128×128 tiles · hills)*
   - Plan: [ ] layout · [ ] key buildings · [ ] NPCs & quests · [ ] loot · [ ] encounters
+## Random encounters
+
+Encounters generate a small map matching the terrain where they happen, with a few variations each:
+woods, plains, farmland, wasteland, salt flat, canyon, hills, river, ruins, and the edge of the Hollow Sun.
