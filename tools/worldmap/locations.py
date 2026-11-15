@@ -15,7 +15,7 @@ L = [
     dict(id='starlite_crossing', name='Starlite Crossing', type='landmark', pos=(0.475, 0.465), biome='ruins', faction='Ghouls', danger=2, size=96,
          hook='', trade='',
          pitch='A gutted crossroads town just east of Patchwork, with the Orbit Diner and a filling station; ghouls nest in the ruins.'),
-    dict(id='sterling_downtown', name='Port Sterling - Downtown', type='city', pos=(0.800, 0.620), biome='ruins', faction='Ghouls / the Signal cult', danger=4, size=160,
+    dict(id='sterling_downtown', name='Port Sterling - Downtown', type='city', pos=(0.712, 0.585), biome='ruins', faction='Ghouls / the Signal cult', danger=4, size=160,
          hook='', trade='',
          pitch='The bombed river city: towers, barricaded avenues, City Hall, and a radio cult holding the Atlas Building.'),
     dict(id='sterling_waterfront', name='Sterling Waterfront', type='district', pos=(0.710, 0.705), biome='ruins', faction='River traders', danger=3, size=128,

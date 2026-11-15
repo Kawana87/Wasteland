@@ -141,7 +141,7 @@ d = ImageDraw.Draw(im, "RGBA")
 sx = N / 1200
 tf = ImageFont.truetype(FONT + "DejaVuSerif-BoldItalic.ttf", int(22 * sx))
 for (t, x, y, ang) in ((LOC.NAMES["river"], 0.6, 0.665, -62), (LOC.NAMES["lake"], 0.665, 0.065, 0), (LOC.NAMES["hills"], 0.1, 0.23, 0),
-                       (LOC.NAMES["woods"], 0.44, 0.105, 0), (LOC.NAMES["city"], 0.82, 0.575, 0), (LOC.NAMES["waste"], 0.33, 0.55, 0),
+                       (LOC.NAMES["woods"], 0.44, 0.105, 0), (LOC.NAMES["city"], 0.8, 0.53, 0), (LOC.NAMES["waste"], 0.33, 0.55, 0),
                        (LOC.NAMES["marsh"], 0.6, 0.985, 0)):
     tw = int(d.textlength(t, font=tf)) + 12
     ti = Image.new("RGBA", (tw, int(34 * sx)), (0, 0, 0, 0)); td = ImageDraw.Draw(ti)

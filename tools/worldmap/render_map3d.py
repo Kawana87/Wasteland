@@ -80,29 +80,7 @@ def natural(mask, seed, px=0.012, amp=0.9, base=40):
     near = soft(mask, N * px * 3) > 0.03                  # fraying only near the outline, never fresh patches far away
     return ((m + amp * n) > 0.5) & near
 marsh = natural(LY.marsh, 80, 0.012, 1.6, 22)
-RW = {"interstate": 0.0042, "highway": 0.003, "road": 0.0018, "track": 0.0011}
-road_m = {k: np.zeros((N, N), bool) for k in RW}
-for kind, pts in LY.ROADS:
-    road_m[kind] |= line_mask(pts, RW[kind])
-roads_all = road_m["interstate"] | road_m["highway"] | road_m["road"]
-# The city is a density field, not a blob: a dense core stretched along the river, older districts and
-# suburbs around it, and ribbons of sprawl reaching out along the highways, fading out into the waste.
-ryx = np.array(LY.RIVER); ry_order = np.argsort(ryx[:, 1])
-river_x = np.interp(Y, ryx[ry_order, 1], ryx[ry_order, 0])
-east = sstep(-0.004, 0.012, X - river_x)                       # east bank only
-dfast = ndimage.distance_transform_edt(~(road_m["interstate"] | road_m["highway"])) / N
-u, v = X - 0.805, Y - 0.625
-uu, vv = u * 0.97 + v * 0.24, v * 0.97 - u * 0.24              # long axis leans with the river
-D = 1.15 * np.exp(-((uu / 0.065) ** 2 + (vv / 0.12) ** 2))
-for (x, y, r, a) in ((0.89, 0.42, 0.06, 0.55), (0.845, 0.88, 0.055, 0.5), (0.72, 0.76, 0.035, 0.45), (0.93, 0.62, 0.04, 0.45),
-                     (0.76, 0.47, 0.035, 0.4), (0.95, 0.78, 0.03, 0.35)):
-    D += a * np.exp(-(np.hypot(X - x, (Y - y) * 1.2) / r) ** 2)
-D += 0.4 * np.exp(-dfast / 0.007) * np.exp(-(np.hypot(X - 0.82, Y - 0.62) / 0.22) ** 2)
-D *= 0.6 + 0.8 * fbm(81, 10, 5)
-D *= east * (1 - soft(water, 2))
-core = D > 0.85
-city = D > 0.42
-sub = (D > 0.17) & ~city
+CITYZONE = soft(LY.city | LY.suburbs, N * 0.02)                # rough city footprint, only to keep erosion and washes out
 deadwood = natural(LY.deadwood, 84, 0.015, 1.0, 30) & ~water
 _e = np.exp(-(np.hypot((X - 0.115) / 1.6, Y - 0.6) / 0.03) ** 2) + 0.6 * np.exp(-(np.hypot(X - 0.15, Y - 0.625) / 0.02) ** 2)
 _f = fbm(85, 14, 5); _f = (_f - _f.mean()) / _f.std()
@@ -141,7 +119,7 @@ for k in range(16):
             for t in range(rr.randint(6, 18)):
                 hb += rr.uniform(-0.4, 0.4); bx -= math.cos(hb) * 0.004; by -= math.sin(hb) * 0.004; tp.append((bx, by))
             wash |= line_mask(tp, 0.0011)
-wash &= ~(D > 0.12)
+wash &= ~(CITYZONE > 0.2)
 dwash = ndimage.distance_transform_edt(~wash) / N
 H -= 0.014 * sstep(0.006, 0.0, dwash)
 # the river valley
@@ -210,8 +188,7 @@ import erosion
 E = min(N, 1024)
 sc_ = ZS * E / W
 hs0 = ndimage.zoom(H, E / N, order=1).astype(np.float64) * sc_
-emask = np.clip(0.35 + 0.65 * hm + 1.0 * ndimage.zoom(can_area, 1, order=0) * 0 , 0, 1)
-emask = np.clip(0.35 + 0.65 * hm + can_area + pk, 0, 1) * (1 - sstep(0.08, 0.2, D)) * (1 - soft(water, 3))
+emask = np.clip(0.35 + 0.65 * hm + can_area + pk, 0, 1) * (1 - CITYZONE) * (1 - soft(water, 3))
 em = ndimage.zoom(emask, E / N, order=1).astype(np.float64)
 hs = erosion.erode(hs0.copy(), em, int(700000 * (E / 1024) ** 2), 7)
 delta = ndimage.zoom((hs - hs0) / sc_, N / E, order=1)[:N, :N].astype(np.float32)
@@ -219,6 +196,114 @@ edge_fade = sstep(0.0, 0.02, np.minimum(np.minimum(X, 1 - X), np.minimum(Y, 1 - 
 delta *= edge_fade
 H += delta
 erode_d = delta
+
+# ======================================================================= roads (least-cost paths over the terrain)
+# After Galin et al., "Procedural Generation of Roads" (2010): each road is the cheapest path between its towns,
+# where cost rises with slope and with water, so roads bend around hills, follow valleys and cross rivers short
+# and square. Big roads are laid first; later roads get a discount on existing ones, so they merge into shared
+# trunks and junctions instead of running side by side.
+log("roads: least-cost paths")
+from skimage.graph import MCP_Geometric
+RN = 512
+Hr = ndimage.zoom(H, RN / N, order=1)
+gyr, gxr = np.gradient(Hr * ZS * RN / W)
+slope_r = np.hypot(gxr, gyr)
+water_r = ndimage.zoom(water.astype(np.float32), RN / N, order=1) > 0.4
+noise_r = ndimage.zoom(fbm(110, 10, 4), RN / N, order=1)
+CBD = (0.712, 0.585)                                    # downtown: the east bank where the old bridge lands
+P["sterling_downtown"] = CBD
+def wp(p): return P[p] if isinstance(p, str) else p
+ROUTES = [
+    ("interstate", [(0.0, 0.48), "hangmans_gap", "bluebird_lodge", "bunker_echo", "patchwork", "starlite_crossing", "founders_bridge", CBD]),
+    ("interstate", [CBD, "victory_stadium", "atomic_plaza", (1.0, 0.52)]),
+    ("highway", [(0.8, 0.0), "clearwater", "sunbeam_commune", "maple_grove", CBD]),
+    ("highway", [(0.0, 0.3), "devils_throat", "granite_bowl", "silver_comet_wreck", "gus_salvage", "big_wheel_stop", "ferrymans_landing", CBD]),
+    ("highway", [CBD, "sterling_waterfront", "bright_hope_plant", "blackrock_refinery", "wellspring", "rimtown", "copperhead", "bonewhite_flats", (0.0, 0.62)]),
+    ("highway", [CBD, "mercy_general", "union_railyard", "sterling_airfield", (0.97, 1.0)]),
+    ("highway", [(0.44, 0.0), "lookout_station_3", "owls_perch", "goldenrod", "radio_kzap", "big_wheel_stop"]),
+    ("highway", ["patchwork", "rattlebone_camp", "wellspring", "buzzard_mesa", (0.55, 1.0)]),
+    ("highway", ["maple_grove", "atomic_plaza", (0.95, 0.72), "union_railyard"]),
+    ("road", ["prometheus_research", "maple_grove"]),
+    ("road", ["goldenrod", "our_lady_mission", "granite_bowl"]),
+    ("road", ["goldenrod", "camp_whispering_pines", "ridgeback_dam", "clearwater"]),
+    ("road", ["splinter_creek", "hushwood", "starwatch"]),
+    ("road", ["splinter_creek", "owls_perch"]),
+    ("road", ["fort_steadfast", "double_bar_ranch", "bluebird_lodge"]),
+    ("road", ["fort_steadfast", "launch_site_zulu"]),
+    ("road", ["copperhead", "redwall", "deep_seven"]),
+    ("road", ["iron_gate_pen", "radio_kzap"]),
+    ("road", ["bright_hope_plant", "greenmarsh", "buzzard_mesa"]),
+    ("road", ["greenmarsh", (0.64, 1.0)]),
+    ("track", ["patchwork", "moonbeam_drivein"]),
+    ("track", ["bunker_echo", "silver_comet_wreck"]),
+    ("track", ["hangmans_gap", "bonewhite_flats"]),
+    ("track", ["double_bar_ranch", "rimtown"]),
+    ("track", ["rimtown", "hollow_sun"]),
+]
+K = {"interstate": (14, 60, 0.15, 11), "highway": (30, 70, 0.25, 9), "road": (60, 90, 0.35, 7), "track": (120, 160, 0.5, 5)}
+existing = np.zeros((RN, RN), np.float32)
+def chaikin(pts, it):
+    for _ in range(it):
+        out = [pts[0]]
+        for i in range(len(pts) - 1):
+            (x0, y0), (x1, y1) = pts[i], pts[i + 1]
+            out += [(0.75 * x0 + 0.25 * x1, 0.75 * y0 + 0.25 * y1), (0.25 * x0 + 0.75 * x1, 0.25 * y0 + 0.75 * y1)]
+        out.append(pts[-1]); pts = out
+    return pts
+def cell(p): return (min(RN - 1, max(0, int(p[1] * RN))), min(RN - 1, max(0, int(p[0] * RN))))
+ROADS = []
+for kind, wps in ROUTES:
+    ks, kw, kn, win = K[kind]
+    cost = (1 + ks * slope_r ** 2 + kn * noise_r + kw * water_r) * np.where(existing > 0, 0.5, 1.0)
+    pts = []
+    for a_, b_ in zip(wps[:-1], wps[1:]):
+        m = MCP_Geometric(cost, fully_connected=True)
+        m.find_costs([cell(wp(a_))], [cell(wp(b_))])
+        tr = m.traceback(cell(wp(b_)))
+        seg = [((c + 0.5) / RN, (r + 0.5) / RN) for r, c in tr]
+        pts += seg if not pts else seg[1:]
+    arr = np.array(pts)
+    if len(arr) > win:                                      # take the pixel staircase out, then round the bends
+        k_ = np.ones(win) / win
+        sm = np.stack([np.convolve(np.pad(arr[:, q], win // 2, mode="edge"), k_, mode="valid") for q in (0, 1)], 1)
+        sm[0], sm[-1] = arr[0], arr[-1]
+        arr = sm
+    pts = chaikin([tuple(p) for p in arr[::2]] + [tuple(arr[-1])], 2)
+    ROADS.append((kind, pts))
+    im_ = Image.new("L", (RN, RN), 0); ImageDraw.Draw(im_).line([(x * RN, y * RN) for x, y in pts], fill=255, width=2)
+    existing = np.maximum(existing, np.array(im_) / 255.0)
+METRO = chaikin([tuple(p) for p in (lambda: [((c + .5) / RN, (r + .5) / RN) for a_, b_ in zip(["starlite_crossing", "founders_bridge", CBD, "mercy_general"], ["founders_bridge", CBD, "mercy_general", "union_railyard"])
+                 for r, c in (lambda m: (m.find_costs([cell(wp(a_))], [cell(wp(b_))]), m.traceback(cell(wp(b_))))[1])(MCP_Geometric(1 + 40 * slope_r ** 2 + 60 * water_r, fully_connected=True))])()[::3]], 3)
+RW = {"interstate": 0.0042, "highway": 0.003, "road": 0.0018, "track": 0.0011}
+road_m = {k: np.zeros((N, N), bool) for k in RW}
+for kind, pts in ROADS:
+    road_m[kind] |= line_mask(pts, RW[kind])
+roads_all = road_m["interstate"] | road_m["highway"] | road_m["road"]
+
+# ======================================================================= the city (accessibility-based density)
+# Urban density falls off as a negative exponential of distance from the centre (Clark 1951), but the distance
+# that matters is travel effort, not a straight line: along highways, rail and the riverside it is cheap, across
+# hills and water it is dear. So the city is thickest on the riverbank where the bridge lands, stretches along
+# the river and shoots out ribbons of development along each road (ribbon development), with smaller centres
+# where roads meet, and thins out into scattered lots and then waste.
+log("city density")
+tc = 1 + 10 * slope_r + 60 * water_r
+tc = np.where(existing > 0, 0.22, tc)                    # roads are fast (bridges included)
+dwr = ndimage.zoom(dw, RN / N, order=1)
+tc = np.where((dwr < 0.012) & ~water_r & (existing == 0), 0.45, tc)    # river road, wharves, riverside industry
+def cdist(p):
+    m = MCP_Geometric(tc, fully_connected=True); c_, _ = m.find_costs([cell(p)]); return c_ / RN
+Dr = 1.3 * np.exp(-cdist(CBD) / 0.055)
+for p_, a_, r_ in (("maple_grove", 0.5, 0.025), ("atomic_plaza", 0.4, 0.018), ((0.845, 0.88), 0.45, 0.022), ("union_railyard", 0.3, 0.015),
+                   ("sterling_waterfront", 0.35, 0.015)):
+    Dr = np.maximum(Dr, a_ * np.exp(-cdist(wp(p_)) / r_))
+D = ndimage.zoom(Dr, N / RN, order=1)[:N, :N]
+_dn = fbm(81, 12, 5); D *= 0.65 + 0.7 * (_dn - _dn.min()) / (_dn.max() - _dn.min())
+D *= (1 - soft(water, 2)) * (1 - sstep(0.5, 1.0, slope_full := np.hypot(*np.gradient(H * ZS * N / W))))
+core = D > 0.8
+city = D > 0.4
+sub = (D > 0.16) & ~city
+
 # flats: salt pan, farms, city, marsh are flattened
 def flatten(mask, level=None, px=6):
     global H
@@ -241,7 +326,6 @@ H[pools] = WL - 0.01
 water_all = water | pools
 
 # roads: flatten their beds
-log("roads")
 Hs = ndimage.gaussian_filter(H, N * 0.003)
 rm = soft(roads_all & ~water, 2)
 H = H * (1 - rm) + Hs * rm
@@ -359,7 +443,7 @@ for kind in ("track", "road", "highway", "interstate"):
 cracks = (roads_all & (fbm(78, 200, 2) > 0.66))
 lay(cracks, col("#6a6052"), 0.6)
 # metro line (rails)
-rail = line_mask(LY.METRO, 0.0012) & ~water
+rail = line_mask(METRO, 0.0012) & ~water
 lay(rail, col("#3a3430"))
 glow = ndimage.gaussian_filter(sstep(0.3, 0.0, np.hypot(X - cx, Y - cy) / LY.crater_r), N * 0.003) * 0.04
 alb = np.clip(alb, 0, 1)
@@ -415,14 +499,14 @@ rot = math.radians(8); cs, sn = math.cos(rot), math.sin(rot)
 blk = 0.85                                   # block pitch (Blender units)
 for gi in range(-40, 41):
     for gj in range(-40, 41):
-        bxw, byw = 32 + (gi * cs - gj * sn) * blk, -12 + (gi * sn + gj * cs) * blk      # around the city centre
+        bxw, byw = 26 + (gi * cs - gj * sn) * blk, -12 + (gi * sn + gj * cs) * blk      # around the city centre
         x, y = bxw / W + 0.5, 0.5 - byw / W
         if not (0 < x < 1 and 0 < y < 1): continue
         i, j = int(y * N), int(x * N)
         dv = D[i, j]
         if dv < 0.3 or roads_all[i, j] or rr.random() > sstep(0.3, 0.55, dv): continue
         incore = core[i, j]
-        dist = math.hypot(x - 0.8, y - 0.62)
+        dist = math.hypot(x - CBD[0], y - CBD[1])
         for q in range(rr.choice((1, 2, 2, 4))):
             ox, oy = rr.uniform(-0.2, 0.2), rr.uniform(-0.2, 0.2)
             w, d = rr.uniform(0.22, 0.6), rr.uniform(0.22, 0.6)
@@ -605,7 +689,7 @@ for k in range(25):
 # bridges: decks over the water wherever a road crosses it (Founders Bridge keeps its fallen span)
 log("bridges")
 fb = P["founders_bridge"]
-for kind, pts in LY.ROADS:
+for kind, pts in ROADS:
     if kind == "track": continue
     run = []
     for (x, y) in pts + [(9, 9)]:
@@ -641,7 +725,7 @@ hb = ndimage.gaussian_filter(H, 0.6)
 Image.fromarray(np.clip(glow * 255, 0, 255).astype(np.uint8)).save(TMP + "/glow.png")
 Image.fromarray(np.clip(water_all * 255, 0, 255).astype(np.uint8)).save(TMP + "/water.png")
 np.save(TMP + "/height.npy", H.astype(np.float32))
-json.dump([dict(kind=k, path=[[round(x, 4), round(y, 4)] for x, y in pts[::3] + [pts[-1]]]) for k, pts in LY.ROADS], open(TMP + "/roads.json", "w"))
+json.dump([dict(kind=k, path=[[round(x, 4), round(y, 4)] for x, y in pts[::3] + [pts[-1]]]) for k, pts in ROADS], open(TMP + "/roads.json", "w"))
 geo_v = np.concatenate(GV); geo_c = np.concatenate(GC)
 log("buildings: %d verts, colour range %.3f..%.3f nan %d, z %.2f..%.2f" % (len(geo_v), geo_c.min(), geo_c.max(), np.isnan(geo_c).sum(), geo_v[:,2].min(), geo_v[:,2].max()))
 faces_flat = np.concatenate([np.asarray(a).ravel() for a in GF]); faces_len = np.concatenate([np.full(len(a), np.asarray(a).shape[1]) for a in GF])
