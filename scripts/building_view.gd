@@ -222,6 +222,30 @@ func set_faded(f: bool) -> void:
 	_faded = f
 	modulate.a = 0.3 if f else 1.0
 
+## True when this building actually covers the player on screen: some part of it stands in front of
+## the player (greater depth) on the player's screen column and is tall enough to reach the sampled
+## points (feet / chest / head, in screen px above the feet). Standing beside or in front never fades.
+func occludes(pw: Vector2, offs: Array) -> bool:
+	var pdepth := pw.x + pw.y
+	for p in b.parts:
+		var r: Rect2i = p.r
+		var top: float = p.fl * World.FLOOR_H + (maxi(r.size.x, r.size.y) * 2.0 + 8.0 if b.roof == "pitched" else 6.0)
+		for dc in [-0.3, 0.0, 0.3]:          # the player's width on screen
+			var c: float = pw.x - pw.y + dc
+			var xlo: float = maxf(r.position.x, r.position.y + c)
+			var xhi: float = minf(r.end.x, r.end.y + c)
+			if xlo >= xhi:
+				continue
+			var dhi: float = 2.0 * xhi - c
+			if dhi <= pdepth + 0.05:
+				continue                        # this part is behind or beside the player
+			var d: float = maxf(2.0 * xlo - c, pdepth)
+			for off in offs:
+				var z: float = ((d - pdepth) * 12.0 + float(off)) / Iso.S
+				if z <= top:
+					return true
+	return false
+
 ## Screen-space box of the whole building including roof (for see-through checks).
 func screen_rect() -> Rect2:
 	var top := b.h0 + b.floors * World.FLOOR_H + (maxi(b.w, b.h) * 2.0 + 8.0 if b.roof == "pitched" else 14.0)
@@ -249,8 +273,15 @@ func update_view(pb: int, pfl: int) -> void:
 			wn.low.visible = false
 		else:
 			var front: bool = s.side == "s" or s.side == "e" or s.side == "i"
-			wn.full.visible = not front or s.mode == "stub"
-			wn.low.visible = front and s.mode != "stub"
+			if front and (s.is_door or s.mode.begins_with("door")):
+				# doorways stay readable from inside: the door shows at full height, see-through
+				wn.full.visible = true
+				wn.low.visible = false
+			else:
+				wn.full.visible = not front or s.mode == "stub"
+				wn.low.visible = front and s.mode != "stub"
+		var doorish: bool = s.is_door or s.mode.begins_with("door")
+		wn.full.modulate.a = 0.55 if (inside and s.fl == pfl and doorish and (s.side == "s" or s.side == "e" or s.side == "i")) else 1.0
 		for x in wn.extras:
 			x.visible = wn.full.visible
 	for r in roofs:

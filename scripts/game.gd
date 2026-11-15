@@ -126,6 +126,8 @@ func _ready() -> void:
 			_debug_soak.call_deferred()
 		if "--char" in args:
 			_debug_char.call_deferred()
+		if "--fade" in args:
+			_debug_fade.call_deferred()
 		return
 	hud.show_title("A new world is generated every time: rolling hills and cliffs out west, a ruined city to the east.\nRaiders hold plateau camps; feral ghouls haunt the ruins; brutes and shellbacks roam the wilds.\nFriendly settlements trade gear for scrap. Set up camps anywhere and fast travel between them.\n\nPC: WASD move · mouse aim · left click shoot · F / right click melee · Space jump · C sneak\nE use / talk / chop / climb / stairs · I inventory · H heal · B camp menu · T fast travel · V CRT filter\nGamepad: left stick move · right stick aim · RT shoot · A jump · X use · B melee · Y sneak\nTouch: left thumb move · right thumb aim and shoot · buttons on the right", start_new_world)
 
@@ -1349,7 +1351,8 @@ func _update_visibility() -> void:
 	var pscr := p.position + Vector2(0, -18)
 	var pdepth := p.wpos.x + p.wpos.y
 	for v in views:
-		var fade: bool = pb == 0 and v.b.id != pb and pdepth < v.front_depth - 0.5 and v.screen_rect().has_point(pscr)
+		# fade only when the building really hides you (you're behind it); your own building uses the cutaway
+		var fade: bool = v.b.id != pb and pdepth < v.front_depth and v.screen_rect().has_point(pscr) and v.occludes(p.wpos, [3.0, 18.0, 32.0])
 		v.set_faded(fade)
 	for k in faded_trees:
 		if is_instance_valid(faded_trees[k]): (faded_trees[k] as Sprite2D).modulate.a = 1.0
@@ -1506,6 +1509,29 @@ func _debug_shots() -> void:
 			_snap(out + "/11_night_%s.png" % b.kind)
 			break
 	print("SHOTS DONE ", ProjectSettings.globalize_path(out))
+	get_tree().quit()
+
+func _debug_fade() -> void:
+	# See-through check around one house: front, beside, behind, inside.
+	var out := "user://shots"
+	DirAccess.make_dir_recursive_absolute(out)
+	await get_tree().create_timer(1.0).timeout
+	for e in enemies: e.visible = false; e.aw = 0.0
+	var bld: World.Bld = null
+	for b in world.buildings:
+		if b.floors == 1 and b.w >= 4 and b.h >= 4 and not b.raider and b.door_seg != null:
+			bld = b; break
+	if bld == null: bld = world.buildings[0]
+	var spots := {"front": Vector2(bld.x0 + bld.w + 1.2, bld.y0 + bld.h + 1.2),
+		"beside": Vector2(bld.x0 + bld.w + 1.0, bld.y0 - 0.8),
+		"behind": Vector2(bld.x0 + bld.w * 0.5, bld.y0 - 0.9),
+		"behind_corner": Vector2(bld.x0 - 0.8, bld.y0 + bld.h * 0.5),
+		"inside": Vector2(bld.x0 + bld.w * 0.5, bld.y0 + bld.h * 0.5)}
+	for k in spots:
+		player.fl = 0
+		player.wpos = spots[k]
+		await get_tree().create_timer(0.5).timeout
+		await _snap(out + "/fade_%s.png" % k)
 	get_tree().quit()
 
 func _debug_char() -> void:
