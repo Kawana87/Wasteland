@@ -225,26 +225,49 @@ func set_faded(f: bool) -> void:
 ## True when this building actually covers the player on screen: some part of it stands in front of
 ## the player (greater depth) on the player's screen column and is tall enough to reach the sampled
 ## points (feet / chest / head, in screen px above the feet). Standing beside or in front never fades.
-func occludes(pw: Vector2, offs: Array) -> bool:
-	var pdepth := pw.x + pw.y
+## Height (game px, absolute) of this building's outer surface at world point (x, y), or -1 if outside.
+func surface_z(x: float, y: float) -> float:
+	var best := -1.0
 	for p in b.parts:
 		var r: Rect2i = p.r
-		var top: float = p.fl * World.FLOOR_H + (maxi(r.size.x, r.size.y) * 2.0 + 8.0 if b.roof == "pitched" else 6.0)
-		for dc in [-0.3, 0.0, 0.3]:          # the player's width on screen
-			var c: float = pw.x - pw.y + dc
-			var xlo: float = maxf(r.position.x, r.position.y + c)
-			var xhi: float = minf(r.end.x, r.end.y + c)
-			if xlo >= xhi:
-				continue
-			var dhi: float = 2.0 * xhi - c
-			if dhi <= pdepth + 0.05:
-				continue                        # this part is behind or beside the player
-			var d: float = maxf(2.0 * xlo - c, pdepth)
-			for off in offs:
-				var z: float = ((d - pdepth) * 12.0 + float(off)) / Iso.S
-				if z <= top:
-					return true
-	return false
+		if x < r.position.x or x > r.end.x or y < r.position.y or y > r.end.y:
+			continue
+		var top: float = b.h0 + p.fl * World.FLOOR_H
+		if b.roof == "pitched" and not b.ruined:
+			var rise := minf(r.size.x, r.size.y) * 4.0 + 4.0
+			var t := 0.0
+			if r.size.x >= r.size.y:
+				t = 1.0 - absf(y - (r.position.y + r.size.y * 0.5)) / (r.size.y * 0.5)
+			else:
+				t = 1.0 - absf(x - (r.position.x + r.size.x * 0.5)) / (r.size.x * 0.5)
+			top += rise * clampf(t, 0.0, 1.0)
+		elif b.roof == "saw":
+			top += 12.0 * fposmod(x - r.position.x, 2.0) * 0.5
+		else:
+			top += 2.0
+		best = maxf(best, top)
+	return best
+
+## True when the building hides the player: walking the camera's line of sight through each sample point
+## (screen px above the feet) on the player's screen column, some part of the building rises high enough
+## to cover it. Every sample must be covered.
+func occludes(pw: Vector2, offs: Array, pz: float = 0.0) -> bool:
+	var pdepth := pw.x + pw.y
+	var c: float = pw.x - pw.y
+	for off in offs:
+		var hit := false
+		var dd := 0.05
+		while dd < 14.0 and not hit:
+			var d := pdepth + dd
+			var x := (d + c) * 0.5
+			var y := (d - c) * 0.5
+			var sz := surface_z(x, y)
+			if sz >= 0.0 and sz >= (dd * 12.0 + float(off)) / Iso.S + pz:
+				hit = true
+			dd += 0.1
+		if not hit:
+			return false
+	return true
 
 ## Screen-space box of the whole building including roof (for see-through checks).
 func screen_rect() -> Rect2:

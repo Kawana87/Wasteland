@@ -468,13 +468,13 @@ func generate(sd: int) -> void:
 	for k in 2:
 		for t in 60:
 			var p := Vector2(rf(6, N - 6), rf(6, N - 6))
-			if _free_spot(p) and T[idx(int(p.x), int(p.y))] == GRASS and p.distance_to(start) > 10:
+			if _free_spot(p) and T[idx(int(p.x), int(p.y))] == GRASS and p.distance_to(start) > 10 and _clear_of_buildings(p, 2.0):
 				add_decor("watertower", p, true, Vector2(0.55, 0.55))
 				break
 	for k in 4:
 		for t in 60:
 			var p := road_point() + Vector2(rf(-2.5, 2.5), rf(-2.5, 2.5))
-			if _free_spot(p) and T[idx(int(p.x), int(p.y))] == GRASS and not near_road(int(p.x), int(p.y), 0):
+			if _free_spot(p) and T[idx(int(p.x), int(p.y))] == GRASS and not near_road(int(p.x), int(p.y), 0) and _clear_of_buildings(p, 1.6):
 				add_decor("billboard_" + ["x", "y"][ri(0, 1)], p, true, Vector2(0.2, 0.2))
 				break
 	# trees
@@ -482,7 +482,7 @@ func generate(sd: int) -> void:
 		for x in N:
 			var i := idx(x, y)
 			if T[i] != GRASS or CL[i] == 1: continue
-			if rng.randf() < (0.03 if in_city(x, y) else 0.13):
+			if rng.randf() < (0.03 if in_city(x, y) else 0.13) and _clear_of_buildings(Vector2(x + 0.5, y + 0.5), 0.75):
 				T[i] = TREE
 	_cars()
 	# keep doors clear of trees and wrecks
@@ -533,6 +533,91 @@ func generate(sd: int) -> void:
 			if can_stand(p, 0.28, 0):
 				survivors.append({"pos": p, "name": sn[k], "bid": b.id})
 				break
+	_tidy()
+	_fix_spawns()
+
+## Final real-world-logic pass over everything placed: nothing solid inside walls or in front of doors,
+## no trees growing through props, wrecks that collide with props are scrapped, door exits are clear.
+func _tidy() -> void:
+	var doors := []
+	for b in buildings:
+		doors.append(Vector2(b.out.x + 0.5, b.out.y + 0.5))
+	var keep := []
+	for d in decor:
+		if (d.name.begins_with("fence") or d.name.begins_with("picket")) and d.bid == 0 and building_at(d.pos.x, d.pos.y) != 0:
+			continue
+		if d.bid != 0 or d.flat or not d.solid or d.name in ["pillar", "fuelpump", "mailbox"]:
+			keep.append(d); continue
+		var bad := func(q: Vector2) -> bool:
+			if building_at(q.x, q.y) != 0 or not _clear_of_buildings(q, d.half.x + 0.05): return true
+			for o in keep:
+				if o.solid and o.bid == 0 and absf(o.pos.x - q.x) < (o.half.x + d.half.x) * 0.8 and absf(o.pos.y - q.y) < (o.half.y + d.half.y) * 0.8: return true
+			for dp in doors:
+				if dp.distance_to(q) < 1.05: return true
+			return false
+		if bad.call(d.pos):
+			if d.name.begins_with("fence") or d.name.begins_with("picket"):
+				continue                      # fence runs simply stop at the wall
+			var moved := false
+			for ring in range(1, 9):
+				for k in 12:
+					var q: Vector2 = d.pos + Vector2.from_angle(k * TAU / 12.0) * ring * 0.25
+					if in_bounds(int(q.x), int(q.y)) and not bad.call(q):
+						d.pos = q; moved = true; break
+				if moved: break
+			if not moved:
+				continue                      # nowhere sensible: drop it
+		keep.append(d)
+	decor = keep
+	decor_grid.clear()
+	for d in decor:
+		if d.solid:
+			var k := int(floor(d.pos.y)) * N + int(floor(d.pos.x))
+			if not decor_grid.has(k): decor_grid[k] = []
+			decor_grid[k].append(d)
+	# trees under solid props, wrecks hitting props or doors
+	for d in decor:
+		if not d.solid or d.bid != 0: continue
+		for yy in range(int(d.pos.y - d.half.y - 0.4), int(d.pos.y + d.half.y + 0.4) + 1):
+			for xx in range(int(d.pos.x - d.half.x - 0.4), int(d.pos.x + d.half.x + 0.4) + 1):
+				if in_bounds(xx, yy) and T[idx(xx, yy)] == TREE: T[idx(xx, yy)] = GRASS
+	for k in range(cars.size() - 1, -1, -1):
+		var c: Car = cars[k]
+		var hit := decor_hit(c.pos, 0.9)
+		for dp in doors:
+			if dp.distance_to(c.pos) < 1.8: hit = true
+		if hit:
+			cars.remove_at(k)
+			for q in range(crates.size() - 1, -1, -1):
+				if crates[q].kind == "car" and crates[q].pos.distance_to(c.pos) < 2.2:
+					crates.remove_at(q)
+	# loot left outdoors that ended up inside a wall
+	for cr in crates:
+		if cr.bid == 0 and cr.kind != "car" and building_at(cr.pos.x, cr.pos.y) != 0:
+			for ring in range(1, 10):
+				var q: Vector2 = cr.pos + Vector2.from_angle(ring * 2.4) * ring * 0.3
+				if building_at(q.x, q.y) == 0 and can_stand(q, 0.2, 0):
+					cr.pos = q; break
+	# door exits: the tile outside every door must be walkable
+	for b in buildings:
+		var o := Vector2i(b.out)
+		if in_bounds(o.x, o.y) and T[idx(o.x, o.y)] == TREE: T[idx(o.x, o.y)] = GRASS
+
+## Move any spawn that landed inside a wall, furniture, tree or wreck to the nearest spot it can stand on.
+func _fix_spawns() -> void:
+	for sp in spawns:
+		var fl: int = sp.get("fl", 0)
+		var p: Vector2 = sp.pos
+		if can_stand(p, 0.22, fl):
+			continue
+		var found := false
+		for ring in range(1, 14):
+			var r := ring * 0.25
+			for k in 12:
+				var q := p + Vector2.from_angle(k * TAU / 12.0) * r
+				if in_bounds(int(q.x), int(q.y)) and can_stand(q, 0.22, fl) and building_at(q.x, q.y) == building_at(p.x, p.y):
+					sp.pos = q; found = true; break
+			if found: break
 
 # ------------------------------------------------------------------ roads
 static func _catmull(p0: Vector2, p1: Vector2, p2: Vector2, p3: Vector2, t: float) -> Vector2:
@@ -633,7 +718,16 @@ func _cars() -> void:
 			var clash := false
 			for o in cars:
 				if o.pos.distance_to(c.pos) < 3.0: clash = true
-			if clash or building_at(c.pos.x, c.pos.y) > 0: continue
+			if clash: continue
+			# whole body footprint (and a little margin) must be clear of buildings and trees
+			var fw := Vector2.from_angle(c.ang)
+			var bad := false
+			for u in [-1.4, -0.7, 0.0, 0.7, 1.4]:
+				for v in [-0.5, 0.5]:
+					var q: Vector2 = c.pos + fw * u + fw.orthogonal() * v
+					if not in_bounds(int(q.x), int(q.y)) or building_at(q.x, q.y) > 0 or T[idx(int(q.x), int(q.y))] == TREE:
+						bad = true
+			if bad: continue
 			cars.append(c)
 			var cr := Crate.new()
 			var fwd := Vector2.from_angle(c.ang)
@@ -649,7 +743,7 @@ func _cars() -> void:
 		while i < pts.size() - 1:
 			var dir := (pts[mini(i + 1, pts.size() - 1)] - pts[maxi(i - 1, 0)]).normalized()
 			var p := pts[i] + dir.orthogonal() * 2.3
-			if in_bounds(int(p.x), int(p.y)) and T[idx(int(p.x), int(p.y))] in [GRASS, SIDE] and rng.randf() < 0.9:
+			if in_bounds(int(p.x), int(p.y)) and T[idx(int(p.x), int(p.y))] in [GRASS, SIDE] and rng.randf() < 0.9 and _clear_of_buildings(p, 0.8) and not tree_hit(p, 0.3) and not car_hit(p, 0.4):
 				line.append(p)
 			elif line.size() > 1:
 				pole_lines.append(line)
@@ -680,13 +774,26 @@ func _lamps() -> void:
 			var dir := (pts[i + 1] - pts[i - 1]).normalized()
 			var q: Vector2 = p + dir.orthogonal() * side * (pth.w + 0.75)
 			side = -side
-			if _free_spot(q) and T[idx(int(q.x), int(q.y))] != ROAD:
+			if _free_spot(q) and T[idx(int(q.x), int(q.y))] != ROAD and _clear_of_buildings(q, 0.7):
 				add_decor("lamp", q, true, Vector2(0.08, 0.08))
+
+## No building within r tiles of p (tall props must not stand against or inside walls).
+func _clear_of_buildings(p: Vector2, r: float) -> bool:
+	for k in 8:
+		var q := p + Vector2.from_angle(k * PI / 4.0) * r
+		if building_at(q.x, q.y) != 0:
+			return false
+	return building_at(p.x, p.y) == 0
 
 func _free_spot(p: Vector2) -> bool:
 	if not in_bounds(int(p.x), int(p.y)): return false
 	var t := T[idx(int(p.x), int(p.y))]
-	return (t == GRASS or t == SIDE or t == ROAD or t == DIRT_ROAD) and not car_hit(p, 0.3) and not tree_hit(p, 0.3) and building_at(p.x, p.y) == 0
+	if (t == GRASS or t == SIDE or t == ROAD or t == DIRT_ROAD) and not car_hit(p, 0.3) and not tree_hit(p, 0.3) and building_at(p.x, p.y) == 0 and not decor_hit(p, 0.15):
+		for b in buildings:
+			if Vector2(b.out.x + 0.5, b.out.y + 0.5).distance_squared_to(p) < 1.2:
+				return false
+		return true
+	return false
 
 func _debris() -> void:
 	for pth in paths:

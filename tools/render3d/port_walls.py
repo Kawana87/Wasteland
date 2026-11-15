@@ -238,12 +238,19 @@ def build_wall(axis, pi, mode, mats, hh=None, rng=None):
     elif mode == "garage":
         opening = (0.06, 0.94, 0.0, gz(21))
     if mode == "stub":
-        h = 10.0
-        for k in range(24):
-            h = max(3, min(20, h + rng.randint(-3, 3)))
-            u0, u1 = k / 24 - (E if k == 0 else 0), (k + 1) / 24 + (E if k == 23 else 0)
-            W.box(u0, u1, -T, T, 0, gz(h), wm)
-            W.box(u0, u1, -T * 1.05, T * 1.05, gz(h) - gz(1.2), gz(h), mats["char"])
+        # broken-off wall: a few chunky steps, chipped corners, all in the wall's own material
+        n = 7
+        hts = []
+        h = rng.uniform(8, 14)
+        for k in range(n):
+            h = max(4, min(19, h + rng.uniform(-5, 5)))
+            hts.append(h)
+        for k in range(n):
+            u0, u1 = k / n - (E if k == 0 else 0), (k + 1) / n + (E if k == n - 1 else 0)
+            W.box(u0, u1, -T, T, 0, gz(hts[k]), wm)
+            if rng.random() < 0.6:     # a chipped block sitting on the step
+                cu = rng.uniform(k / n, (k + 1) / n - 0.06)
+                W.box(cu, cu + 0.06, -T * 0.9, T * 0.9, gz(hts[k]), gz(hts[k] + rng.uniform(1.5, 3)), wm)
         return W.done()
     if opening is None:
         W.box(-E, 1 + E, -T, T, 0, hh, wm)
@@ -340,7 +347,7 @@ def main(pals):
             mats = mats_for(pi, axis)
             ax = 2 if axis == "x" else 26
             shade = 1.08 if axis == "x" else 1.0
-            for mode in MODES + ("low", "stub"):
+            for mode in (os.environ["ONLY"].split(",") if os.environ.get("ONLY") else MODES + ("low", "stub")):
                 if mode == "low":
                     ob = build_wall(axis, pi, "plain", mats, hh=gz(5))
                     name = "low_%s%d" % (axis, pi)

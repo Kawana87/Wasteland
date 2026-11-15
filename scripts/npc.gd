@@ -71,7 +71,11 @@ func step(delta: float, p: Player) -> void:
 		sp = 0.0            # stop and look at you
 	if sp > 0.0:
 		var dir := (target - wpos).normalized()
+		var before := wpos
 		if not move(dir * sp * delta):
+			target = wpos
+		if type == "cattle" and building() != 0:
+			wpos = before          # livestock stays outdoors
 			target = wpos
 		body.flip_h = (dir.x - dir.y) < 0
 		face_dir = world_to_screen_dir(dir)
