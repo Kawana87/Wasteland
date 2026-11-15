@@ -12,6 +12,7 @@ import kit, props as P
 
 WALL_HALF = kit.WALL_T * 0.5
 NATURE = {"tree", "joshua_tree", "cactus", "shrub", "deadbush", "rock", "grass_tuft", "tumbleweed_", "pebbles_"}
+GROUND_ONLY = {"crater"}       # ground decals: may lap onto ruins, only get draped onto the terrain
 CANOPY = {"tree": 0.45, "joshua_tree": 0.45, "cactus": 0.2, "shrub": 0.15}      # extra clearance from walls
 
 
@@ -101,6 +102,8 @@ def run(scene_name=""):
         b = g["bb"]
         if g["zone"] == "int":
             continue
+        if g["name"] in GROUND_ONLY:
+            continue
         if g["zone"] == "roof":
             ok = any(s[0] + 0.2 <= b[0] and b[3] <= s[2] - 0.2 and s[1] + 0.2 <= b[1] and b[4] <= s[3] - 0.2 and b[2] > 0.5
                      for s in solids)
@@ -149,7 +152,7 @@ def run(scene_name=""):
             if _ov(A[0], A[3], C[0], C[3]) > 0 and _ov(A[1], A[4], C[1], C[4]) > 0:
                 log["roof"].append(a["name"]); _remove(a); break
     # 3: outdoor props vs each other
-    solid_g = [(gid, g) for gid, g in order if g["zone"] == "ext" and not g.get("dead") and g["name"] not in P.DECALS]
+    solid_g = [(gid, g) for gid, g in order if g["zone"] == "ext" and not g.get("dead") and g["name"] not in P.DECALS and g["name"] not in GROUND_ONLY]
     # spatial hash (4-tile cells) so big worlds don't need every pair compared
     CELL = 4.0
     grid = {}
@@ -191,6 +194,19 @@ def run(scene_name=""):
     if kit.TERRAIN.get("amp", 0) > 0:
         for gid, g in order:
             if g.get("dead") or g["zone"] != "ext": continue
+            if g["name"] in GROUND_ONLY:
+                # drape: decal meshes follow the terrain vertex by vertex, loose parts by their own centre
+                for o in g["obs"]:
+                    if o.name.startswith("crater"):
+                        mw = o.matrix_world
+                        for v in o.data.vertices:
+                            w = mw @ v.co
+                            v.co.z += kit.ground_z(w.x, -w.y) + 0.02
+                    else:
+                        ob_ = _obj_bb(o)
+                        o.location.z += kit.ground_z((ob_[0] + ob_[3]) / 2, (ob_[1] + ob_[4]) / 2)
+                log["grounded"] += 1
+                continue
             b = g["bb"]
             if b[2] > 0.15: continue
             gz = kit.ground_z((b[0] + b[3]) / 2, (b[1] + b[4]) / 2)

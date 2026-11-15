@@ -83,7 +83,7 @@ def dress_zones(M, hwy, doors, blockers, rng):
     kit.footpath([(31.2, 72.0), (38, 74.5), (cx - 3, cy)], 0.8, seed=21)
     # craters across the bombed suburb
     for k in range(5):
-        LM.crater(rng.uniform(0, 26), rng.uniform(55, 88), rng.uniform(1.0, 1.8), rng)
+        LM.crater(rng.uniform(0, 26), rng.uniform(55, 88), 0, rng, r=rng.uniform(1.0, 1.8))
     # highway wrecks, a jackknifed truck, a roadblock
     with P.zone(prio=1):
         for k in range(10):
@@ -121,13 +121,18 @@ def render_tiles(name, W, H, cols, rows, samples=24):
     camera(cx, cy, W, H, 0.5)
     sc.cycles.samples = samples
     sc.render.use_border = True; sc.render.use_crop_to_border = True
+    xs = [round(i * W / cols) for i in range(cols + 1)]
+    ys = [round(j * H / rows) for j in range(rows + 1)]
     for j in range(rows):
         for i in range(cols):
             path = os.path.join(OUT, "%s_t%d%d.png" % (name, i, j))
             if os.path.exists(path):
                 continue
-            sc.render.border_min_x, sc.render.border_max_x = i / cols, (i + 1) / cols
-            sc.render.border_min_y, sc.render.border_max_y = 1 - (j + 1) / rows, 1 - j / rows
+            # 2px overlap on every inner edge so no seam survives Blender's border rounding
+            x0p, x1p = max(0, xs[i] - 2), min(W, xs[i + 1] + 2)
+            y0p, y1p = max(0, ys[j] - 2), min(H, ys[j + 1] + 2)
+            sc.render.border_min_x, sc.render.border_max_x = x0p / W, x1p / W
+            sc.render.border_min_y, sc.render.border_max_y = 1 - y1p / H, 1 - y0p / H
             sc.render.filepath = path
             bpy.ops.render.render(write_still=True)
             print("tile", i, j, flush=True)
@@ -135,7 +140,9 @@ def render_tiles(name, W, H, cols, rows, samples=24):
     for j in range(rows):
         for i in range(cols):
             t = Image.open(os.path.join(OUT, "%s_t%d%d.png" % (name, i, j)))
-            full.paste(t, (round(i * W / cols), round(j * H / rows)))
+            x0p, y0p = max(0, xs[i] - 2), max(0, ys[j] - 2)
+            # paste the tile, then trim: later tiles overwrite the 2px overlap
+            full.paste(t, (x0p, y0p))
     full.save(os.path.join(OUT, name + "_raw.png"))
     fallout_grade(full).save(os.path.join(OUT, name + ".png"))
     print("scene", name, flush=True)

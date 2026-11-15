@@ -154,9 +154,17 @@ def materials():
 
 
 # ------------------------------------------------------------------ mesh helpers
-def mesh(verts, faces, mat, name="mesh", smooth=False, solidify=0.0):
+def mesh(verts, faces, mat, name="mesh", smooth=False, solidify=0.0, center=False):
+    """center=True puts the object origin at the middle of its verts, so Object-space materials map the
+    same way they do on box() parts (otherwise they sample far-off coordinates)."""
     me = bpy.data.meshes.new(name)
-    me.from_pydata([g2b(*v) for v in verts], [], faces)
+    vv = [g2b(*v) for v in verts]
+    c = None
+    if center:
+        # small odd offset: a flat face must never sit exactly on a texture grid line (mortar rows etc.)
+        c = sum(vv, Vector((0, 0, 0))) / len(vv) + Vector((0.0313, 0.0271, 0.0173))
+        vv = [v - c for v in vv]
+    me.from_pydata(vv, [], faces)
     me.update()
     ob = bpy.data.objects.new(name, me)
     bpy.context.scene.collection.objects.link(ob); __import__('lib').REG.append(ob)
@@ -165,6 +173,8 @@ def mesh(verts, faces, mat, name="mesh", smooth=False, solidify=0.0):
         for p in me.polygons: p.use_smooth = True
     if solidify:
         md = ob.modifiers.new("sol", 'SOLIDIFY'); md.thickness = solidify
+    if c is not None:
+        ob.location = c
     return ob
 
 
@@ -344,7 +354,7 @@ def roof_gable(M, x0, y0, x1, y1, z, rise, roof_mat, gable_mat, axis=None, over=
         ob = mesh(e + r, faces, roof_mat, "roof", solidify=0.06)
         if not hip:
             for xx in (x0, x1):
-                mesh([(xx, y0 - 0.04, z - 0.02), (xx, y1 + 0.04, z - 0.02), (xx, ym, z + rise - 0.03)], [(0, 1, 2)], gable_mat, "gable", solidify=WALL_T)
+                mesh([(xx, y0 - 0.04, z - 0.02), (xx, y1 + 0.04, z - 0.02), (xx, ym, z + rise - 0.03)], [(0, 1, 2)], gable_mat, "gable", solidify=WALL_T, center=True)
     else:
         xm = (x0 + x1) / 2
         half = (x1 - x0) / 2
@@ -358,7 +368,7 @@ def roof_gable(M, x0, y0, x1, y1, z, rise, roof_mat, gable_mat, axis=None, over=
         ob = mesh(e + r, faces, roof_mat, "roof", solidify=0.06)
         if not hip:
             for yy in (y0, y1):
-                mesh([(x0 - 0.04, yy, z - 0.02), (x1 + 0.04, yy, z - 0.02), (xm, yy, z + rise - 0.03)], [(0, 1, 2)], gable_mat, "gable", solidify=WALL_T)
+                mesh([(x0 - 0.04, yy, z - 0.02), (x1 + 0.04, yy, z - 0.02), (xm, yy, z + rise - 0.03)], [(0, 1, 2)], gable_mat, "gable", solidify=WALL_T, center=True)
     # fascia boards along the eaves
     return ob
 
@@ -450,7 +460,7 @@ def _fix_door(cells, ox, oy, door):
 
 
 def house(M, ox, oy, parts, wall_mat, roof="gable", roof_mat="sh_brown", door=None, door_state="closed",
-          shutters=None, chimney=None, porch=None, win_state="glass", ruined=False, extra_doors=()):
+          shutters=None, chimney=None, porch=None, win_state="glass", ruined=False, extra_doors=(), windows=True):
     """parts: [(x, y, w, h, storeys)] relative to (ox, oy).
     door: (side, part_index, t) — t is the offset along that run. roof: gable | hip | flat | shed."""
     cells = {}
@@ -485,7 +495,7 @@ def house(M, ox, oy, parts, wall_mat, roof="gable", roof_mat="sh_brown", door=No
                         t = dpos - lo
                         openings.append((t - 0.42, t + 0.42, 0.0, 1.6, "door"))
                         my_doors.append((t, dstate))
-            t = 1.0
+            t = 1.0 if windows else L
             while t < L - 0.6:
                 if all(abs(t - o[0] - 0.42) > 1.0 for o in openings) and window_ok(a, b, t, juncs):
                     openings.append((t - 0.38, t + 0.38, 0.85, 1.65, "win"))

@@ -543,7 +543,7 @@ def ruin_building(M, x0, y0, w, h, rng, style="burnt", base='#8a8276', storeys=1
     _z.__exit__()
     if style == "bombed":
         cx, cy = x0 + w * rng.uniform(0.6, 1.1), y0 + h + rng.uniform(0.6, 1.6)
-        crater(cx, cy, rng.uniform(1.0, 1.5), rng)
+        crater(cx, cy, 0, rng, r=rng.uniform(1.0, 1.5))
         for k in range(16):    # debris thrown outward
             a = rng.uniform(0, 6.28); d = rng.uniform(1.5, 4.5)
             s = rng.uniform(0.06, 0.18)
@@ -552,31 +552,59 @@ def ruin_building(M, x0, y0, w, h, rng, style="burnt", base='#8a8276', storeys=1
             o.rotation_euler = (rng.uniform(-.5, .5), rng.uniform(-.5, .5), rng.uniform(0, 6))
 
 
-def crater(cx, cy, r, rng):
-    """Shallow blast crater: dark scorched bowl ringed with thrown-up dirt and rubble."""
+@P.prop
+def crater(cx, cy, rng, r=1.2):
+    """Blast crater as a ground decal that sits ON the terrain (a real dip would be hidden by the ground):
+    a dark scorched centre fading out through burnt earth, a raised lip of thrown dirt, rubble on the rim."""
     import bmesh as _bm
+    from lib import _nodes, _noise, _ramp, _mix, grit
+    m, nt, bs = _nodes("crater%d" % rng.randint(0, 99999))
+    tc = nt.nodes.new("ShaderNodeTexCoord")
+    sep = nt.nodes.new("ShaderNodeSeparateXYZ"); nt.links.new(tc.outputs["Object"], sep.inputs[0])
+    ln = nt.nodes.new("ShaderNodeVectorMath"); ln.operation = 'LENGTH'
+    cxy = nt.nodes.new("ShaderNodeCombineXYZ"); nt.links.new(sep.outputs[0], cxy.inputs[0]); nt.links.new(sep.outputs[1], cxy.inputs[1])
+    nt.links.new(cxy.outputs[0], ln.inputs[0])
+    dv = nt.nodes.new("ShaderNodeMath"); dv.operation = 'DIVIDE'; nt.links.new(ln.outputs["Value"], dv.inputs[0]); dv.inputs[1].default_value = r * 1.6
+    n = _noise(nt, tc.outputs["Object"], 2.5, 6.0, 0.7).outputs[0]
+    ad = nt.nodes.new("ShaderNodeMath"); ad.operation = 'ADD'; nt.links.new(dv.outputs[0], ad.inputs[0])
+    mu = nt.nodes.new("ShaderNodeMath"); mu.operation = 'MULTIPLY'; nt.links.new(n, mu.inputs[0]); mu.inputs[1].default_value = 0.25
+    nt.links.new(mu.outputs[0], ad.inputs[1])
+    col = _ramp(nt, ad.outputs[0], [(0.15, '#1a1612'), (0.45, '#3a3028'), (0.7, '#6a5a46'), (0.85, '#7e6e56')])
+    nt.links.new(grit(nt, col, tc.outputs["Object"], 0.45, 60.0), bs.inputs["Base Color"])
+    bs.inputs["Roughness"].default_value = 1.0
+    alpha = _ramp(nt, ad.outputs[0], [(0.8, '#ffffff'), (1.0, '#000000')])
+    kit._alpha_out(m, nt, bs, alpha)
     bm = _bm.new()
-    rings, segs = 6, 24
+    rings, segs = 8, 28
     vs = []
     for i in range(rings + 1):
-        rr = r * (i / rings) * 1.6
-        z = -0.25 * max(0.0, 1 - (i / rings * 1.6) ** 2) if i / rings * 1.6 < 1 else 0.12 * math.exp(-((i / rings * 1.6 - 1.15) ** 2) * 10)
+        f = i / rings * 1.6
+        z = 0.004 + 0.12 * math.exp(-((f - 1.1) ** 2) * 14)       # flat floor, raised lip, back to ground
         ring = []
         for j in range(segs):
             a = j / segs * 6.283
-            jit = rng.uniform(0.9, 1.1)
-            ring.append(bm.verts.new(g2b(cx + math.cos(a) * rr * jit, cy + math.sin(a) * rr * jit, z + 0.01)))
+            jit = rng.uniform(0.92, 1.08) if 0 < i < rings else 1.0
+            ring.append(bm.verts.new(g2b(math.cos(a) * r * f * jit, math.sin(a) * r * f * jit, z)))
         vs.append(ring)
-    for i in range(rings):
+    ctr = bm.verts.new(g2b(0, 0, 0.004))
+    for i in range(1, rings):
         for j in range(segs):
-            bm.faces.new((vs[i][j], vs[i][(j + 1) % segs], vs[i + 1][(j + 1) % segs], vs[i + 1][j]))
+            bm.faces.new((vs[i][j], vs[i + 1][j], vs[i + 1][(j + 1) % segs], vs[i][(j + 1) % segs]))
+    for j in range(segs):
+        bm.faces.new((ctr, vs[1][j], vs[1][(j + 1) % segs]))
+    bm.normal_update()
+    for f in bm.faces:
+        if f.normal.z < 0:
+            f.normal_flip()
     me = bpy.data.meshes.new("crater"); bm.to_mesh(me); bm.free()
     ob = bpy.data.objects.new("crater", me); bpy.context.scene.collection.objects.link(ob); __import__('lib').REG.append(ob)
-    me.materials.append(MAT("rock:#3a332c:#221e1a"))
+    ob.location = g2b(cx, cy, 0)
+    ob.visible_shadow = False
+    me.materials.append(m)
     for p in me.polygons: p.use_smooth = True
-    for k in range(10):
+    for k in range(rng.randint(5, 9)):
         a = rng.uniform(0, 6.28)
-        P.rubble_pile(cx + math.cos(a) * r * 1.3, cy + math.sin(a) * r * 1.3, 0, rng, size=0.35)
+        P.rubble_pile(cx + math.cos(a) * r * 1.15, cy + math.sin(a) * r * 1.15, 0, rng, size=rng.uniform(0.25, 0.4))
 
 
 def graffiti_on(out_dir, x0, y_face, w, rng, facing="s", n=None, zmax=1.6):
@@ -632,17 +660,30 @@ def gas_station(M, x0, y0, rng, road_y=None):
 def barn(M, x0, y0, rng):
     """Big red gambrel-ish barn (tall gable), hay loft door, open front."""
     red = kit.mat_planks("barn%d" % rng.randint(0, 999), rng.choice(['#8a3a2a', '#7a4a3a', '#6a5a4a']), '#5a2a1e')
-    house(M, x0, y0, [(0, 0, 5, 7, 2)], red, "gable", rng.choice(["sh_slate", "sh_brown"]), door=("s", 7, 2.5, "open"), win_state="boarded")
-    box(x0 + 2.0, y0 + 7 + 0.07, 2.4, x0 + 3.0, y0 + 7 + 0.09, 3.2, M["black"])
+    house(M, x0, y0, [(0, 0, 5, 7, 2)], red, "gable", rng.choice(["sh_slate", "sh_brown"]), windows=False)
+    # big sliding barn doors (one hanging open) and the hay-loft hatch, all on the south gable end
+    trim = MAT("paint:#d8d0bc:0.5")
+    box(x0 + 1.2, y0 + 7 + 0.05, 0.0, x0 + 3.8, y0 + 7 + 0.07, 2.6, M["black"])
+    box(x0 + 1.2, y0 + 7 + 0.07, 0.0, x0 + 2.5, y0 + 7 + 0.13, 2.6, red)
+    box(x0 + 3.9, y0 + 7 + 0.09, 0.0, x0 + 5.1, y0 + 7 + 0.15, 2.6, red)
+    for (a, b) in ((1.2, 2.5), (3.9, 5.1)):
+        box(x0 + a, y0 + 7 + 0.13, 0.0, x0 + b, y0 + 7 + 0.16, 0.08, trim); box(x0 + a, y0 + 7 + 0.13, 2.52, x0 + b, y0 + 7 + 0.16, 2.6, trim)
+        mesh([(x0 + a, y0 + 7 + 0.14, 0.08), (x0 + b, y0 + 7 + 0.14, 2.52), (x0 + b, y0 + 7 + 0.15, 2.52), (x0 + a, y0 + 7 + 0.15, 0.08)], [(0, 1, 2, 3)], trim, "x", solidify=0.04)
+    box(x0 + 2.1, y0 + 7 + 0.07, 2.9, x0 + 2.9, y0 + 7 + 0.09, 3.6, M["black"])
+    box(x0 + 1.0, y0 + 7 + 0.05, 2.6, x0 + 4.0, y0 + 7 + 0.18, 2.68, trim)
+    kit.solid(x0 + 1.2, y0 + 7 - 0.6, x0 + 3.8, y0 + 7 + 1.2, 2.0, "doorway")
     with P.zone(prio=2):
         for k in range(rng.randint(2, 5)):
             P.crate(x0 + 5.8 + rng.uniform(0, 1.5), y0 + rng.uniform(1, 6), rng.uniform(0, 90), rng)
 
 
 def silo(M, x, y, rng):
-    m = kit.mat_paint_rust("silo%d" % rng.randint(0, 999), '#a8a8a0', 0.6) if hasattr(kit, "mat_paint_rust") else MAT("metal:#a8a8a0")
-    cyl(x, y, 0, 5.0, 1.0, m, 24)
-    sphere(x, y, 5.0, 1.0, m, scale=(1, 1, 0.6))
+    m = MAT("metal:%s" % rng.choice(["#9a9a92", "#a8a49a", "#8a8e8a"]))
+    cyl(x, y, 0, 5.0, 1.0, m, 28)
+    for k in range(9):          # corrugation bands
+        cyl(x, y, 0.4 + k * 0.55, 0.44 + k * 0.55, 1.02, MAT("metal:#6e6e68"), 28)
+    sphere(x, y, 5.0, 1.0, m, scale=(1, 1, 0.55))
+    box(x + 0.95, y - 0.08, 0.2, x + 1.0, y + 0.08, 5.2, MAT("metal:#5a5a54"))        # ladder rail
     kit.solid(x - 1, y - 1, x + 1, y + 1, 5.6, "silo")
 
 
