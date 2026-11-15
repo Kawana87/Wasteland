@@ -127,10 +127,11 @@ def render_prop(name, build, scale=LAB2GAME, center=False, outline=True, bright=
         lim = []
         # room on each side of the anchor; a side where the anchor sits on the edge (poles, flags) is
         # allowed to touch it
-        if bb[0] < ax - 1 and ax > 1: lim.append(ax / max(ax - bb[0], 1e-3))
-        if bb[2] > ax + 1 and w - ax > 1: lim.append((w - ax) / max(bb[2] - ax, 1e-3))
-        if bb[1] < ay - 1 and ay > 1: lim.append(ay / max(ay - bb[1], 1e-3))
-        if bb[3] > ay + 1 and h - ay > 1: lim.append((h - ay) / max(bb[3] - ay, 1e-3))
+        M_ = 1.5     # keep a pixel of air so nothing is shaved by the canvas edge
+        if bb[0] < ax - 1 and ax > 3: lim.append((ax - M_) / max(ax - bb[0], 1e-3))
+        if bb[2] > ax + 1 and w - ax > 3: lim.append((w - ax - M_) / max(bb[2] - ax, 1e-3))
+        if bb[1] < ay - 1 and ay > 3: lim.append((ay - M_) / max(ay - bb[1], 1e-3))
+        if bb[3] > ay + 1 and h - ay > 3: lim.append((h - ay - M_) / max(bb[3] - ay, 1e-3))
         k = max(0.3, min([k] + lim))
         if os.environ.get("PDEBUG"): print("DBG", name, it, bb, ob_, round(k, 3), flush=True)
         if abs(k - 1.0) < 0.02:
