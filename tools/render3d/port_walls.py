@@ -247,9 +247,16 @@ def build_wall(axis, pi, mode, mats, hh=None, rng=None):
             h = max(3, min(20, h + rng.uniform(-3.5, 3.5)))
             raw.append(h)
         hts = [(raw[max(0, k - 1)] + raw[k] * 2 + raw[min(n - 1, k + 1)]) / 4 for k in range(n)]
+        # every variant meets its neighbours at the same height (9 px) so a run of broken segments reads
+        # as one continuous ragged wall, not separate notched blocks
+        END = 9.0
+        for k in range(n):
+            t = min(k, n - 1 - k) / 4.0
+            if t < 1.0:
+                hts[k] = END + (hts[k] - END) * t
         for k in range(n):
             u0, u1 = k / n - (E if k == 0 else 0), (k + 1) / n + (E if k == n - 1 else 0)
-            W.box(u0, u1, -T, T, 0, gz(hts[k] + rng.uniform(-0.6, 0.6)), wm)
+            W.box(u0, u1, -T, T, 0, gz(hts[k] + (rng.uniform(-0.6, 0.6) if 2 < k < n - 3 else 0.0)), wm)
         for j in range(rng.randint(1, 2)):
             k = rng.randrange(n)
             cu = k / n

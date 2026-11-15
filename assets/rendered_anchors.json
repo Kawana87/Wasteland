@@ -1,27 +1,527 @@
 {
+"ac_unit": [
+18,
+20
+],
+"antenna": [
+10,
+66
+],
+"awning_3e8a86_x": [
+2,
+12
+],
+"awning_3e8a86_y": [
+26,
+12
+],
+"awning_c84a3a_x": [
+2,
+12
+],
+"awning_c84a3a_y": [
+26,
+12
+],
+"awning_d8b040_x": [
+2,
+12
+],
+"awning_d8b040_y": [
+26,
+12
+],
+"bag": [
+7,
+12
+],
+"barrel": [
+10,
+20
+],
+"barrel_rust": [
+10,
+23
+],
+"barrel_toxic": [
+10,
+23
+],
+"bench": [
+21,
+22
+],
+"billboard_x": [
+66,
+110
+],
+"billboard_y": [
+66,
+110
+],
+"bones": [
+13,
+12
+],
+"bricks": [
+18,
+18
+],
 "brute_r": [
 22,
 56
+],
+"cache": [
+13,
+19
+],
+"cache_open": [
+13,
+19
+],
+"campfire0": [
+12,
+23
+],
+"campfire1": [
+12,
+23
+],
+"car_burned_0": [
+60,
+54
+],
+"car_burned_1": [
+60,
+54
+],
+"car_burned_2": [
+60,
+54
+],
+"car_burned_3": [
+60,
+54
+],
+"car_burned_4": [
+60,
+54
+],
+"car_burned_5": [
+60,
+54
+],
+"car_burned_6": [
+60,
+54
+],
+"car_burned_7": [
+60,
+54
+],
+"car_red_0": [
+60,
+54
+],
+"car_red_1": [
+60,
+54
+],
+"car_red_2": [
+60,
+54
+],
+"car_red_3": [
+60,
+54
+],
+"car_red_4": [
+60,
+54
+],
+"car_red_5": [
+60,
+54
+],
+"car_red_6": [
+60,
+54
+],
+"car_red_7": [
+60,
+54
+],
+"car_teal_0": [
+60,
+54
+],
+"car_teal_1": [
+60,
+54
+],
+"car_teal_2": [
+60,
+54
+],
+"car_teal_3": [
+60,
+54
+],
+"car_teal_4": [
+60,
+54
+],
+"car_teal_5": [
+60,
+54
+],
+"car_teal_6": [
+60,
+54
+],
+"car_teal_7": [
+60,
+54
+],
+"car_yellow_0": [
+60,
+54
+],
+"car_yellow_1": [
+60,
+54
+],
+"car_yellow_2": [
+60,
+54
+],
+"car_yellow_3": [
+60,
+54
+],
+"car_yellow_4": [
+60,
+54
+],
+"car_yellow_5": [
+60,
+54
+],
+"car_yellow_6": [
+60,
+54
+],
+"car_yellow_7": [
+60,
+54
+],
+"cart": [
+18,
+25
 ],
 "cattle_r": [
 32,
 31
 ],
+"crate": [
+13,
+19
+],
+"crate_open": [
+13,
+19
+],
 "crow_r": [
 8,
 13
+],
+"deadbush": [
+18,
+21
 ],
 "dog_r": [
 14,
 18
 ],
+"fence": [
+24,
+26
+],
+"flag": [
+1,
+44
+],
+"flag_main": [
+1,
+44
+],
+"flag_raider": [
+1,
+44
+],
+"fuelpump": [
+13,
+44
+],
+"furn_armchair_a": [
+36,
+60
+],
+"furn_armchair_b": [
+36,
+60
+],
+"furn_barrel_a": [
+36,
+60
+],
+"furn_barrel_b": [
+36,
+60
+],
+"furn_bed_a": [
+36,
+60
+],
+"furn_bed_b": [
+36,
+60
+],
+"furn_bookshelf_a": [
+36,
+60
+],
+"furn_bookshelf_b": [
+36,
+60
+],
+"furn_booth_a": [
+36,
+60
+],
+"furn_booth_b": [
+36,
+60
+],
+"furn_chair_a": [
+36,
+60
+],
+"furn_chair_b": [
+36,
+60
+],
+"furn_couch_a": [
+36,
+60
+],
+"furn_couch_b": [
+36,
+60
+],
+"furn_counter_a": [
+36,
+60
+],
+"furn_counter_b": [
+36,
+60
+],
+"furn_desk_a": [
+36,
+60
+],
+"furn_desk_b": [
+36,
+60
+],
+"furn_dresser_a": [
+36,
+60
+],
+"furn_dresser_b": [
+36,
+60
+],
+"furn_filing_a": [
+36,
+60
+],
+"furn_filing_b": [
+36,
+60
+],
+"furn_fridge_a": [
+36,
+60
+],
+"furn_fridge_b": [
+36,
+60
+],
+"furn_jukebox_a": [
+36,
+60
+],
+"furn_jukebox_b": [
+36,
+60
+],
+"furn_locker_a": [
+36,
+60
+],
+"furn_locker_b": [
+36,
+60
+],
+"furn_mattress_a": [
+36,
+60
+],
+"furn_mattress_b": [
+36,
+60
+],
+"furn_shopcounter_a": [
+36,
+60
+],
+"furn_shopcounter_b": [
+36,
+60
+],
+"furn_shopshelf_a": [
+36,
+60
+],
+"furn_shopshelf_b": [
+36,
+60
+],
+"furn_stool_a": [
+36,
+60
+],
+"furn_stool_b": [
+36,
+60
+],
+"furn_stove_a": [
+36,
+60
+],
+"furn_stove_b": [
+36,
+60
+],
+"furn_table_a": [
+36,
+60
+],
+"furn_table_b": [
+36,
+60
+],
+"furn_terminal_a": [
+36,
+60
+],
+"furn_terminal_b": [
+36,
+60
+],
+"furn_tv_a": [
+36,
+60
+],
+"furn_tv_b": [
+36,
+60
+],
+"furn_vending_a": [
+36,
+60
+],
+"furn_vending_b": [
+36,
+60
+],
+"furn_workbench_a": [
+36,
+60
+],
+"furn_workbench_b": [
+36,
+60
+],
 "ghoul_r": [
 16,
 45
 ],
+"hydrant": [
+7,
+23
+],
+"jersey_x": [
+25,
+24
+],
+"jersey_y": [
+25,
+24
+],
+"lamp": [
+6,
+99
+],
+"mailbox": [
+9,
+30
+],
+"newsbox": [
+9,
+22
+],
+"papers": [
+15,
+8
+],
+"phonebooth": [
+16,
+57
+],
+"picket_x": [
+15,
+19
+],
+"picket_y": [
+15,
+19
+],
+"pillar": [
+7,
+68
+],
 "player_r": [
 16,
 45
+],
+"pole": [
+6,
+92
+],
+"post": [
+2,
+21
+],
+"puddle_toxic": [
+24,
+11
+],
+"pump": [
+12,
+44
 ],
 "raider_r": [
 16,
@@ -30,6 +530,26 @@
 "rat_r": [
 10,
 11
+],
+"roof_tank": [
+21,
+54
+],
+"roof_vent": [
+7,
+16
+],
+"rubble0": [
+21,
+22
+],
+"rubble1": [
+21,
+22
+],
+"rubble2": [
+21,
+22
 ],
 "settler1_r": [
 16,
@@ -46,6 +566,10 @@
 "shellback_r": [
 22,
 22
+],
+"shrub": [
+13,
+18
 ],
 "stub_x0_1": [
 2,
@@ -239,12 +763,104 @@
 26,
 45
 ],
+"stump": [
+10,
+9
+],
 "survivor_r": [
 16,
 45
 ],
+"tent": [
+24,
+36
+],
+"tire": [
+12,
+13
+],
+"tower": [
+18,
+72
+],
 "trader_r": [
 16,
 45
+],
+"trashbag": [
+12,
+17
+],
+"tree0": [
+18,
+54
+],
+"tree1": [
+18,
+54
+],
+"tree2": [
+18,
+54
+],
+"tree3": [
+18,
+54
+],
+"tree4": [
+18,
+54
+],
+"tree5": [
+18,
+54
+],
+"tree6": [
+18,
+54
+],
+"tree7": [
+18,
+54
+],
+"tree_dead": [
+18,
+54
+],
+"tree_dead1": [
+18,
+54
+],
+"tree_dead2": [
+18,
+54
+],
+"tuft0": [
+6,
+10
+],
+"tuft1": [
+6,
+10
+],
+"tuft2": [
+6,
+10
+],
+"vending_x": [
+18,
+48
+],
+"vending_y": [
+18,
+48
+],
+"watertower": [
+42,
+168
+],
+"workbench": [
+18,
+22
 ]
 }

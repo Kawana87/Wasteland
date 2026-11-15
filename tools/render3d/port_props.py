@@ -23,7 +23,12 @@ ANCH = json.load(open(os.path.join(PC.ROOT, "assets", "anchors.json")))
 ORIG = "/tmp/sprites_orig"
 
 
+ALIAS = {"tree3": "tree0", "tree4": "tree0", "tree5": "tree0", "tree6": "tree0", "tree7": "tree0",
+         "tree_dead1": "tree_dead", "tree_dead2": "tree_dead"}
+
+
 def canvas(name):
+    name = ALIAS.get(name, name)
     p = os.path.join(ORIG, name + ".png")
     if not os.path.exists(p):
         p = os.path.join(PC.SPR, name + ".png")
@@ -53,6 +58,7 @@ def screen_extent(pts, ax, ay):
 
 def orig_box(name):
     """Opaque bounding box (w, h in px) of the original pixel-art sprite: the size players are used to."""
+    name = ALIAS.get(name, name)
     p = os.path.join(ORIG, name + ".png")
     if not os.path.exists(p):
         return None
@@ -64,7 +70,8 @@ def orig_box(name):
 def render_prop(name, build, scale=LAB2GAME, center=False, outline=True, bright=1.1, sat=1.05, samples=20,
                 fit_xy=None, margin=0.0, match=True, alpha_cut=70):
     w, h = canvas(name)
-    ax, ay = ANCH.get(name, (w // 2, h - 1))
+    ax, ay = ANCH.get(ALIAS.get(name, name), (w // 2, h - 1))
+    PC.set_anchor(name, ax, ay)
     n0 = PC.mark()
     build()
     obs = PC.new_objects_since(n0)
@@ -102,31 +109,33 @@ def render_prop(name, build, scale=LAB2GAME, center=False, outline=True, bright=
     def rescale(k):
         nonlocal s
         s *= k; emp.scale = (s, s, s); emp.location = emp.location * k
-    # quick test renders: measure the real silhouette, then match the original's size and keep it on the canvas
-    for it in range(3):
-        PC.frame(w, h, ax, ay)
-        test = PC.shrink(PC.render_raw(samples=2), w, h, alpha_cut=alpha_cut)
+    # quick test renders on a canvas padded by the sprite size on every side, so overflow is measured
+    # instead of clipped; match the original's size (first passes), then make it fit the real canvas
+    for it in range(8):
+        PC.frame(w * 3, h * 3, ax + w, ay + h)
+        test = PC.shrink(PC.render_raw(samples=2), w * 3, h * 3, alpha_cut=alpha_cut)
         bb = test.getchannel("A").getbbox()
         if not bb:
             rescale(1.5); continue
+        bb = (bb[0] - w, bb[1] - h, bb[2] - w, bb[3] - h)
         bw, bh = bb[2] - bb[0], bb[3] - bb[1]
         k = 1.0
-        if ob_ and it < 2:
+        if ob_ and it < 3:
             if match == "h": k = ob_[1] / max(bh, 1)
             elif match == "w": k = ob_[0] / max(bw, 1)
             else: k = min(ob_[0] / max(bw, 1), ob_[1] / max(bh, 1))
-        # room on each side of the anchor (the silhouette scales about the anchor)
         lim = []
-        # sides where the anchor sits right at the edge can't be judged (a pole on an edge anchor always touches)
-        if bb[0] < ax and ax > 2: lim.append((ax - margin) / max(ax - bb[0], 1e-3))
-        if bb[2] > ax and w - ax > 2: lim.append((w - margin - ax) / max(bb[2] - ax, 1e-3))
-        if bb[1] < ay and ay > 2: lim.append((ay - margin) / max(ay - bb[1], 1e-3))
-        if bb[3] > ay and h - ay > 2: lim.append((h - margin - ay) / max(bb[3] - ay, 1e-3))
-        k = min([k] + lim)
-        if os.environ.get("PDEBUG"): print("DBG", name, it, bb, ob_, round(k, 3), round(s, 3), flush=True)
-        if abs(k - 1.0) < 0.03:
+        # room on each side of the anchor; a side where the anchor sits on the edge (poles, flags) is
+        # allowed to touch it
+        if bb[0] < ax - 1 and ax > 1: lim.append(ax / max(ax - bb[0], 1e-3))
+        if bb[2] > ax + 1 and w - ax > 1: lim.append((w - ax) / max(bb[2] - ax, 1e-3))
+        if bb[1] < ay - 1 and ay > 1: lim.append(ay / max(ay - bb[1], 1e-3))
+        if bb[3] > ay + 1 and h - ay > 1: lim.append((h - ay) / max(bb[3] - ay, 1e-3))
+        k = max(0.3, min([k] + lim))
+        if os.environ.get("PDEBUG"): print("DBG", name, it, bb, ob_, round(k, 3), flush=True)
+        if abs(k - 1.0) < 0.02:
             break
-        rescale(k)
+        rescale(k * (0.98 if k < 1 else 1.0))
     out = PC.sprite(name, w, h, ax, ay, samples=samples, bright=bright, sat=sat, outline=outline, alpha_cut=alpha_cut)
     PC.clear(obs + [emp])
     return out
@@ -155,10 +164,10 @@ def flag(col, rng):
     cyl(0, 0, 0, 2.6, 0.05, MAT("metal:#8a8a84"), 6)
     sphere(0, 0, 2.62, 0.04, MAT("metal:#c8c8c0"))
     bt = FAST.Batch("cloth")
-    for k in range(5):
-        u = k / 5
-        bt.cube(g2b(0.05 + u * 0.4 + 0.04, 0.0, 2.35 - math.sin(u * 3) * 0.04), (0.085, 0.015, 0.36), MAT("fab:%s" % col),
-                rot=(0, math.sin(u * 4) * 0.15, 0))
+    for k in range(6):
+        u = k / 6
+        bt.cube(g2b(0.05 + u * 0.9 + 0.075, 0.0, 2.25 - math.sin(u * 3) * 0.06), (0.16, 0.015, 0.62), MAT("fab:%s" % col),
+                rot=(0, math.sin(u * 4) * 0.12, 0))
     bt.done()
 
 
@@ -172,6 +181,53 @@ def campfire(rng, frame):
         o = FAST.primitive_cone_add(vertices=6, radius1=0.08, radius2=0.0, depth=hgt, location=g2b(math.cos(a) * r, math.sin(a) * r, 0.12 + hgt / 2))
         o.data.materials.append(fl[k % 3])
         o.rotation_euler = (r2.uniform(-.25, .25), r2.uniform(-.25, .25), 0)
+
+
+def poster_mat():
+    """Old atomic-age billboard: cream field with 'THE FUTURE!' in red, teal and red bands, weathered."""
+    from PIL import Image as I, ImageDraw, ImageFont, ImageFilter
+    import random as _r
+    W_, H_ = 512, 256
+    im = I.new("RGB", (W_, H_), (226, 214, 176))
+    d = ImageDraw.Draw(im)
+    d.rectangle((0, 150, W_, 200), fill=(58, 134, 128)); d.rectangle((0, 200, W_, H_), fill=(196, 74, 54))
+    try:
+        f = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 66)
+    except Exception:
+        f = ImageFont.load_default()
+    tw = d.textlength("THE FUTURE!", font=f)
+    d.text(((W_ - tw) / 2, 48), "THE FUTURE!", fill=(184, 58, 40), font=f)
+    rr = _r.Random(3)
+    for k in range(260):     # flaking paint
+        x, y = rr.randrange(W_), rr.randrange(H_)
+        d.ellipse((x, y, x + rr.randint(2, 9), y + rr.randint(2, 6)), fill=(150, 130, 100))
+    im = im.filter(ImageFilter.GaussianBlur(0.6))
+    path = "/tmp/r3d_poster.png"; im.save(path)
+    from lib import _nodes
+    m, nt, bs = _nodes("poster")
+    tx = nt.nodes.new("ShaderNodeTexImage"); tx.image = bpy.data.images.load(path)
+    nt.links.new(tx.outputs["Color"], bs.inputs["Base Color"]); bs.inputs["Roughness"].default_value = 0.9
+    return m
+
+
+def billboard(axis):
+    """Two posts, a framed poster panel facing the camera side (+y for x, +x for y)."""
+    wood = MAT("wood:#5a4232:#4a3628"); frame = MAT("flat:#3a2e24:0.8")
+    L, z0, z1 = 2.4, 1.6, 2.9
+    for t in (-0.85, 0.85):          # posts stand behind the panel
+        x, y = (t, -0.12) if axis == "x" else (-0.12, t)
+        box(x - 0.05, y - 0.05, 0, x + 0.05, y + 0.05, z1 + 0.05, wood)
+    if axis == "x":
+        box(-L / 2 - 0.05, -0.06, z0 - 0.05, L / 2 + 0.05, 0.02, z1 + 0.05, frame)
+        verts = [(-L / 2, 0.025, z0), (L / 2, 0.025, z0), (L / 2, 0.025, z1), (-L / 2, 0.025, z1)]
+    else:
+        box(-0.06, -L / 2 - 0.05, z0 - 0.05, 0.02, L / 2 + 0.05, z1 + 0.05, frame)
+        verts = [(0.025, L / 2, z0), (0.025, -L / 2, z0), (0.025, -L / 2, z1), (0.025, L / 2, z1)]
+    ob = kit.mesh(verts, [(0, 1, 2, 3)], poster_mat(), "poster")
+    me = ob.data
+    uv = me.uv_layers.new()
+    for i, c in enumerate([(0, 0), (1, 0), (1, 1), (0, 1)]):
+        uv.data[i].uv = c
 
 
 def picket(axis):
@@ -440,7 +496,7 @@ def furn_builder(nm, orient):
     r = random.Random(hash(nm) % 997)
     f = {'counter': lambda: P.counter(0, 0, rot, r, w=1.2, sink=False), 'stove': lambda: P.stove(0, 0, rot, r),
          'fridge': lambda: P.fridge(0, 0, rot, r), 'table': lambda: P.table(0, 0, rot, r, shape="rect"),
-         'chair': lambda: P.chair(0, 0, rot, r, style="wood"), 'couch': lambda: P.couch(0, 0, rot, r, w=1.5),
+         'chair': lambda: P.chair(0, 0, rot + 180, r, style="wood"), 'couch': lambda: P.couch(0, 0, rot, r, w=1.5),
          'armchair': lambda: P.armchair(0, 0, rot, r), 'tv': lambda: _rot(lambda: console_tv(r), rot), 'bookshelf': lambda: P.bookshelf(0, 0, rot, r, w=1.0),
          'bed': lambda: P.bed(0, 0, rot, r, size=1.4), 'dresser': lambda: P.dresser(0, 0, rot, r), 'desk': lambda: _rot(lambda: desk(r), rot),
          'filing': lambda: P.filing_cabinet(0, 0, rot, r), 'shopshelf': lambda: P.gondola(0, 0, rot, r, w=1.4, stock=0.55),
@@ -468,8 +524,8 @@ def specs():
     S["barrel_rust"] = dict(build=lambda: barrel_up("rust"))
     S["barrel_toxic"] = dict(build=lambda: barrel_up("toxic"))
     S["bench"] = dict(build=lambda: P.bench(0, 0, 0, R(5)))
-    S["billboard_x"] = dict(build=lambda: P.billboard(0, 0, 0, R(6)))
-    S["billboard_y"] = dict(build=lambda: P.billboard(0, 0, 90, R(6)))
+    S["billboard_x"] = dict(build=lambda: billboard("x"))
+    S["billboard_y"] = dict(build=lambda: billboard("y"))
     S["bones"] = dict(build=lambda: P.skeleton(0, 0, 20, R(7)))
     S["bricks"] = dict(build=lambda: P.rubble_pile(0, 0, 0, R(8), size=0.6, mats=[MAT("paint:#8e4a3a:0.6"), MAT("paint:#a85a44:0.6")]))
     S["cache"] = dict(build=lambda: cache(False))
@@ -513,6 +569,13 @@ def specs():
     S["tower"] = dict(build=watchtower)
     S["trashbag"] = dict(build=lambda: P.trash_bags(0, 0, 0, R(24), n=1))
     S["tree_dead"] = dict(build=lambda: P.tree(0, 0, 0, R(25), kind="dead"))
+    S["tree_dead1"] = dict(build=lambda: P.tree(0, 0, 0, R(61), kind="dead"))
+    S["tree_dead2"] = dict(build=lambda: P.tree(0, 0, 0, R(62), kind="sparse"))
+    S["tree3"] = dict(build=lambda: P.tree(0, 0, 0, R(63), kind="pine"))
+    S["tree4"] = dict(build=lambda: P.tree(0, 0, 0, R(64), kind="pine"))
+    S["tree5"] = dict(build=lambda: leafy_tree(R(65), 0.85, ("#8a8a48", "#6a6a34")))
+    S["tree6"] = dict(build=lambda: P.tree(0, 0, 0, R(66), kind="scrub"))
+    S["tree7"] = dict(build=lambda: leafy_tree(R(67), 1.25, ("#4e6a34", "#3a5228")))
     S["vending_x"] = dict(build=lambda: P.vending(0, 0, 0, R(26)))
     S["vending_y"] = dict(build=lambda: P.vending(0, 0, -90, R(26)))
     S["watertower"] = dict(build=water_tower)

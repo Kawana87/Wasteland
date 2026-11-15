@@ -132,6 +132,10 @@ func _ready() -> void:
 			_debug_tour.call_deferred()
 		if "--bestiary" in args:
 			_debug_bestiary.call_deferred()
+		if "--upstairs" in args:
+			_debug_upstairs.call_deferred()
+		if "--desks" in args:
+			_debug_desks.call_deferred()
 		return
 	hud.show_title("A new world is generated every time: rolling hills and cliffs out west, a ruined city to the east.\nRaiders hold plateau camps; feral ghouls haunt the ruins; brutes and shellbacks roam the wilds.\nFriendly settlements trade gear for scrap. Set up camps anywhere and fast travel between them.\n\nPC: WASD move · mouse aim · left click shoot · F / right click melee · Space jump · C sneak\nE use / talk / chop / climb / stairs · I inventory · H heal · B camp menu · T fast travel · V CRT filter\nGamepad: left stick move · right stick aim · RT shoot · A jump · X use · B melee · Y sneak\nTouch: left thumb move · right thumb aim and shoot · buttons on the right", start_new_world)
 
@@ -263,13 +267,29 @@ func _light_for(nm: String, p: Vector2, z: float) -> void:
 		var L: Array = LIGHTS[nm]
 		lights.add(Iso.to_screen(p.x, p.y, z + L[0]) + Vector2(L[1], 0), L[2], L[3], L[4])
 
+const TREES_LEAFY := ["tree0", "tree1", "tree2", "tree5", "tree7"]
+const TREES_PINE := ["tree3", "tree4", "tree3"]
+const TREES_DRY := ["tree6", "tree5", "tree_dead2"]
+const TREES_DEAD := ["tree_dead", "tree_dead1", "tree_dead2"]
+
+## Trees grow in patches: each 8x8 area leans pine, leafy or dry scrub, with dead trees mixed in.
+func _tree_tex(x: int, y: int, v: int) -> String:
+	var h := absi((x * 73856093) ^ (y * 19349663)) % 997
+	if v == 3 and h % 3 == 0:
+		return TREES_DEAD[h % TREES_DEAD.size()]
+	var region := absi((x / 8) * 7 + (y / 8) * 13 + world.seed_value) % 5
+	var pool: Array = TREES_PINE if region == 0 else (TREES_DRY if region == 1 else TREES_LEAFY)
+	if h % 5 == 0: pool = TREES_LEAFY        # a few strays of other kinds in every patch
+	var tex: String = pool[h % pool.size()]
+	return tex if ResourceLoader.exists("res://assets/sprites/%s.png" % tex) else "tree%d" % (v % 3)
+
 func _spawn_props() -> void:
 	var w := world
 	for y in World.N:
 		for x in World.N:
 			if w.T[w.idx(x, y)] == World.TREE:
 				var v := w.V[w.idx(x, y)]
-				var tex := "tree_dead" if (v == 3 and (x * 7 + y) % 3 == 0) else "tree%d" % (v % 3)
+				var tex := _tree_tex(x, y, v)
 				var p := Vector2(x + 0.5, y + 0.5)
 				tree_nodes[w.idx(x, y)] = _sprite(tex, p, w.hz(p.x, p.y), Vector2(-12, -36))
 	for c in w.cars:
@@ -1517,6 +1537,39 @@ func _debug_shots() -> void:
 			_snap(out + "/11_night_%s.png" % b.kind)
 			break
 	print("SHOTS DONE ", ProjectSettings.globalize_path(out))
+	get_tree().quit()
+
+func _debug_desks() -> void:
+	var out := "user://shots"
+	DirAccess.make_dir_recursive_absolute(out)
+	await get_tree().create_timer(1.0).timeout
+	for e in enemies: e.visible = false; e.aw = 0.0
+	var n := 0
+	for b in world.buildings:
+		for f in b.furn:
+			if f.name == "chair" and n < 4:
+				player.fl = f.fl
+				player.wpos = f.pos + Vector2(1.2, 0.6)
+				await get_tree().create_timer(0.4).timeout
+				await _snap(out + "/d_%d.png" % n); n += 1
+	get_tree().quit()
+
+func _debug_upstairs() -> void:
+	var out := "user://shots"
+	DirAccess.make_dir_recursive_absolute(out)
+	await get_tree().create_timer(1.0).timeout
+	for e in enemies: e.visible = false; e.aw = 0.0
+	var n := 0
+	for b in world.buildings:
+		if b.floors < 2 or n >= 10: continue
+		for c in b.cells:
+			if b.cells[c] >= 2 and not b.holes.has(c):
+				player.fl = 1
+				player.wpos = Vector2(c) + Vector2(0.5, 0.5)
+				await get_tree().create_timer(0.4).timeout
+				print("UP shot %d: b%d %s ruined=%s parts=%s" % [n, b.id, b.kind, str(b.ruined), str(b.parts)])
+				await _snap(out + "/u_%02d_%s.png" % [n, b.kind]); n += 1
+				break
 	get_tree().quit()
 
 func _debug_bestiary() -> void:

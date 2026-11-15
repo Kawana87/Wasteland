@@ -69,7 +69,8 @@ def check_projection():
     return o, ex, ey, ez
 
 
-def render_raw(path="/tmp/r3d_port.png", samples=20):
+def render_raw(path=None, samples=20):
+    path = path or "/tmp/r3d_port_%d.png" % os.getpid()
     sc = bpy.context.scene
     sc.cycles.samples = samples
     sc.render.filepath = path

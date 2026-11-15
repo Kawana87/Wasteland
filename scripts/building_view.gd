@@ -93,7 +93,8 @@ func setup(w: World, bld: World.Bld) -> void:
 	for c in b.cells:
 		if b.cells[c] < 2 or b.holes.has(c): continue
 		var is_stairs: bool = c == b.stairs
-		var f := _tile("stairs_down" if is_stairs else "floor_" + fk, c.x, c.y, b.h0 + World.FLOOR_H, Iso.z_for(c.x + c.y + 0.02))
+		# layer 3: above the lower storey's walls (layer 2), below upper walls and furniture
+		var f := _tile("stairs_down" if is_stairs else "floor_" + fk, c.x, c.y, b.h0 + World.FLOOR_H, Iso.z_for(c.x + c.y + 0.02, 3))
 		f.visible = false
 		upper.append(f)
 	if b.stairs.x >= 0:
@@ -293,7 +294,9 @@ func update_view(pb: int, pfl: int) -> void:
 			wn.full.visible = false
 			wn.low.visible = false
 		elif s.fl < pfl:
-			wn.full.visible = s.side != "i"
+			# lower storey: interior walls hidden; so are walls with another storey above them (they sit
+			# under the upstairs floor and would poke through it); outer walls of lower wings stay
+			wn.full.visible = s.side != "i" and not ((s.side == "n" or s.side == "w") and b.floors_at(s.cell) > s.fl + 1)
 			wn.low.visible = false
 		else:
 			var front: bool = s.side == "s" or s.side == "e" or s.side == "i"
