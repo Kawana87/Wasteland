@@ -1,3613 +1,2307 @@
 {
- "region": "The Sundown Basin",
+ "region": "The Sable Wastes",
  "size": [
-  1600,
-  1200
+  2048,
+  2048
  ],
- "grid": 50,
+ "names": {
+  "river": "Sable River",
+  "lake": "Lake Winona",
+  "hills": "Gravel Hills",
+  "woods": "Deadpine Woods",
+  "city": "PORT STERLING",
+  "waste": "The Wastes",
+  "marsh": "Sable Fens"
+ },
  "locations": [
   {
-   "id": "haven_flats",
-   "name": "Haven Flats",
+   "id": "patchwork",
+   "name": "Patchwork",
    "type": "town",
    "pos": [
-    0.44,
-    0.445
+    0.42,
+    0.5
    ],
    "biome": "plains",
    "faction": "Settlers",
    "danger": 1,
    "size": 128,
-   "pitch": "Where you start: a settlement of shacks and gardens beside the interstate, the ruins of Comet Junction just east.",
+   "hook": "",
+   "trade": "",
+   "pitch": "Where you start: a town of scrap shacks and gardens bolted together around an old motor court on the interstate.",
    "px": [
-    704,
-    712
+    860,
+    1024
    ]
   },
   {
-   "id": "comet_junction",
-   "name": "Comet Junction",
+   "id": "starlite_crossing",
+   "name": "Starlite Crossing",
    "type": "landmark",
    "pos": [
-    0.495,
-    0.452
+    0.475,
+    0.465
    ],
    "biome": "ruins",
    "faction": "Ghouls",
    "danger": 2,
    "size": 96,
-   "pitch": "A gutted crossroads town with the Orbit Diner and the Comet filling station; ghouls nest in the ruins.",
+   "hook": "",
+   "trade": "",
+   "pitch": "A gutted crossroads town just east of Patchwork, with the Orbit Diner and a filling station; ghouls nest in the ruins.",
    "px": [
-    792,
-    723
+    973,
+    952
    ]
   },
   {
-   "id": "halcyon_downtown",
-   "name": "New Halcyon - Downtown",
+   "id": "sterling_downtown",
+   "name": "Port Sterling - Downtown",
    "type": "city",
    "pos": [
-    0.735,
-    0.415
+    0.8,
+    0.62
    ],
    "biome": "ruins",
-   "faction": "Ghouls / Brotherhood of the Dial",
+   "faction": "Ghouls / the Signal cult",
    "danger": 4,
    "size": 160,
-   "pitch": "The bombed metropolis on the Kettle River: towers, barricaded avenues, City Hall and the Dial radio cult holding the Atlas Building.",
+   "hook": "",
+   "trade": "",
+   "pitch": "The bombed river city: towers, barricaded avenues, City Hall, and a radio cult holding the Atlas Building.",
    "px": [
-    1176,
-    664
+    1638,
+    1270
    ]
   },
   {
-   "id": "halcyon_docks",
-   "name": "Halcyon Docks",
+   "id": "sterling_waterfront",
+   "name": "Sterling Waterfront",
    "type": "district",
    "pos": [
-    0.705,
-    0.462
+    0.71,
+    0.705
    ],
    "biome": "ruins",
    "faction": "River traders",
    "danger": 3,
    "size": 128,
+   "hook": "",
+   "trade": "",
    "pitch": "Warehouses and rusting barges; river traders run a fortified market on a beached ferry.",
    "px": [
-    1128,
-    739
+    1454,
+    1444
    ]
   },
   {
-   "id": "halcyon_heights",
-   "name": "Halcyon Heights",
+   "id": "maple_grove",
+   "name": "Maple Grove",
    "type": "district",
    "pos": [
-    0.79,
-    0.37
+    0.89,
+    0.42
    ],
    "biome": "suburbs",
    "faction": "Scavengers",
    "danger": 2,
    "size": 128,
+   "hook": "",
+   "trade": "",
    "pitch": "Endless cul-de-sacs of picked-over houses; scavenger families and feral dogs.",
    "px": [
-    1264,
-    592
+    1823,
+    860
    ]
   },
   {
-   "id": "halcyon_general",
-   "name": "Halcyon General Hospital",
+   "id": "mercy_general",
+   "name": "Mercy General Hospital",
    "type": "dungeon",
    "pos": [
-    0.757,
-    0.445
+    0.86,
+    0.69
    ],
    "biome": "ruins",
    "faction": "Ghouls",
    "danger": 4,
    "size": 96,
+   "hook": "",
+   "trade": "",
    "pitch": "Eight storeys of ghouls; the pharmacy vault on the top floor is still sealed.",
    "px": [
-    1211,
-    712
+    1761,
+    1413
    ]
   },
   {
-   "id": "halcyon_stadium",
-   "name": "Halcyon Stadium",
-   "type": "landmark",
+   "id": "victory_stadium",
+   "name": "Victory Stadium",
+   "type": "hub",
    "pos": [
-    0.765,
-    0.398
+    0.76,
+    0.545
    ],
    "biome": "ruins",
-   "faction": "Raiders (Pit Kings)",
-   "danger": 3,
-   "size": 96,
-   "pitch": "Raiders run fight nights in the collapsed bowl; win and you're a legend, lose and you're dinner.",
+   "faction": "the Stadium Bosses",
+   "danger": 2,
+   "size": 192,
+   "hook": "stadium",
+   "trade": "entertainment, betting",
+   "pitch": "A loud town in the bleachers of the collapsed stadium; shacks fill the stands, the field is a market by day and fight nights pack the bowl. Win in the ring and you're a legend.",
    "px": [
-    1224,
-    637
+    1556,
+    1116
    ]
   },
   {
-   "id": "big_sky_mall",
-   "name": "Big Sky Mall",
-   "type": "dungeon",
+   "id": "atomic_plaza",
+   "name": "Atomic Plaza",
+   "type": "hub",
    "pos": [
-    0.808,
-    0.342
+    0.94,
+    0.5
    ],
    "biome": "suburbs",
-   "faction": "Raiders",
-   "danger": 3,
-   "size": 128,
-   "pitch": "The shopping mall with the run-down parking lot; raiders hold the department store, rats the food court.",
+   "faction": "the Plaza Merchants",
+   "danger": 1,
+   "size": 192,
+   "hook": "mall",
+   "trade": "everything (market town)",
+   "pitch": "A whole town living inside the giant mall: storefronts are homes and shops, the food court is the market, the department store is the council hall, and a wall of stacked cars rings the parking lot.",
    "px": [
-    1293,
-    547
+    1925,
+    1024
    ]
   },
   {
-   "id": "halcyon_railyard",
-   "name": "Halcyon Rail Yard",
+   "id": "union_railyard",
+   "name": "Union Rail Yard",
    "type": "landmark",
    "pos": [
-    0.7,
-    0.372
+    0.87,
+    0.81
    ],
    "biome": "industrial",
    "faction": "none",
    "danger": 2,
    "size": 96,
+   "hook": "",
+   "trade": "",
    "pitch": "Freight cars in rows; one locomotive still has fuel.",
    "px": [
-    1120,
-    595
+    1782,
+    1659
    ]
   },
   {
-   "id": "halcyon_airfield",
-   "name": "Halcyon Airfield",
+   "id": "sterling_airfield",
+   "name": "Sterling Municipal Airfield",
    "type": "landmark",
    "pos": [
-    0.825,
-    0.475
+    0.93,
+    0.91
    ],
    "biome": "plains",
    "faction": "Robots",
    "danger": 3,
    "size": 128,
-   "pitch": "Crashed bombers on a cracked runway, guarded by security robots that never got the stand-down order.",
+   "hook": "",
+   "trade": "",
+   "pitch": "Crashed bombers on a cracked runway, guarded by robots that never got the stand-down order.",
    "px": [
-    1320,
-    760
+    1905,
+    1864
    ]
   },
   {
-   "id": "millbrook",
-   "name": "Millbrook",
+   "id": "goldenrod",
+   "name": "Goldenrod",
    "type": "town",
    "pos": [
     0.4,
-    0.29
+    0.24
    ],
    "biome": "farmland",
    "faction": "Farmers' Grange",
    "danger": 1,
    "size": 128,
-   "pitch": "The breadbasket: a farming town on the river with a grain elevator, a mill and a weekly market.",
+   "hook": "",
+   "trade": "",
+   "pitch": "The breadbasket: a farming town with a grain elevator, a mill and a weekly market.",
    "px": [
-    640,
-    464
+    819,
+    492
    ]
   },
   {
-   "id": "cedar_falls",
-   "name": "Cedar Falls",
+   "id": "splinter_creek",
+   "name": "Splinter Creek",
    "type": "town",
    "pos": [
-    0.255,
-    0.155
+    0.25,
+    0.075
    ],
    "biome": "forest",
    "faction": "Loggers",
    "danger": 2,
    "size": 128,
-   "pitch": "A lumber town at the falls; the sawmill still runs on the water wheel.",
+   "hook": "",
+   "trade": "",
+   "pitch": "A lumber town on the creek; the sawmill still runs on the water wheel.",
    "px": [
-    408,
-    248
+    512,
+    154
    ]
   },
   {
-   "id": "prospect",
-   "name": "Prospect",
+   "id": "copperhead",
+   "name": "Copperhead",
    "type": "town",
    "pos": [
-    0.205,
-    0.545
+    0.17,
+    0.74
    ],
    "biome": "badlands",
    "faction": "Mine Company",
    "danger": 2,
    "size": 128,
-   "pitch": "A mining boomtown at the foot of the mountains; saloon, assay office, company scrip.",
+   "hook": "",
+   "trade": "",
+   "pitch": "A mining town in the southern hills; saloon, assay office, company scrip.",
    "px": [
-    328,
-    872
+    348,
+    1516
    ]
   },
   {
-   "id": "dustwater",
-   "name": "Dustwater",
+   "id": "wellspring",
+   "name": "Wellspring",
    "type": "town",
    "pos": [
-    0.505,
-    0.618
+    0.43,
+    0.76
    ],
    "biome": "desert",
-   "faction": "Water Barons",
-   "danger": 2,
+   "faction": "Townsfolk",
+   "danger": 1,
    "size": 128,
-   "pitch": "A desert town built around the last deep well; the Water Barons sell every drop.",
+   "hook": "",
+   "trade": "",
+   "pitch": "A plain crossroads town where the southern roads meet: a deep well, a general store, a saloon and the safest bed in the south.",
    "px": [
-    808,
-    989
+    881,
+    1556
    ]
   },
   {
-   "id": "lakeview",
-   "name": "Lakeview",
-   "type": "town",
+   "id": "clearwater",
+   "name": "Clearwater",
+   "type": "hub",
    "pos": [
-    0.79,
-    0.598
+    0.75,
+    0.1
    ],
    "biome": "lakeshore",
-   "faction": "Fishers",
+   "faction": "the Water Guild",
    "danger": 1,
-   "size": 96,
-   "pitch": "A lakeside resort town turned fishing village on the reservoir.",
+   "size": 192,
+   "hook": "lake",
+   "trade": "clean water",
+   "pitch": "Built around Lake Winona's old marina. Rows of solar stills, filter towers and cisterns turn lake water into the cleanest water in the Wastes; water caravans leave every morning and Clearwater's tokens are the closest thing to money.",
    "px": [
-    1264,
-    957
+    1536,
+    205
    ]
   },
   {
-   "id": "harmony_ridge",
-   "name": "Harmony Ridge",
+   "id": "sunbeam_commune",
+   "name": "Sunbeam Commune",
    "type": "settlement",
    "pos": [
-    0.885,
-    0.215
+    0.82,
+    0.22
    ],
    "biome": "hills",
    "faction": "Children of the Sun",
    "danger": 2,
    "size": 96,
+   "hook": "",
+   "trade": "",
    "pitch": "A commune on the hill that worships the bomb's light; friendly, a little too friendly.",
    "px": [
-    1416,
-    344
+    1679,
+    451
    ]
   },
   {
-   "id": "gallows_pass",
-   "name": "Gallows Pass",
+   "id": "hangmans_gap",
+   "name": "Hangman's Gap",
    "type": "settlement",
    "pos": [
-    0.115,
-    0.445
+    0.04,
+    0.47
    ],
    "biome": "mountains",
-   "faction": "Toll Raiders",
+   "faction": "Toll raiders",
    "danger": 3,
    "size": 96,
-   "pitch": "The only road through the mountains, and the raiders who charge for it.",
+   "hook": "",
+   "trade": "",
+   "pitch": "Where the interstate leaves the valley, and the raiders who charge for it.",
    "px": [
-    184,
-    712
+    82,
+    963
    ]
   },
   {
-   "id": "fort_liberty",
-   "name": "Fort Liberty",
+   "id": "fort_steadfast",
+   "name": "Fort Steadfast",
    "type": "town",
    "pos": [
-    0.305,
-    0.675
+    0.36,
+    0.93
    ],
    "biome": "desert",
-   "faction": "Liberty Remnant (army)",
+   "faction": "Steadfast Remnant (army)",
    "danger": 3,
    "size": 160,
-   "pitch": "A pre-war army base held by the descendants of its garrison; strict, well armed, recruiting.",
+   "hook": "",
+   "trade": "",
+   "pitch": "A pre-war army base held by the grandchildren of its garrison; strict, well armed, recruiting.",
    "px": [
-    488,
-    1080
+    737,
+    1905
    ]
   },
   {
-   "id": "st_agnes",
-   "name": "St. Agnes Mission",
+   "id": "our_lady_mission",
+   "name": "Our Lady of the Sands Mission",
    "type": "settlement",
    "pos": [
-    0.605,
+    0.31,
     0.3
    ],
    "biome": "plains",
-   "faction": "Sisters of St. Agnes",
+   "faction": "the Sisters",
    "danger": 1,
    "size": 64,
+   "hook": "",
+   "trade": "",
    "pitch": "Nuns run a clinic in an old adobe mission; they heal anyone who disarms at the gate.",
    "px": [
-    968,
-    480
+    635,
+    614
    ]
   },
   {
-   "id": "tumbleweed_stop",
-   "name": "Tumbleweed Truck Stop",
+   "id": "big_wheel_stop",
+   "name": "Big Wheel Truck Stop",
    "type": "settlement",
    "pos": [
-    0.615,
-    0.468
+    0.52,
+    0.39
    ],
    "biome": "plains",
    "faction": "Caravaneers",
    "danger": 1,
    "size": 64,
-   "pitch": "Caravans park their brahmin wagons by the old diesel pumps; best rumours in the basin.",
+   "hook": "",
+   "trade": "",
+   "pitch": "Caravans park their brahmin wagons by the old diesel pumps; the best rumours in the valley.",
    "px": [
-    984,
-    749
+    1065,
+    799
    ]
   },
   {
-   "id": "rustys_junkyard",
-   "name": "Rusty's Junkyard",
+   "id": "gus_salvage",
+   "name": "Gus's Salvage",
    "type": "settlement",
    "pos": [
-    0.548,
-    0.508
+    0.36,
+    0.41
    ],
    "biome": "plains",
-   "faction": "Rusty",
+   "faction": "Gus",
    "danger": 1,
    "size": 64,
-   "pitch": "Rusty buys and sells anything metal; his dogs keep the peace.",
+   "hook": "",
+   "trade": "",
+   "pitch": "Gus buys and sells anything metal; his dogs keep the peace.",
    "px": [
-    877,
-    813
+    737,
+    840
    ]
   },
   {
-   "id": "copper_kettle",
-   "name": "Copper Kettle Landing",
+   "id": "ferrymans_landing",
+   "name": "Ferryman's Landing",
    "type": "settlement",
    "pos": [
-    0.565,
-    0.365
+    0.59,
+    0.37
    ],
    "biome": "river",
    "faction": "River traders",
    "danger": 1,
    "size": 64,
-   "pitch": "A riverboat trading post on stilts; ferries cross here since the bridges fell.",
+   "hook": "",
+   "trade": "",
+   "pitch": "A trading post on stilts; ferries cross here since the bridges fell.",
    "px": [
-    904,
-    584
+    1208,
+    758
    ]
   },
   {
-   "id": "ranger_station",
-   "name": "Ranger Station 7",
+   "id": "lookout_station_3",
+   "name": "Lookout Station 3",
    "type": "settlement",
    "pos": [
-    0.455,
-    0.1
+    0.47,
+    0.06
    ],
    "biome": "forest",
-   "faction": "Pine Rangers",
+   "faction": "Rangers",
    "danger": 2,
    "size": 64,
-   "pitch": "Forest rangers who still patrol, still fight fires, still hand out maps.",
+   "hook": "",
+   "trade": "",
+   "pitch": "Rangers who still patrol the dead woods and hand out maps.",
    "px": [
-    728,
-    160
+    963,
+    123
    ]
   },
   {
-   "id": "sundial_ranch",
-   "name": "Sundial Ranch",
+   "id": "double_bar_ranch",
+   "name": "Double-Bar Ranch",
    "type": "settlement",
    "pos": [
-    0.355,
-    0.505
+    0.33,
+    0.66
    ],
    "biome": "plains",
    "faction": "Ranchers",
    "danger": 1,
    "size": 96,
-   "pitch": "A cattle ranch on the open range; always hiring hands to guard the herd from brutes.",
+   "hook": "",
+   "trade": "",
+   "pitch": "A cattle ranch on the open range, always hiring hands to guard the herd from brutes.",
    "px": [
-    568,
-    808
+    676,
+    1352
    ]
   },
   {
-   "id": "cottonwood_motel",
-   "name": "Cottonwood Motor Court",
+   "id": "bluebird_lodge",
+   "name": "Bluebird Motor Lodge",
    "type": "camp",
    "pos": [
-    0.318,
-    0.452
+    0.24,
+    0.57
    ],
    "biome": "plains",
    "faction": "Drifters",
    "danger": 2,
    "size": 64,
-   "pitch": "A neon-signed motel strip on the interstate; drifters rent rooms, nobody asks questions.",
+   "hook": "",
+   "trade": "",
+   "pitch": "A neon-signed motel on the interstate; drifters rent rooms, nobody asks questions.",
    "px": [
-    509,
-    723
+    492,
+    1167
    ]
   },
   {
-   "id": "thunder_mesa",
-   "name": "Thunder Mesa",
-   "type": "settlement",
-   "pos": [
-    0.585,
-    0.695
-   ],
-   "biome": "desert",
-   "faction": "Mesa Clans",
-   "danger": 2,
-   "size": 96,
-   "pitch": "Scavenger clans living in cliff dwellings cut into a mesa; they trade in salt and glass.",
-   "px": [
-    936,
-    1112
-   ]
-  },
-  {
-   "id": "hollister_dam",
-   "name": "Hollister Dam",
-   "type": "landmark",
-   "pos": [
-    0.86,
-    0.69
-   ],
-   "biome": "lakeshore",
-   "faction": "contested",
-   "danger": 3,
-   "size": 128,
-   "pitch": "The dam still makes power; whoever holds the turbine hall lights the basin.",
-   "px": [
-    1376,
-    1104
-   ]
-  },
-  {
-   "id": "the_glow",
-   "name": "The Glow",
+   "id": "buzzard_mesa",
+   "name": "Buzzard Mesa - the Grinder",
    "type": "dungeon",
    "pos": [
-    0.625,
-    0.595
+    0.51,
+    0.9
+   ],
+   "biome": "desert",
+   "faction": "Raiders (the Grinders)",
+   "danger": 4,
+   "size": 128,
+   "hook": "",
+   "trade": "",
+   "pitch": "The raiders' stronghold on top of a sheer mesa, decorated with what's left of their enemies; one switchback road up.",
+   "px": [
+    1044,
+    1843
+   ]
+  },
+  {
+   "id": "ridgeback_dam",
+   "name": "Ridgeback Dam",
+   "type": "hub",
+   "pos": [
+    0.66,
+    0.175
+   ],
+   "biome": "lakeshore",
+   "faction": "the Turbine Guild",
+   "danger": 2,
+   "size": 160,
+   "hook": "dam",
+   "trade": "electric power, batteries",
+   "pitch": "Engineers live inside the dam's galleries and keep two turbines spinning. They sell charged batteries and run power lines to anyone who pays, which makes them the richest people in the valley and the biggest target.",
+   "px": [
+    1352,
+    358
+   ]
+  },
+  {
+   "id": "hollow_sun",
+   "name": "The Hollow Sun",
+   "type": "dungeon",
+   "pos": [
+    0.3,
+    0.8
    ],
    "biome": "crater",
    "faction": "none",
    "danger": 5,
    "size": 96,
-   "pitch": "The bomb's crater, still glowing green; something valuable waits at the bottom for anyone who can survive it.",
+   "hook": "",
+   "trade": "",
+   "pitch": "The bomb's crater, still glowing; something valuable waits at the bottom for anyone who survives it.",
    "px": [
-    1000,
-    952
+    614,
+    1638
    ]
   },
   {
-   "id": "bright_flats",
-   "name": "Bright Flats",
-   "type": "landmark",
+   "id": "bonewhite_flats",
+   "name": "Bonewhite Flats",
+   "type": "hub",
    "pos": [
-    0.445,
-    0.695
+    0.12,
+    0.6
    ],
    "biome": "salt",
-   "faction": "none",
+   "faction": "the Salt Riders",
    "danger": 2,
-   "size": 128,
-   "pitch": "A blinding salt pan; rocket-car test track and the wreck of an atomic land-speed racer.",
+   "size": 160,
+   "hook": "salt flat",
+   "trade": "salt, preserved meat, racing",
+   "pitch": "Salt harvesters live in the hangars of an old rocket-car test track. They rake salt, cure meat for half the Wastes and race patched-up atomic cars on the flats every month.",
    "px": [
-    712,
-    1112
+    246,
+    1229
    ]
   },
   {
-   "id": "shelter_17",
-   "name": "Civil Defense Shelter No. 17",
+   "id": "bunker_echo",
+   "name": "Civil Defense Bunker Echo",
    "type": "dungeon",
    "pos": [
-    0.315,
-    0.35
+    0.3,
+    0.505
    ],
    "biome": "hills",
    "faction": "unknown",
    "danger": 3,
    "size": 96,
-   "pitch": "A sealed bomb shelter in the hills; the door opens for the first time in 80 years.",
+   "hook": "",
+   "trade": "",
+   "pitch": "A sealed bomb shelter next door to Patchwork; the door opens for the first time in 80 years.",
    "px": [
-    504,
-    560
+    614,
+    1034
    ]
   },
   {
-   "id": "kettle_point",
-   "name": "Kettle Point Nuclear Plant",
+   "id": "bright_hope_plant",
+   "name": "Bright Hope Power Station",
    "type": "dungeon",
    "pos": [
     0.66,
-    0.315
+    0.86
    ],
    "biome": "river",
    "faction": "Ghouls",
    "danger": 4,
    "size": 128,
+   "hook": "",
+   "trade": "",
    "pitch": "Cooling towers on the river; the reactor is cold, the ghouls inside are not.",
    "px": [
-    1056,
-    504
+    1352,
+    1761
    ]
   },
   {
-   "id": "starlight_drivein",
-   "name": "Starlight Drive-In",
+   "id": "moonbeam_drivein",
+   "name": "Moonbeam Drive-In",
    "type": "landmark",
    "pos": [
-    0.53,
-    0.405
+    0.52,
+    0.565
    ],
    "biome": "plains",
    "faction": "Raiders",
    "danger": 2,
    "size": 96,
-   "pitch": "Raiders project scratched reels on the giant screen on Saturday nights.",
+   "hook": "",
+   "trade": "",
+   "pitch": "Raiders show scratched reels on the giant screen on Saturday nights.",
    "px": [
-    848,
-    648
+    1065,
+    1157
    ]
   },
   {
-   "id": "silver_vein",
-   "name": "Silver Vein Mine",
+   "id": "deep_seven",
+   "name": "Deep Seven Mine",
    "type": "dungeon",
    "pos": [
-    0.145,
-    0.615
+    0.07,
+    0.83
    ],
    "biome": "mountains",
    "faction": "Mole rats",
    "danger": 3,
    "size": 96,
-   "pitch": "Deep shafts under the mountains; the miners dug too far.",
+   "hook": "",
+   "trade": "",
+   "pitch": "Deep shafts under the hills; the miners dug too far.",
    "px": [
-    232,
-    984
+    143,
+    1700
    ]
   },
   {
-   "id": "red_canyon",
-   "name": "Red Canyon - the Bonepile",
-   "type": "dungeon",
+   "id": "redwall",
+   "name": "Redwall",
+   "type": "hub",
    "pos": [
-    0.245,
-    0.62
+    0.21,
+    0.86
    ],
    "biome": "badlands",
-   "faction": "Raiders (Bonepile Gang)",
-   "danger": 4,
-   "size": 128,
-   "pitch": "The raiders' stronghold in a red sandstone canyon, decorated with what's left of their enemies.",
+   "faction": "the Redwall Families",
+   "danger": 1,
+   "size": 192,
+   "hook": "canyon",
+   "trade": "stone, salt, defence",
+   "pitch": "A town carved into both walls of Scorch Canyon: cliff homes, rope bridges, cargo lifts and hanging gardens watered by a spring at the bottom. The only way in is the lift, so nobody has ever taken it.",
    "px": [
-    392,
-    992
+    430,
+    1761
    ]
   },
   {
-   "id": "ironback_tunnel",
-   "name": "Ironback Tunnel",
+   "id": "devils_throat",
+   "name": "Devil's Throat Tunnel",
    "type": "dungeon",
    "pos": [
-    0.155,
-    0.325
+    0.1,
+    0.3
    ],
    "biome": "mountains",
    "faction": "Shellbacks",
    "danger": 3,
    "size": 96,
-   "pitch": "A two-mile rail tunnel through the mountains; derailed trains and shellback nests in the dark.",
+   "hook": "",
+   "trade": "",
+   "pitch": "A rail tunnel through the hills; derailed trains and shellback nests in the dark.",
    "px": [
-    248,
-    520
+    205,
+    614
    ]
   },
   {
-   "id": "kettle_bridge",
-   "name": "Kettle River Bridge",
+   "id": "founders_bridge",
+   "name": "Founders Bridge",
    "type": "landmark",
    "pos": [
-    0.665,
-    0.448
+    0.635,
+    0.54
    ],
    "biome": "river",
    "faction": "Toll raiders",
    "danger": 2,
    "size": 96,
-   "pitch": "The broken interstate bridge; a plank walkway across the gap and a toll gang at each end.",
+   "hook": "",
+   "trade": "",
+   "pitch": "The broken interstate bridge into the city; a plank walkway across the gap and a toll gang at each end.",
    "px": [
-    1064,
-    717
+    1300,
+    1106
    ]
   },
   {
-   "id": "blackwood_pen",
-   "name": "Blackwood Penitentiary",
-   "type": "dungeon",
+   "id": "iron_gate_pen",
+   "name": "Iron Gate",
+   "type": "hub",
    "pos": [
-    0.375,
-    0.185
+    0.56,
+    0.28
    ],
    "biome": "forest",
-   "faction": "Raiders (the Cons)",
-   "danger": 4,
-   "size": 128,
-   "pitch": "The prison where the inmates won; now a raider fortress with its own rules.",
+   "faction": "the Warden's Council",
+   "danger": 2,
+   "size": 192,
+   "hook": "prison",
+   "trade": "law, bounties, labour",
+   "pitch": "Guards' and inmates' grandchildren live together in the old penitentiary: cell blocks are apartments, the yard is a farm, the guard towers still watch. Strict laws, fair trials, and the best bounty board in the Wastes.",
    "px": [
-    600,
-    296
+    1147,
+    573
    ]
   },
   {
-   "id": "mount_vigil",
-   "name": "Mount Vigil Observatory",
+   "id": "starwatch",
+   "name": "Starwatch Observatory",
    "type": "landmark",
    "pos": [
-    0.075,
-    0.24
+    0.065,
+    0.09
    ],
    "biome": "mountains",
    "faction": "Stargazers",
    "danger": 2,
    "size": 64,
-   "pitch": "A domed observatory on the peak; two old astronomers still chart the satellites.",
+   "hook": "",
+   "trade": "",
+   "pitch": "A domed observatory on the highest hill; two old astronomers still chart the satellites.",
    "px": [
-    120,
-    384
+    133,
+    184
    ]
   },
   {
-   "id": "radio_kbsn",
-   "name": "Radio KBSN",
+   "id": "radio_kzap",
+   "name": "Radio KZAP",
    "type": "landmark",
    "pos": [
-    0.575,
-    0.215
+    0.47,
+    0.32
    ],
    "biome": "plains",
    "faction": "DJ Lucky Larry",
    "danger": 1,
    "size": 64,
-   "pitch": "The basin's only radio station; Lucky Larry plays records and reads the news you bring him.",
+   "hook": "",
+   "trade": "",
+   "pitch": "The valley's only radio station; Lucky Larry plays records and reads the news you bring him.",
    "px": [
-    920,
-    344
+    963,
+    655
    ]
   },
   {
-   "id": "black_gulch",
-   "name": "Black Gulch Refinery",
+   "id": "blackrock_refinery",
+   "name": "Blackrock Refinery",
    "type": "dungeon",
    "pos": [
-    0.705,
-    0.665
+    0.57,
+    0.76
    ],
    "biome": "desert",
    "faction": "Raiders / fuel cult",
    "danger": 4,
    "size": 128,
-   "pitch": "Oil derricks and a burning refinery; whoever runs it controls the basin's fuel.",
+   "hook": "",
+   "trade": "",
+   "pitch": "Oil tanks and a burning refinery on the river; whoever runs it controls the fuel.",
    "px": [
-    1128,
-    1064
+    1167,
+    1556
    ]
   },
   {
-   "id": "silo_delta9",
-   "name": "Missile Silo Delta-9",
+   "id": "launch_site_zulu",
+   "name": "Launch Site Zulu",
    "type": "dungeon",
    "pos": [
-    0.375,
-    0.6
+    0.15,
+    0.95
    ],
    "biome": "desert",
    "faction": "Robots",
    "danger": 5,
    "size": 96,
+   "hook": "",
+   "trade": "",
    "pitch": "One missile was never launched. The silo's robots are still waiting for orders.",
    "px": [
-    600,
-    960
+    307,
+    1946
    ]
   },
   {
-   "id": "starliner_wreck",
-   "name": "Wreck of the Starliner",
+   "id": "silver_comet_wreck",
+   "name": "Wreck of the Silver Comet",
    "type": "landmark",
    "pos": [
-    0.265,
-    0.485
+    0.27,
+    0.4
    ],
    "biome": "plains",
    "faction": "none",
    "danger": 2,
    "size": 64,
+   "hook": "",
+   "trade": "",
    "pitch": "A crashed atomic airliner in a field; the cargo hold was never found.",
    "px": [
-    424,
-    776
+    553,
+    819
    ]
   },
   {
-   "id": "paradise_lake",
-   "name": "Paradise Lake Summer Camp",
+   "id": "camp_whispering_pines",
+   "name": "Camp Whispering Pines",
    "type": "dungeon",
    "pos": [
-    0.555,
-    0.11
+    0.54,
+    0.18
    ],
    "biome": "forest",
    "faction": "unknown",
    "danger": 3,
    "size": 96,
-   "pitch": "Cabins on a forest lake; the campers never went home.",
+   "hook": "",
+   "trade": "",
+   "pitch": "Cabins in the dead woods; the campers never went home.",
    "px": [
-    888,
-    176
+    1106,
+    369
    ]
   },
   {
-   "id": "whitestone_quarry",
-   "name": "Whitestone Quarry",
+   "id": "granite_bowl",
+   "name": "Granite Bowl Quarry",
    "type": "landmark",
    "pos": [
-    0.215,
-    0.39
+    0.19,
+    0.36
    ],
    "biome": "hills",
    "faction": "Scavengers",
    "danger": 2,
    "size": 96,
+   "hook": "",
+   "trade": "",
    "pitch": "A flooded quarry with rusting machinery; good stone, bad water.",
    "px": [
-    344,
-    624
+    389,
+    737
    ]
   },
   {
-   "id": "fire_lookout",
-   "name": "Pinewood Fire Lookout",
+   "id": "owls_perch",
+   "name": "Owl's Perch Tower",
    "type": "landmark",
    "pos": [
-    0.665,
-    0.13
+    0.35,
+    0.14
    ],
    "biome": "forest",
    "faction": "Hermit",
    "danger": 1,
    "size": 64,
-   "pitch": "A lookout tower above the trees; the hermit inside sees everything that moves in the forest.",
+   "hook": "",
+   "trade": "",
+   "pitch": "A fire tower above the dead trees; the hermit inside sees everything that moves.",
    "px": [
-    1064,
-    208
+    717,
+    287
    ]
   },
   {
-   "id": "little_eden",
-   "name": "Little Eden",
+   "id": "hushwood",
+   "name": "Hushwood",
    "type": "landmark",
    "pos": [
-    0.095,
-    0.52
+    0.14,
+    0.17
    ],
    "biome": "mountains",
    "faction": "none",
    "danger": 3,
    "size": 96,
-   "pitch": "A ghost town in a mountain hollow; the church bell still rings at midnight.",
+   "hook": "",
+   "trade": "",
+   "pitch": "A ghost town in a hollow; the church bell still rings at midnight.",
    "px": [
-    152,
-    832
+    287,
+    348
    ]
   },
   {
-   "id": "helios_labs",
-   "name": "Helios Laboratories",
+   "id": "prometheus_research",
+   "name": "Prometheus Research Center",
    "type": "dungeon",
    "pos": [
-    0.915,
-    0.31
+    0.94,
+    0.28
    ],
    "biome": "hills",
    "faction": "Robots / scientists",
    "danger": 4,
    "size": 128,
+   "hook": "",
+   "trade": "",
    "pitch": "A pre-war research campus in the eastern hills; the experiments got out.",
    "px": [
-    1464,
-    496
+    1925,
+    573
    ]
   },
   {
-   "id": "sawtooth_camp",
-   "name": "Sawtooth Raider Camp",
+   "id": "rattlebone_camp",
+   "name": "Rattlebone Camp",
    "type": "camp",
    "pos": [
-    0.47,
-    0.545
+    0.45,
+    0.585
    ],
    "biome": "plains",
    "faction": "Raiders",
    "danger": 3,
    "size": 64,
-   "pitch": "A raider camp on the plateau south of Haven Flats; they raid the interstate.",
+   "hook": "",
+   "trade": "",
+   "pitch": "A raider camp south of Patchwork that preys on the interstate.",
    "px": [
-    752,
-    872
+    922,
+    1198
+   ]
+  },
+  {
+   "id": "greenmarsh",
+   "name": "Greenmarsh",
+   "type": "hub",
+   "pos": [
+    0.66,
+    0.945
+   ],
+   "biome": "wetland",
+   "faction": "the Marsh Co-op",
+   "danger": 1,
+   "size": 192,
+   "hook": "wetlands",
+   "trade": "food (rice, fish, cranberries)",
+   "pitch": "Stilt houses and boardwalks over the river marshes. The Co-op floods paddies, farms fish ponds and cranberry bogs, and feeds more people than anywhere else in the Wastes. Watch for gulpers in the reeds.",
+   "px": [
+    1352,
+    1935
+   ]
+  },
+  {
+   "id": "rimtown",
+   "name": "Rimtown",
+   "type": "hub",
+   "pos": [
+    0.345,
+    0.775
+   ],
+   "biome": "crater",
+   "faction": "Ghoul glassworkers",
+   "danger": 2,
+   "size": 160,
+   "hook": "crater rim",
+   "trade": "glowing glass, lamps",
+   "pitch": "Ghouls who don't mind the radiation live on the rim of the Hollow Sun and dig the fused glowing glass out of the crater; their glass lamps light homes across the Wastes.",
+   "px": [
+    707,
+    1587
    ]
   }
  ],
- "routes": [
+ "roads": [
+  {
+   "kind": "track",
+   "path": [
+    [
+     0.42,
+     0.5
+    ],
+    [
+     0.52,
+     0.565
+    ]
+   ]
+  },
+  {
+   "kind": "track",
+   "path": [
+    [
+     0.3,
+     0.505
+    ],
+    [
+     0.27,
+     0.4
+    ]
+   ]
+  },
+  {
+   "kind": "track",
+   "path": [
+    [
+     0.04,
+     0.47
+    ],
+    [
+     0.12,
+     0.6
+    ]
+   ]
+  },
+  {
+   "kind": "track",
+   "path": [
+    [
+     0.33,
+     0.66
+    ],
+    [
+     0.345,
+     0.775
+    ]
+   ]
+  },
+  {
+   "kind": "track",
+   "path": [
+    [
+     0.345,
+     0.775
+    ],
+    [
+     0.3,
+     0.8
+    ]
+   ]
+  },
+  {
+   "kind": "road",
+   "path": [
+    [
+     0.4012,
+     0.2416
+    ],
+    [
+     0.373,
+     0.2575
+    ],
+    [
+     0.3463,
+     0.2762
+    ],
+    [
+     0.3215,
+     0.2937
+    ],
+    [
+     0.292,
+     0.3097
+    ],
+    [
+     0.263,
+     0.3236
+    ],
+    [
+     0.2377,
+     0.336
+    ],
+    [
+     0.2112,
+     0.3485
+    ],
+    [
+     0.19,
+     0.36
+    ]
+   ]
+  },
+  {
+   "kind": "road",
+   "path": [
+    [
+     0.3969,
+     0.237
+    ],
+    [
+     0.4266,
+     0.2273
+    ],
+    [
+     0.4531,
+     0.2163
+    ],
+    [
+     0.4825,
+     0.2065
+    ],
+    [
+     0.5111,
+     0.1914
+    ],
+    [
+     0.5404,
+     0.1811
+    ],
+    [
+     0.5681,
+     0.1785
+    ],
+    [
+     0.6008,
+     0.1773
+    ],
+    [
+     0.6291,
+     0.1766
+    ],
+    [
+     0.6578,
+     0.1726
+    ],
+    [
+     0.6853,
+     0.1555
+    ],
+    [
+     0.7086,
+     0.1349
+    ],
+    [
+     0.734,
+     0.1123
+    ],
+    [
+     0.75,
+     0.1
+    ]
+   ]
+  },
+  {
+   "kind": "road",
+   "path": [
+    [
+     0.2504,
+     0.0738
+    ],
+    [
+     0.2256,
+     0.0958
+    ],
+    [
+     0.2036,
+     0.1148
+    ],
+    [
+     0.1789,
+     0.136
+    ],
+    [
+     0.1561,
+     0.1551
+    ],
+    [
+     0.1331,
+     0.1612
+    ],
+    [
+     0.1099,
+     0.1391
+    ],
+    [
+     0.0852,
+     0.1132
+    ],
+    [
+     0.065,
+     0.09
+    ],
+    [
+     0.065,
+     0.09
+    ]
+   ]
+  },
+  {
+   "kind": "road",
+   "path": [
+    [
+     0.2503,
+     0.0733
+    ],
+    [
+     0.2774,
+     0.093
+    ],
+    [
+     0.3047,
+     0.1113
+    ],
+    [
+     0.333,
+     0.1288
+    ],
+    [
+     0.35,
+     0.14
+    ]
+   ]
+  },
+  {
+   "kind": "road",
+   "path": [
+    [
+     0.3561,
+     0.9269
+    ],
+    [
+     0.3546,
+     0.9002
+    ],
+    [
+     0.353,
+     0.87
+    ],
+    [
+     0.3496,
+     0.8392
+    ],
+    [
+     0.346,
+     0.8103
+    ],
+    [
+     0.3442,
+     0.781
+    ],
+    [
+     0.3399,
+     0.7514
+    ],
+    [
+     0.3363,
+     0.7186
+    ],
+    [
+     0.3343,
+     0.6916
+    ],
+    [
+     0.3281,
+     0.6611
+    ],
+    [
+     0.3071,
+     0.6381
+    ],
+    [
+     0.2862,
+     0.6151
+    ],
+    [
+     0.2625,
+     0.5932
+    ],
+    [
+     0.24,
+     0.57
+    ],
+    [
+     0.24,
+     0.57
+    ]
+   ]
+  },
+  {
+   "kind": "road",
+   "path": [
+    [
+     0.3566,
+     0.9277
+    ],
+    [
+     0.3298,
+     0.9338
+    ],
+    [
+     0.3009,
+     0.9347
+    ],
+    [
+     0.2707,
+     0.9386
+    ],
+    [
+     0.2398,
+     0.9383
+    ],
+    [
+     0.208,
+     0.9432
+    ],
+    [
+     0.18,
+     0.9485
+    ],
+    [
+     0.15,
+     0.95
+    ],
+    [
+     0.15,
+     0.95
+    ]
+   ]
+  },
+  {
+   "kind": "road",
+   "path": [
+    [
+     0.1706,
+     0.7411
+    ],
+    [
+     0.1818,
+     0.7704
+    ],
+    [
+     0.1909,
+     0.8008
+    ],
+    [
+     0.2002,
+     0.8293
+    ],
+    [
+     0.2047,
+     0.8548
+    ],
+    [
+     0.1792,
+     0.8538
+    ],
+    [
+     0.1478,
+     0.8463
+    ],
+    [
+     0.1177,
+     0.8402
+    ],
+    [
+     0.0885,
+     0.8334
+    ],
+    [
+     0.07,
+     0.83
+    ]
+   ]
+  },
+  {
+   "kind": "road",
+   "path": [
+    [
+     0.5602,
+     0.2807
+    ],
+    [
+     0.5317,
+     0.2922
+    ],
+    [
+     0.4996,
+     0.3061
+    ],
+    [
+     0.47,
+     0.32
+    ],
+    [
+     0.47,
+     0.32
+    ]
+   ]
+  },
+  {
+   "kind": "road",
+   "path": [
+    [
+     0.9404,
+     0.282
+    ],
+    [
+     0.9296,
+     0.3125
+    ],
+    [
+     0.9197,
+     0.3397
+    ],
+    [
+     0.9082,
+     0.3688
+    ],
+    [
+     0.8949,
+     0.398
+    ],
+    [
+     0.89,
+     0.42
+    ]
+   ]
+  },
+  {
+   "kind": "road",
+   "path": [
+    [
+     0.93,
+     0.91
+    ],
+    [
+     0.93,
+     0.88
+    ],
+    [
+     0.93,
+     0.85
+    ],
+    [
+     0.93,
+     0.82
+    ],
+    [
+     0.93,
+     0.79
+    ],
+    [
+     0.93,
+     0.78
+    ]
+   ]
+  },
+  {
+   "kind": "road",
+   "path": [
+    [
+     0.6586,
+     0.8639
+    ],
+    [
+     0.6591,
+     0.8938
+    ],
+    [
+     0.6601,
+     0.9251
+    ],
+    [
+     0.6491,
+     0.941
+    ],
+    [
+     0.6189,
+     0.9344
+    ],
+    [
+     0.5881,
+     0.9263
+    ],
+    [
+     0.5599,
+     0.9161
+    ],
+    [
+     0.5307,
+     0.9062
+    ],
+    [
+     0.51,
+     0.9
+    ]
+   ]
+  },
+  {
+   "kind": "road",
+   "path": [
+    [
+     0.6615,
+     0.9417
+    ],
+    [
+     0.6491,
+     0.9772
+    ],
+    [
+     0.64,
+     1.0
+    ]
+   ]
+  },
+  {
+   "kind": "highway",
+   "path": [
+    [
+     0.0037,
+     0.2971
+    ],
+    [
+     0.0306,
+     0.2986
+    ],
+    [
+     0.062,
+     0.301
+    ],
+    [
+     0.0913,
+     0.3
+    ],
+    [
+     0.1206,
+     0.313
+    ],
+    [
+     0.1451,
+     0.3321
+    ],
+    [
+     0.1717,
+     0.3488
+    ],
+    [
+     0.1982,
+     0.3659
+    ],
+    [
+     0.2304,
+     0.3801
+    ],
+    [
+     0.2597,
+     0.395
+    ],
+    [
+     0.2891,
+     0.4037
+    ],
+    [
+     0.3213,
+     0.4041
+    ],
+    [
+     0.3494,
+     0.407
+    ],
+    [
+     0.3805,
+     0.4063
+    ],
+    [
+     0.4118,
+     0.404
+    ],
+    [
+     0.4417,
+     0.4011
+    ],
+    [
+     0.4709,
+     0.3978
+    ],
+    [
+     0.4988,
+     0.3927
+    ],
+    [
+     0.5281,
+     0.3869
+    ],
+    [
+     0.5598,
+     0.3761
+    ],
+    [
+     0.5888,
+     0.375
+    ],
+    [
+     0.6125,
+     0.3912
+    ],
+    [
+     0.6396,
+     0.4094
+    ],
+    [
+     0.6702,
+     0.4234
+    ],
+    [
+     0.7,
+     0.44
+    ],
+    [
+     0.7,
+     0.44
+    ]
+   ]
+  },
+  {
+   "kind": "highway",
+   "path": [
+    [
+     0.4434,
+     0.0036
+    ],
+    [
+     0.4547,
+     0.0285
+    ],
+    [
+     0.4621,
+     0.0568
+    ],
+    [
+     0.4448,
+     0.0766
+    ],
+    [
+     0.4208,
+     0.094
+    ],
+    [
+     0.3928,
+     0.1109
+    ],
+    [
+     0.3674,
+     0.1272
+    ],
+    [
+     0.3548,
+     0.1476
+    ],
+    [
+     0.3673,
+     0.176
+    ],
+    [
+     0.3823,
+     0.2028
+    ],
+    [
+     0.3965,
+     0.2326
+    ],
+    [
+     0.4117,
+     0.258
+    ],
+    [
+     0.436,
+     0.283
+    ],
+    [
+     0.4572,
+     0.3029
+    ],
+    [
+     0.4765,
+     0.3281
+    ],
+    [
+     0.4948,
+     0.3548
+    ],
+    [
+     0.514,
+     0.3818
+    ],
+    [
+     0.52,
+     0.39
+    ]
+   ]
+  },
+  {
+   "kind": "highway",
+   "path": [
+    [
+     0.4217,
+     0.5027
+    ],
+    [
+     0.4277,
+     0.5303
+    ],
+    [
+     0.4409,
+     0.5579
+    ],
+    [
+     0.4482,
+     0.5869
+    ],
+    [
+     0.4462,
+     0.6154
+    ],
+    [
+     0.4433,
+     0.6479
+    ],
+    [
+     0.4398,
+     0.6788
+    ],
+    [
+     0.4364,
+     0.7093
+    ],
+    [
+     0.4324,
+     0.7389
+    ],
+    [
+     0.4362,
+     0.7697
+    ],
+    [
+     0.4503,
+     0.7951
+    ],
+    [
+     0.465,
+     0.8206
+    ],
+    [
+     0.4802,
+     0.8457
+    ],
+    [
+     0.4941,
+     0.8759
+    ],
+    [
+     0.5089,
+     0.9003
+    ],
+    [
+     0.5225,
+     0.9294
+    ],
+    [
+     0.5343,
+     0.9602
+    ],
+    [
+     0.5462,
+     0.9898
+    ],
+    [
+     0.55,
+     1.0
+    ]
+   ]
+  },
+  {
+   "kind": "highway",
+   "path": [
+    [
+     0.719,
+     0.8034
+    ],
+    [
+     0.6967,
+     0.8235
+    ],
+    [
+     0.6746,
+     0.8454
+    ],
+    [
+     0.6542,
+     0.8501
+    ],
+    [
+     0.6318,
+     0.8286
+    ],
+    [
+     0.6107,
+     0.8046
+    ],
+    [
+     0.5895,
+     0.7824
+    ],
+    [
+     0.5677,
+     0.7636
+    ],
+    [
+     0.5362,
+     0.76
+    ],
+    [
+     0.5053,
+     0.7589
+    ],
+    [
+     0.4719,
+     0.7598
+    ],
+    [
+     0.4411,
+     0.7596
+    ],
+    [
+     0.4088,
+     0.7633
+    ],
+    [
+     0.3761,
+     0.7712
+    ],
+    [
+     0.345,
+     0.7738
+    ],
+    [
+     0.3129,
+     0.7683
+    ],
+    [
+     0.2814,
+     0.7642
+    ],
+    [
+     0.2523,
+     0.7564
+    ],
+    [
+     0.2208,
+     0.7496
+    ],
+    [
+     0.191,
+     0.7441
+    ],
+    [
+     0.1676,
+     0.7284
+    ],
+    [
+     0.1549,
+     0.7002
+    ],
+    [
+     0.1446,
+     0.6694
+    ],
+    [
+     0.133,
+     0.6406
+    ],
+    [
+     0.1223,
+     0.6111
+    ],
+    [
+     0.0982,
+     0.6018
+    ],
+    [
+     0.071,
+     0.6092
+    ],
+    [
+     0.0406,
+     0.6158
+    ],
+    [
+     0.0112,
+     0.6185
+    ],
+    [
+     0.0,
+     0.62
+    ]
+   ]
+  },
+  {
+   "kind": "highway",
+   "path": [
+    [
+     0.822,
+     0.3976
+    ],
+    [
+     0.8201,
+     0.3697
+    ],
+    [
+     0.8227,
+     0.3407
+    ],
+    [
+     0.8218,
+     0.3092
+    ],
+    [
+     0.819,
+     0.2826
+    ],
+    [
+     0.8175,
+     0.2497
+    ],
+    [
+     0.819,
+     0.22
+    ],
+    [
+     0.8055,
+     0.1911
+    ],
+    [
+     0.7861,
+     0.1643
+    ],
+    [
+     0.7725,
+     0.136
+    ],
+    [
+     0.7567,
+     0.1089
+    ],
+    [
+     0.7575,
+     0.0829
+    ],
+    [
+     0.7737,
+     0.0555
+    ],
+    [
+     0.7851,
+     0.0277
+    ],
+    [
+     0.8,
+     0.0
+    ],
+    [
+     0.8,
+     0.0
+    ]
+   ]
+  },
+  {
+   "kind": "highway",
+   "path": [
+    [
+     0.95,
+     0.47
+    ],
+    [
+     0.9462,
+     0.4953
+    ],
+    [
+     0.97,
+     0.5
+    ],
+    [
+     1.0,
+     0.5
+    ],
+    [
+     1.0,
+     0.5
+    ]
+   ]
+  },
   {
    "kind": "interstate",
    "path": [
     [
-     0,
-     717
+     0.7,
+     0.44
     ],
     [
-     20,
-     716
+     0.73,
+     0.43
     ],
     [
-     41,
-     715
+     0.76,
+     0.42
     ],
     [
-     62,
-     715
+     0.79,
+     0.41
     ],
     [
-     83,
-     715
+     0.8197,
+     0.4039
     ],
     [
-     103,
-     715
+     0.8479,
+     0.415
     ],
     [
-     123,
-     714
+     0.8757,
+     0.43
     ],
     [
-     143,
-     713
+     0.9036,
+     0.445
     ],
     [
-     164,
-     713
+     0.9313,
+     0.4601
     ],
     [
-     184,
-     713
+     0.9503,
+     0.4806
     ],
     [
-     204,
-     715
+     0.9553,
+     0.51
     ],
     [
-     224,
-     717
+     0.9593,
+     0.54
     ],
     [
-     243,
-     718
+     0.9633,
+     0.57
     ],
     [
-     262,
-     721
+     0.9673,
+     0.6
     ],
     [
-     282,
-     725
+     0.967,
+     0.63
     ],
     [
-     301,
-     727
+     0.96,
+     0.66
     ],
     [
-     320,
-     727
+     0.9525,
+     0.69
     ],
     [
-     341,
-     727
+     0.945,
+     0.72
     ],
     [
-     363,
-     727
+     0.9375,
+     0.75
     ],
     [
-     383,
-     727
+     0.9269,
+     0.7777
     ],
     [
-     403,
-     726
+     0.9025,
+     0.795
     ],
     [
-     425,
-     725
+     0.875,
+     0.81
     ],
     [
-     446,
-     725
+     0.8475,
+     0.825
     ],
     [
-     466,
-     725
+     0.8196,
+     0.8358
     ],
     [
-     487,
-     724
+     0.79,
+     0.828
     ],
     [
-     508,
-     723
+     0.76,
+     0.816
     ],
     [
-     528,
-     722
+     0.731,
+     0.8033
     ],
     [
-     547,
-     722
+     0.7168,
+     0.7799
     ],
     [
-     567,
-     720
+     0.7117,
+     0.75
     ],
     [
-     588,
-     719
+     0.7067,
+     0.72
     ],
     [
-     608,
-     718
+     0.7017,
+     0.69
     ],
     [
-     628,
-     717
+     0.6967,
+     0.66
     ],
     [
-     646,
-     715
+     0.6919,
+     0.63
     ],
     [
-     665,
-     714
+     0.6911,
+     0.6
     ],
     [
-     685,
-     713
+     0.6928,
+     0.57
     ],
     [
-     705,
-     713
+     0.6944,
+     0.54
     ],
     [
-     726,
-     714
+     0.6961,
+     0.51
     ],
     [
-     748,
-     717
+     0.6978,
+     0.48
     ],
     [
-     771,
-     721
+     0.6994,
+     0.45
     ],
     [
-     792,
-     724
-    ],
-    [
-     812,
-     726
-    ],
-    [
-     831,
-     728
-    ],
-    [
-     851,
-     731
-    ],
-    [
-     871,
-     734
-    ],
-    [
-     890,
-     737
-    ],
-    [
-     909,
-     739
-    ],
-    [
-     927,
-     742
-    ],
-    [
-     947,
-     744
-    ],
-    [
-     966,
-     746
-    ],
-    [
-     984,
-     746
-    ],
-    [
-     1004,
-     742
-    ],
-    [
-     1023,
-     734
-    ],
-    [
-     1043,
-     725
-    ],
-    [
-     1064,
-     720
-    ],
-    [
-     1086,
-     723
-    ],
-    [
-     1106,
-     732
-    ],
-    [
-     1128,
-     737
-    ],
-    [
-     1151,
-     737
-    ],
-    [
-     1172,
-     735
-    ],
-    [
-     1194,
-     734
-    ],
-    [
-     1215,
-     733
-    ],
-    [
-     1236,
-     732
-    ],
-    [
-     1257,
-     730
-    ],
-    [
-     1279,
-     732
-    ],
-    [
-     1299,
-     743
-    ],
-    [
-     1319,
-     755
-    ],
-    [
-     1339,
-     759
-    ],
-    [
-     1359,
-     759
-    ],
-    [
-     1379,
-     758
-    ],
-    [
-     1399,
-     756
-    ],
-    [
-     1419,
-     756
-    ],
-    [
-     1438,
-     757
-    ],
-    [
-     1459,
-     757
-    ],
-    [
-     1481,
-     756
-    ],
-    [
-     1502,
-     755
-    ],
-    [
-     1521,
-     755
-    ],
-    [
-     1540,
-     755
-    ],
-    [
-     1560,
-     753
-    ],
-    [
-     1580,
-     753
-    ],
-    [
-     1600,
-     752
+     0.7,
+     0.44
     ]
    ]
   },
   {
-   "kind": "highway",
+   "kind": "interstate",
    "path": [
     [
-     896,
-     0
+     -0.0027,
+     0.4815
     ],
     [
-     898,
-     19
+     0.0298,
+     0.4733
     ],
     [
-     899,
-     40
+     0.0579,
+     0.4769
     ],
     [
-     899,
-     60
+     0.0868,
+     0.4923
     ],
     [
-     899,
-     78
+     0.1127,
+     0.5052
     ],
     [
-     902,
-     97
+     0.1385,
+     0.5215
     ],
     [
-     904,
-     118
+     0.1671,
+     0.5319
     ],
     [
-     903,
-     139
+     0.197,
+     0.5481
     ],
     [
-     905,
-     160
+     0.2222,
+     0.561
     ],
     [
-     906,
-     180
+     0.2483,
+     0.5601
     ],
     [
-     907,
-     200
+     0.2701,
+     0.5371
     ],
     [
-     910,
-     221
+     0.2925,
+     0.5153
     ],
     [
-     909,
-     240
+     0.3187,
+     0.5046
     ],
     [
-     909,
-     260
+     0.3485,
+     0.5029
     ],
     [
-     912,
-     281
+     0.3814,
+     0.5033
     ],
     [
-     915,
-     302
+     0.4119,
+     0.501
     ],
     [
-     917,
-     323
+     0.4388,
+     0.4874
     ],
     [
-     921,
-     344
+     0.4664,
+     0.4705
     ],
     [
-     928,
-     363
+     0.4934,
+     0.4737
     ],
     [
-     936,
-     382
+     0.5219,
+     0.4888
     ],
     [
-     943,
-     403
+     0.5509,
+     0.5009
     ],
     [
-     947,
-     422
+     0.5799,
+     0.5126
     ],
     [
-     955,
-     442
+     0.607,
+     0.5272
     ],
     [
-     963,
-     461
+     0.636,
+     0.5405
     ],
     [
-     966,
-     481
+     0.6669,
+     0.5505
     ],
     [
-     967,
-     503
-    ],
-    [
-     967,
-     525
-    ],
-    [
-     964,
-     545
-    ],
-    [
-     961,
-     564
-    ],
-    [
-     961,
-     586
-    ],
-    [
-     962,
-     608
-    ],
-    [
-     964,
-     628
-    ],
-    [
-     967,
-     649
-    ],
-    [
-     970,
-     670
-    ],
-    [
-     974,
-     687
-    ],
-    [
-     977,
-     706
-    ],
-    [
-     979,
-     728
-    ],
-    [
-     978,
-     746
-    ],
-    [
-     966,
-     760
-    ],
-    [
-     949,
-     772
-    ],
-    [
-     933,
-     782
-    ],
-    [
-     915,
-     791
-    ],
-    [
-     896,
-     803
-    ],
-    [
-     881,
-     816
-    ],
-    [
-     877,
-     831
-    ],
-    [
-     878,
-     850
-    ],
-    [
-     879,
-     872
-    ],
-    [
-     877,
-     892
-    ],
-    [
-     875,
-     910
-    ],
-    [
-     868,
-     928
-    ],
-    [
-     854,
-     944
-    ],
-    [
-     839,
-     957
-    ],
-    [
-     824,
-     973
-    ],
-    [
-     816,
-     989
-    ],
-    [
-     823,
-     1003
-    ],
-    [
-     836,
-     1015
-    ],
-    [
-     847,
-     1029
-    ],
-    [
-     863,
-     1044
-    ],
-    [
-     881,
-     1060
-    ],
-    [
-     896,
-     1074
-    ],
-    [
-     908,
-     1086
-    ],
-    [
-     922,
-     1098
-    ],
-    [
-     935,
-     1113
-    ],
-    [
-     942,
-     1133
-    ],
-    [
-     946,
-     1155
-    ],
-    [
-     952,
-     1176
-    ],
-    [
-     960,
-     1200
-    ]
-   ]
-  },
-  {
-   "kind": "highway",
-   "path": [
-    [
-     704,
-     712
-    ],
-    [
-     687,
-     724
-    ],
-    [
-     671,
-     736
-    ],
-    [
-     655,
-     748
-    ],
-    [
-     637,
-     759
-    ],
-    [
-     620,
-     770
-    ],
-    [
-     602,
-     783
-    ],
-    [
-     585,
-     797
-    ],
-    [
-     569,
-     809
-    ],
-    [
-     554,
-     821
-    ],
-    [
-     540,
-     834
-    ],
-    [
-     529,
-     851
-    ],
-    [
-     517,
-     869
-    ],
-    [
-     505,
-     883
-    ],
-    [
-     492,
-     896
-    ],
-    [
-     483,
-     913
-    ],
-    [
-     481,
-     934
-    ],
-    [
-     484,
-     954
-    ],
-    [
-     486,
-     977
-    ],
-    [
-     487,
-     1000
-    ],
-    [
-     487,
-     1021
-    ],
-    [
-     487,
-     1041
-    ],
-    [
-     488,
-     1059
-    ],
-    [
-     487,
-     1079
-    ],
-    [
-     484,
-     1101
-    ],
-    [
-     480,
-     1123
-    ],
-    [
-     476,
-     1144
-    ],
-    [
-     472,
-     1163
-    ],
-    [
-     469,
-     1181
-    ],
-    [
-     464,
-     1200
-    ]
-   ]
-  },
-  {
-   "kind": "highway",
-   "path": [
-    [
-     1176,
-     664
-    ],
-    [
-     1184,
-     683
-    ],
-    [
-     1191,
-     702
-    ],
-    [
-     1197,
-     722
-    ],
-    [
-     1206,
-     741
-    ],
-    [
-     1218,
-     760
-    ],
-    [
-     1226,
-     780
-    ],
-    [
-     1232,
-     801
-    ],
-    [
-     1236,
-     821
-    ],
-    [
-     1239,
-     839
-    ],
-    [
-     1243,
-     856
-    ],
-    [
-     1246,
-     876
-    ],
-    [
-     1250,
-     896
-    ],
-    [
-     1256,
-     917
-    ],
-    [
-     1261,
-     939
-    ],
-    [
-     1266,
-     957
-    ],
-    [
-     1276,
-     975
-    ],
-    [
-     1290,
-     991
-    ],
-    [
-     1302,
-     1004
-    ],
-    [
-     1314,
-     1019
-    ],
-    [
-     1328,
-     1037
-    ],
-    [
-     1341,
-     1053
-    ],
-    [
-     1351,
-     1070
-    ],
-    [
-     1363,
-     1088
-    ],
-    [
-     1376,
-     1105
-    ],
-    [
-     1388,
-     1123
-    ],
-    [
-     1400,
-     1138
-    ],
-    [
-     1411,
-     1152
-    ],
-    [
-     1422,
-     1170
-    ],
-    [
-     1432,
-     1186
-    ],
-    [
-     1440,
-     1200
-    ]
-   ]
-  },
-  {
-   "kind": "highway",
-   "path": [
-    [
-     1264,
-     592
-    ],
-    [
-     1273,
-     575
-    ],
-    [
-     1284,
-     559
-    ],
-    [
-     1296,
-     543
-    ],
-    [
-     1307,
-     524
-    ],
-    [
-     1315,
-     506
-    ],
-    [
-     1322,
-     491
-    ],
-    [
-     1333,
-     479
-    ],
-    [
-     1347,
-     462
-    ],
-    [
-     1358,
-     443
-    ],
-    [
-     1366,
-     427
-    ],
-    [
-     1377,
-     411
-    ],
-    [
-     1388,
-     393
-    ],
-    [
-     1397,
-     377
-    ],
-    [
-     1406,
-     360
-    ],
-    [
-     1419,
-     347
-    ],
-    [
-     1435,
-     339
-    ],
-    [
-     1454,
-     333
-    ],
-    [
-     1475,
-     328
-    ],
-    [
-     1493,
-     324
-    ],
-    [
-     1510,
-     316
-    ],
-    [
-     1526,
-     309
-    ],
-    [
-     1544,
-     303
-    ],
-    [
-     1563,
-     297
-    ],
-    [
-     1581,
-     293
-    ],
-    [
-     1600,
-     288
-    ]
-   ]
-  },
-  {
-   "kind": "road",
-   "path": [
-    [
-     704,
-     712
-    ],
-    [
-     701,
-     696
-    ],
-    [
-     694,
-     676
-    ],
-    [
-     686,
-     654
-    ],
-    [
-     685,
-     632
-    ],
-    [
-     681,
-     611
-    ],
-    [
-     673,
-     591
-    ],
-    [
-     665,
-     570
-    ],
-    [
-     656,
-     549
-    ],
-    [
-     653,
-     529
-    ],
-    [
-     653,
-     505
-    ],
-    [
-     648,
-     482
-    ],
-    [
-     638,
-     466
-    ],
-    [
-     623,
-     450
-    ],
-    [
-     611,
-     436
-    ],
-    [
-     600,
-     427
-    ],
-    [
-     584,
-     415
-    ],
-    [
-     568,
-     399
-    ],
-    [
-     555,
-     385
-    ],
-    [
-     542,
-     369
-    ],
-    [
-     528,
-     352
-    ],
-    [
-     511,
-     336
-    ],
-    [
-     494,
-     323
-    ],
-    [
-     478,
-     313
-    ],
-    [
-     462,
-     301
-    ],
-    [
-     450,
-     286
-    ],
-    [
-     439,
-     273
-    ],
-    [
-     423,
-     261
-    ],
-    [
-     408,
-     248
-    ]
-   ]
-  },
-  {
-   "kind": "road",
-   "path": [
-    [
-     640,
-     464
-    ],
-    [
-     657,
-     472
-    ],
-    [
-     673,
-     481
-    ],
-    [
-     691,
-     491
-    ],
-    [
-     708,
-     500
-    ],
-    [
-     727,
-     507
-    ],
-    [
-     747,
-     513
-    ],
-    [
-     763,
-     522
-    ],
-    [
-     779,
-     528
-    ],
-    [
-     801,
-     535
-    ],
-    [
-     821,
-     544
-    ],
-    [
-     836,
-     552
-    ],
-    [
-     851,
-     561
-    ],
-    [
-     868,
-     568
-    ],
-    [
-     886,
-     575
-    ],
-    [
-     906,
-     581
-    ],
-    [
-     928,
-     583
-    ],
-    [
-     946,
-     583
-    ],
-    [
-     968,
-     582
-    ],
-    [
-     992,
-     579
-    ],
-    [
-     1015,
-     582
-    ],
-    [
-     1035,
-     586
-    ],
-    [
-     1053,
-     585
-    ],
-    [
-     1076,
-     586
-    ],
-    [
-     1100,
-     589
-    ],
-    [
-     1117,
-     598
-    ],
-    [
-     1130,
-     612
-    ],
-    [
-     1145,
-     626
-    ],
-    [
-     1161,
-     643
-    ],
-    [
-     1176,
-     664
-    ]
-   ]
-  },
-  {
-   "kind": "road",
-   "path": [
-    [
-     408,
-     248
-    ],
-    [
-     428,
-     251
-    ],
-    [
-     445,
-     256
-    ],
-    [
-     460,
-     262
-    ],
-    [
-     477,
-     265
-    ],
-    [
-     497,
-     269
-    ],
-    [
-     519,
-     277
-    ],
-    [
-     539,
-     282
-    ],
-    [
-     561,
-     288
-    ],
-    [
-     581,
-     292
-    ],
-    [
-     599,
-     291
-    ],
-    [
-     614,
-     279
-    ],
-    [
-     626,
-     264
-    ],
-    [
-     638,
-     253
-    ],
-    [
-     654,
-     237
-    ],
-    [
-     671,
-     218
-    ],
-    [
-     685,
-     200
-    ],
-    [
-     697,
-     186
-    ],
-    [
-     713,
-     174
-    ],
-    [
-     730,
-     164
-    ],
-    [
-     749,
-     162
-    ],
-    [
-     769,
-     165
-    ],
-    [
-     787,
-     169
-    ],
-    [
-     808,
-     171
-    ],
-    [
-     832,
-     169
-    ],
-    [
-     852,
-     169
-    ],
-    [
-     869,
-     174
-    ],
-    [
-     887,
-     177
-    ],
-    [
-     907,
-     180
-    ],
-    [
-     930,
-     183
-    ],
-    [
-     952,
-     186
-    ],
-    [
-     970,
-     190
-    ],
-    [
-     989,
-     196
-    ],
-    [
-     1008,
-     201
-    ],
-    [
-     1025,
-     204
-    ],
-    [
-     1043,
-     206
-    ],
-    [
-     1063,
-     210
-    ],
-    [
-     1080,
-     220
-    ],
-    [
-     1092,
-     233
-    ],
-    [
-     1103,
-     244
-    ],
-    [
-     1117,
-     255
-    ],
-    [
-     1132,
-     270
-    ],
-    [
-     1149,
-     283
-    ],
-    [
-     1167,
-     296
-    ],
-    [
-     1183,
-     309
-    ],
-    [
-     1197,
-     322
-    ],
-    [
-     1205,
-     340
-    ],
-    [
-     1208,
-     360
-    ],
-    [
-     1214,
-     379
-    ],
-    [
-     1220,
-     395
-    ],
-    [
-     1221,
-     413
-    ],
-    [
-     1224,
-     434
-    ],
-    [
-     1229,
-     453
-    ],
-    [
-     1232,
-     474
-    ],
-    [
-     1239,
-     496
-    ],
-    [
-     1249,
-     516
-    ],
-    [
-     1252,
-     534
-    ],
-    [
-     1256,
-     552
-    ],
-    [
-     1261,
-     572
-    ],
-    [
-     1264,
-     592
-    ]
-   ]
-  },
-  {
-   "kind": "road",
-   "path": [
-    [
-     328,
-     872
-    ],
-    [
-     313,
-     854
-    ],
-    [
-     304,
-     833
-    ],
-    [
-     299,
-     815
-    ],
-    [
-     288,
-     800
-    ],
-    [
-     272,
-     789
-    ],
-    [
-     254,
-     776
-    ],
-    [
-     236,
-     760
-    ],
-    [
-     222,
-     748
-    ],
-    [
-     211,
-     738
-    ],
-    [
-     198,
-     724
-    ],
-    [
-     184,
-     712
-    ]
-   ]
-  },
-  {
-   "kind": "road",
-   "path": [
-    [
-     328,
-     872
-    ],
-    [
-     334,
-     891
-    ],
-    [
-     344,
-     905
-    ],
-    [
-     358,
-     920
-    ],
-    [
-     365,
-     939
-    ],
-    [
-     371,
-     957
-    ],
-    [
-     382,
-     974
-    ],
-    [
-     392,
-     992
-    ]
-   ]
-  },
-  {
-   "kind": "road",
-   "path": [
-    [
-     808,
-     989
-    ],
-    [
-     797,
-     1004
-    ],
-    [
-     787,
-     1020
-    ],
-    [
-     775,
-     1032
-    ],
-    [
-     760,
-     1049
-    ],
-    [
-     748,
-     1067
-    ],
-    [
-     739,
-     1080
-    ],
-    [
-     727,
-     1095
-    ],
-    [
-     712,
-     1112
-    ]
-   ]
-  },
-  {
-   "kind": "road",
-   "path": [
-    [
-     808,
-     989
-    ],
-    [
-     829,
-     993
-    ],
-    [
-     845,
-     998
-    ],
-    [
-     863,
-     1004
-    ],
-    [
-     882,
-     1008
-    ],
-    [
-     899,
-     1012
-    ],
-    [
-     918,
-     1016
-    ],
-    [
-     940,
-     1019
-    ],
-    [
-     961,
-     1024
-    ],
-    [
-     980,
-     1028
-    ],
-    [
-     1000,
-     1029
-    ],
-    [
-     1021,
-     1032
-    ],
-    [
-     1039,
-     1039
-    ],
-    [
-     1059,
-     1049
-    ],
-    [
-     1084,
-     1056
-    ],
-    [
-     1107,
-     1061
-    ],
-    [
-     1128,
-     1062
-    ],
-    [
-     1150,
-     1064
-    ],
-    [
-     1174,
-     1066
-    ],
-    [
-     1193,
-     1063
-    ],
-    [
-     1208,
-     1056
-    ],
-    [
-     1226,
-     1054
-    ],
-    [
-     1248,
-     1057
-    ],
-    [
-     1269,
-     1064
-    ],
-    [
-     1286,
-     1071
-    ],
-    [
-     1302,
-     1075
-    ],
-    [
-     1324,
-     1081
-    ],
-    [
-     1344,
-     1090
-    ],
-    [
-     1358,
-     1097
-    ],
-    [
-     1376,
-     1104
-    ]
-   ]
-  },
-  {
-   "kind": "road",
-   "path": [
-    [
-     1264,
-     592
-    ],
-    [
-     1280,
-     566
-    ],
-    [
-     1293,
-     547
-    ]
-   ]
-  },
-  {
-   "kind": "road",
-   "path": [
-    [
-     1176,
-     664
-    ],
-    [
-     1202,
-     654
-    ],
-    [
-     1221,
-     637
-    ],
-    [
-     1235,
-     618
-    ],
-    [
-     1251,
-     603
-    ],
-    [
-     1264,
-     592
-    ]
-   ]
-  },
-  {
-   "kind": "road",
-   "path": [
-    [
-     1056,
-     504
-    ],
-    [
-     1034,
-     500
-    ],
-    [
-     1011,
-     492
-    ],
-    [
-     990,
-     486
-    ],
-    [
-     968,
-     480
-    ]
-   ]
-  },
-  {
-   "kind": "road",
-   "path": [
-    [
-     1464,
-     496
-    ],
-    [
-     1446,
-     499
-    ],
-    [
-     1427,
-     507
-    ],
-    [
-     1403,
-     519
-    ],
-    [
-     1377,
-     527
-    ],
-    [
-     1354,
-     531
-    ],
-    [
-     1335,
-     534
-    ],
-    [
-     1313,
-     540
-    ],
-    [
-     1293,
-     547
-    ]
-   ]
-  },
-  {
-   "kind": "track",
-   "path": [
-    [
-     704,
-     712
-    ],
-    [
-     709,
-     732
-    ],
-    [
-     714,
-     754
-    ],
-    [
-     716,
-     773
-    ],
-    [
-     719,
-     788
-    ],
-    [
-     730,
-     806
-    ],
-    [
-     742,
-     829
-    ],
-    [
-     749,
-     853
-    ],
-    [
-     752,
-     872
-    ]
-   ]
-  },
-  {
-   "kind": "track",
-   "path": [
-    [
-     792,
-     723
-    ],
-    [
-     812,
-     704
-    ],
-    [
-     826,
-     685
-    ],
-    [
-     837,
-     665
-    ],
-    [
-     850,
-     646
-    ],
-    [
-     864,
-     629
-    ],
-    [
-     879,
-     615
-    ],
-    [
-     893,
-     603
-    ],
-    [
-     904,
-     584
-    ]
-   ]
-  },
-  {
-   "kind": "track",
-   "path": [
-    [
-     328,
-     872
-    ],
-    [
-     313,
-     886
-    ],
-    [
-     300,
-     903
-    ],
-    [
-     285,
-     918
-    ],
-    [
-     271,
-     932
-    ],
-    [
-     260,
-     950
-    ],
-    [
-     248,
-     969
-    ],
-    [
-     232,
-     984
-    ]
-   ]
-  },
-  {
-   "kind": "track",
-   "path": [
-    [
-     184,
-     712
-    ],
-    [
-     178,
-     735
-    ],
-    [
-     171,
-     755
-    ],
-    [
-     163,
-     769
-    ],
-    [
-     158,
-     786
-    ],
-    [
-     155,
-     809
-    ],
-    [
-     152,
-     832
-    ]
-   ]
-  },
-  {
-   "kind": "track",
-   "path": [
-    [
-     509,
-     723
-    ],
-    [
-     492,
-     738
-    ],
-    [
-     475,
-     750
-    ],
-    [
-     462,
-     759
-    ],
-    [
-     444,
-     765
-    ],
-    [
-     424,
-     776
-    ]
-   ]
-  },
-  {
-   "kind": "track",
-   "path": [
-    [
-     568,
-     808
-    ],
-    [
-     571,
-     828
-    ],
-    [
-     576,
-     849
-    ],
-    [
-     582,
-     865
-    ],
-    [
-     583,
-     880
-    ],
-    [
-     583,
-     898
-    ],
-    [
-     591,
-     917
-    ],
-    [
-     598,
-     938
-    ],
-    [
-     604,
-     959
-    ],
-    [
-     616,
-     978
-    ],
-    [
-     626,
-     994
-    ],
-    [
-     634,
-     1007
-    ],
-    [
-     650,
-     1021
-    ],
-    [
-     666,
-     1042
-    ],
-    [
-     672,
-     1066
-    ],
-    [
-     682,
-     1084
-    ],
-    [
-     698,
-     1097
-    ],
-    [
-     712,
-     1112
-    ]
-   ]
-  },
-  {
-   "kind": "track",
-   "path": [
-    [
-     640,
-     464
-    ],
-    [
-     619,
-     477
-    ],
-    [
-     603,
-     485
-    ],
-    [
-     592,
-     495
-    ],
-    [
-     581,
-     507
-    ],
-    [
-     563,
-     522
-    ],
-    [
-     542,
-     540
-    ],
-    [
-     522,
-     552
-    ],
-    [
-     505,
-     560
-    ],
-    [
-     485,
-     567
-    ],
-    [
-     465,
-     574
-    ],
-    [
-     450,
-     585
-    ],
-    [
-     434,
-     596
-    ],
-    [
-     413,
-     603
-    ],
-    [
-     388,
-     611
-    ],
-    [
-     364,
-     619
-    ],
-    [
-     346,
-     620
-    ],
-    [
-     331,
-     612
-    ],
-    [
-     315,
-     596
-    ],
-    [
-     300,
-     577
-    ],
-    [
-     282,
-     565
-    ],
-    [
-     268,
-     554
-    ],
-    [
-     259,
-     537
-    ],
-    [
-     248,
-     520
-    ]
-   ]
-  },
-  {
-   "kind": "track",
-   "path": [
-    [
-     120,
-     384
-    ],
-    [
-     132,
-     400
-    ],
-    [
-     139,
-     418
-    ],
-    [
-     144,
-     436
-    ],
-    [
-     150,
-     458
-    ],
-    [
-     159,
-     475
-    ],
-    [
-     175,
-     484
-    ],
-    [
-     196,
-     495
-    ],
-    [
-     214,
-     505
-    ],
-    [
-     229,
-     510
-    ],
-    [
-     248,
-     520
-    ]
-   ]
-  },
-  {
-   "kind": "track",
-   "path": [
-    [
-     808,
-     989
-    ],
-    [
-     825,
-     988
-    ],
-    [
-     841,
-     985
-    ],
-    [
-     858,
-     982
-    ],
-    [
-     880,
-     980
-    ],
-    [
-     904,
-     977
-    ],
-    [
-     926,
-     971
-    ],
-    [
-     947,
-     963
-    ],
-    [
-     965,
-     961
-    ],
-    [
-     982,
-     957
-    ],
-    [
-     1000,
-     952
-    ]
-   ]
-  },
-  {
-   "kind": "rail",
-   "path": [
-    [
-     0,
-     544
-    ],
-    [
-     21,
-     542
-    ],
-    [
-     42,
-     541
-    ],
-    [
-     61,
-     539
-    ],
-    [
-     81,
-     536
-    ],
-    [
-     102,
-     534
-    ],
-    [
-     123,
-     533
-    ],
-    [
-     146,
-     531
-    ],
-    [
-     167,
-     528
-    ],
-    [
-     187,
-     525
-    ],
-    [
-     207,
-     524
-    ],
-    [
-     227,
-     522
-    ],
-    [
-     246,
-     524
-    ],
-    [
-     261,
-     534
-    ],
-    [
-     275,
-     548
-    ],
-    [
-     289,
-     563
-    ],
-    [
-     303,
-     579
-    ],
-    [
-     315,
-     595
-    ],
-    [
-     329,
-     609
-    ],
-    [
-     344,
-     617
-    ],
-    [
-     361,
-     612
-    ],
-    [
-     378,
-     600
-    ],
-    [
-     394,
-     588
-    ],
-    [
-     410,
-     576
-    ],
-    [
-     428,
-     564
-    ],
-    [
-     446,
-     552
-    ],
-    [
-     463,
-     540
-    ],
-    [
-     481,
-     531
-    ],
-    [
-     500,
-     528
-    ],
-    [
-     519,
-     529
-    ],
-    [
-     539,
-     530
-    ],
-    [
-     560,
-     531
-    ],
-    [
-     580,
-     530
-    ],
-    [
-     600,
-     531
-    ],
-    [
-     620,
-     533
-    ],
-    [
-     640,
-     533
-    ],
-    [
-     660,
-     534
-    ],
-    [
-     680,
-     534
-    ],
-    [
-     700,
-     535
-    ],
-    [
-     720,
-     536
-    ],
-    [
-     739,
-     538
-    ],
-    [
-     759,
-     540
-    ],
-    [
-     779,
-     541
-    ],
-    [
-     798,
-     543
-    ],
-    [
-     816,
-     545
-    ],
-    [
-     836,
-     546
-    ],
-    [
-     857,
-     548
-    ],
-    [
-     876,
-     550
-    ],
-    [
-     896,
-     553
-    ],
-    [
-     917,
-     555
-    ],
-    [
-     939,
-     557
-    ],
-    [
-     960,
-     560
-    ],
-    [
-     982,
-     562
-    ],
-    [
-     1003,
-     564
-    ],
-    [
-     1024,
-     568
-    ],
-    [
-     1044,
-     573
-    ],
-    [
-     1063,
-     579
-    ],
-    [
-     1082,
-     584
-    ],
-    [
-     1101,
-     590
-    ],
-    [
-     1120,
-     595
-    ],
-    [
-     1141,
-     600
-    ],
-    [
-     1160,
-     605
-    ],
-    [
-     1179,
-     610
-    ],
-    [
-     1199,
-     614
-    ],
-    [
-     1219,
-     618
-    ],
-    [
-     1240,
-     622
-    ],
-    [
-     1260,
-     627
-    ],
-    [
-     1280,
-     631
-    ],
-    [
-     1300,
-     633
-    ],
-    [
-     1319,
-     633
-    ],
-    [
-     1339,
-     633
-    ],
-    [
-     1359,
-     634
-    ],
-    [
-     1380,
-     634
-    ],
-    [
-     1401,
-     635
-    ],
-    [
-     1419,
-     634
-    ],
-    [
-     1438,
-     634
-    ],
-    [
-     1458,
-     636
-    ],
-    [
-     1480,
-     636
-    ],
-    [
-     1501,
-     638
-    ],
-    [
-     1521,
-     639
-    ],
-    [
-     1540,
-     640
-    ],
-    [
-     1560,
-     640
-    ],
-    [
-     1580,
-     640
-    ],
-    [
-     1600,
-     640
-    ]
-   ]
-  },
-  {
-   "kind": "rail",
-   "path": [
-    [
-     480,
-     528
-    ],
-    [
-     481,
-     548
-    ],
-    [
-     482,
-     567
-    ],
-    [
-     484,
-     586
-    ],
-    [
-     485,
-     606
-    ],
-    [
-     487,
-     626
-    ],
-    [
-     489,
-     645
-    ],
-    [
-     491,
-     664
-    ],
-    [
-     492,
-     682
-    ],
-    [
-     492,
-     701
-    ],
-    [
-     491,
-     723
-    ],
-    [
-     493,
-     743
-    ],
-    [
-     494,
-     762
-    ],
-    [
-     494,
-     781
-    ],
-    [
-     495,
-     800
-    ],
-    [
-     495,
-     819
-    ],
-    [
-     495,
-     839
-    ],
-    [
-     496,
-     858
-    ],
-    [
-     498,
-     876
-    ],
-    [
-     498,
-     895
-    ],
-    [
-     498,
-     914
-    ],
-    [
-     498,
-     934
-    ],
-    [
-     496,
-     953
-    ],
-    [
-     495,
-     972
-    ],
-    [
-     495,
-     992
-    ],
-    [
-     493,
-     1014
-    ],
-    [
-     492,
-     1036
-    ],
-    [
-     491,
-     1058
-    ],
-    [
-     488,
-     1080
+     0.69,
+     0.56
     ]
    ]
   }

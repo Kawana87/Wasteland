@@ -9,7 +9,7 @@ from PIL import Image, ImageDraw, ImageFont
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import locations as LOC
 
-N = 1200
+N = int(os.environ.get("WM_N", 1200))   # paint_fo3.py renders the same layout larger
 S = N
 ys, xs = np.mgrid[0:N, 0:N].astype(np.float32)
 X, Y = xs / S, ys / S
@@ -72,6 +72,7 @@ deadwood = blob(0.44, 0.13, 0.12, 14, 0.5) & ~water
 farms = blob(0.4, 0.24, 0.07, 15, 0.4) & ~deadwood
 salt = blob(0.12, 0.6, 0.05, 16, 0.4)
 canyon = blob(0.21, 0.84, 0.06, 17, 0.45)
+marsh = (blob(0.66, 0.94, 0.075, 18, 0.5) | blob(0.73, 0.98, 0.05, 19, 0.5)) & (X < 0.79)   # river wetlands south of the city
 crater_c, crater_r = (0.3, 0.8), 0.04
 craters = [(R.uniform(0.05, 0.62), R.uniform(0.05, 0.95), R.uniform(0.006, 0.014)) for _ in range(26)]
 
@@ -88,35 +89,38 @@ ROADS = [
     ("highway", densify([(0.0, 0.3), P["devils_throat"], P["granite_bowl"], P["silver_comet_wreck"], P["gus_salvage"], P["big_wheel_stop"], P["ferrymans_landing"], (0.62, 0.4), (0.7, 0.44)], 0.01, 0.004, 22)),
     ("highway", densify([(0.44, 0.0), P["lookout_station_3"], P["owls_perch"], P["goldenrod"], P["radio_kzap"], P["big_wheel_stop"]], 0.01, 0.004, 23)),
     ("highway", densify([P["patchwork"], P["rattlebone_camp"], P["wellspring"], P["buzzard_mesa"], (0.55, 1.0)], 0.01, 0.004, 24)),
-    ("highway", densify([(0.72, 0.8), P["bright_hope_plant"], P["blackrock_refinery"], P["wellspring"], P["hollow_sun"], P["copperhead"], P["bonewhite_flats"], (0.0, 0.62)], 0.01, 0.004, 25)),
-    ("highway", densify([(0.82, 0.4), P["sunbeam_commune"], P["fishers_rest"], (0.8, 0.0)], 0.01, 0.004, 26)),
+    ("highway", densify([(0.72, 0.8), P["bright_hope_plant"], P["blackrock_refinery"], P["wellspring"], P["rimtown"], P["copperhead"], P["bonewhite_flats"], (0.0, 0.62)], 0.01, 0.004, 25)),
+    ("highway", densify([(0.82, 0.4), P["sunbeam_commune"], P["clearwater"], (0.8, 0.0)], 0.01, 0.004, 26)),
     ("highway", densify([(0.95, 0.47), P["atomic_plaza"], (1.0, 0.5)], 0.01)),
     ("road", densify([P["goldenrod"], P["our_lady_mission"], P["granite_bowl"]], 0.01, 0.004, 27)),
-    ("road", densify([P["goldenrod"], P["camp_whispering_pines"], P["ridgeback_dam"], P["fishers_rest"]], 0.01, 0.004, 28)),
+    ("road", densify([P["goldenrod"], P["camp_whispering_pines"], P["ridgeback_dam"], P["clearwater"]], 0.01, 0.004, 28)),
     ("road", densify([P["splinter_creek"], P["hushwood"], P["starwatch"]], 0.01, 0.004, 29)),
     ("road", densify([P["splinter_creek"], P["owls_perch"]], 0.01, 0.004, 30)),
     ("road", densify([P["fort_steadfast"], P["double_bar_ranch"], P["bluebird_lodge"]], 0.01, 0.004, 31)),
     ("road", densify([P["fort_steadfast"], P["launch_site_zulu"]], 0.01, 0.004, 32)),
-    ("road", densify([P["copperhead"], P["scorch_canyon"], P["deep_seven"]], 0.01, 0.004, 33)),
+    ("road", densify([P["copperhead"], P["redwall"], P["deep_seven"]], 0.01, 0.004, 33)),
     ("road", densify([P["iron_gate_pen"], P["radio_kzap"]], 0.01, 0.004, 34)),
     ("road", densify([P["prometheus_research"], P["maple_grove"]], 0.01, 0.004, 35)),
     ("road", densify([P["sterling_airfield"], (0.93, 0.78)], 0.01)),
     ("track", [P["patchwork"], P["moonbeam_drivein"]]),
     ("track", [P["bunker_echo"], P["silver_comet_wreck"]]),
     ("track", [P["hangmans_gap"], P["bonewhite_flats"]]),
-    ("track", [P["double_bar_ranch"], P["hollow_sun"]]),
+    ("track", [P["double_bar_ranch"], P["rimtown"]]),
+    ("track", [P["rimtown"], P["hollow_sun"]]),
+    ("road", densify([P["bright_hope_plant"], P["greenmarsh"], P["buzzard_mesa"]], 0.01, 0.004, 36)),
+    ("road", densify([P["greenmarsh"], (0.64, 1.0)], 0.01, 0.004, 37)),
 ]
 METRO = densify([(0.5, 0.47), (0.56, 0.5), P["founders_bridge"], (0.74, 0.6), P["sterling_downtown"], (0.86, 0.66), (0.9, 0.75), P["union_railyard"]], 0.01)
 
 
 def draw(out):
-    COL = dict(waste=(150, 142, 118), waste2=(132, 126, 104), hills=(118, 110, 90), peaks=(98, 90, 76), water=(64, 92, 104),
+    COL = dict(marsh=(96, 120, 84), waste=(150, 142, 118), waste2=(132, 126, 104), hills=(118, 110, 90), peaks=(98, 90, 76), water=(64, 92, 104),
                city=(104, 102, 98), core=(78, 76, 74), suburbs=(130, 126, 116), dead=(102, 106, 78), farms=(160, 150, 100),
                salt=(214, 208, 190), canyon=(150, 96, 70))
     img = np.zeros((N, N, 3), np.float32)
     base = np.array(COL["waste"], np.float32) * (1 - n1[..., None] * 0.6) + np.array(COL["waste2"], np.float32) * n1[..., None] * 0.6
     img[:] = base
-    for k, m in (("farms", farms), ("dead", deadwood), ("salt", salt), ("canyon", canyon), ("hills", hills), ("peaks", peaks),
+    for k, m in (("farms", farms), ("dead", deadwood), ("salt", salt), ("canyon", canyon), ("marsh", marsh), ("hills", hills), ("peaks", peaks),
                  ("suburbs", suburbs), ("city", city), ("core", city_core), ("water", water)):
         img[m] = COL[k]
     im = Image.fromarray(img.astype(np.uint8))
@@ -162,9 +166,9 @@ def draw(out):
     mp = [(x * S, y * S) for x, y in METRO]
     for i in range(0, len(mp) - 1, 2):
         d.line((mp[i], mp[i + 1]), fill=(40, 50, 90), width=3)
-    TC = {"city": (200, 40, 30), "district": (210, 100, 60), "town": (30, 130, 40), "settlement": (50, 150, 70), "camp": (200, 140, 30),
+    TC = {"hub": (240, 200, 40), "city": (200, 40, 30), "district": (210, 100, 60), "town": (30, 130, 40), "settlement": (50, 150, 70), "camp": (200, 140, 30),
           "landmark": (60, 60, 160), "dungeon": (160, 30, 30)}
-    RAD = {"city": 12, "district": 7, "town": 9, "settlement": 6, "camp": 5, "landmark": 5, "dungeon": 5}
+    RAD = {"hub": 11, "city": 12, "district": 7, "town": 9, "settlement": 6, "camp": 5, "landmark": 5, "dungeon": 5}
     f = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSansCondensed-Bold.ttf", 13)
     fb = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSansCondensed-Bold.ttf", 16)
     placed = []
@@ -173,7 +177,7 @@ def draw(out):
         r = RAD[l["type"]]
         d.ellipse((x - r, y - r, x + r, y + r), fill=TC[l["type"]], outline=(20, 20, 20), width=2)
         name = l["name"].replace("Port Sterling - ", "")
-        ff = fb if l["type"] in ("city", "town") else f
+        ff = fb if l["type"] in ("city", "town", "hub") else f
         tw = d.textlength(name, font=ff)
         for (ox, oy) in ((r + 4, -8), (-tw - r - 4, -8), (-tw / 2, r + 2), (-tw / 2, -r - 17), (r + 4, 4), (-tw - r - 4, 4)):
             box = (x + ox, y + oy, x + ox + tw, y + oy + 15)
