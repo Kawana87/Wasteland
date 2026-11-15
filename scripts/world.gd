@@ -333,7 +333,7 @@ static func sstep(t: float) -> float:
 	t = clampf(t, 0.0, 1.0)
 	return t * t * (3.0 - 2.0 * t)
 
-const SETTLEMENT_NAMES := ["Rustwater", "Tin Hollow", "Saltgrass", "Haven Flats", "Cinder Creek", "Last Light"]
+const SETTLEMENT_NAMES := ["Rustwater", "Tin Hollow", "Saltgrass", "Patchwork", "Cinder Creek", "Last Light"]
 const TEMPLATES := {
 	"kitchen": {"north": ["counter", "stove", "counter", "fridge"], "west": ["counter"], "center": ["table"]},
 	"living": {"north": ["bookshelf", "tv", "armchair"], "west": ["couch"], "center": []},

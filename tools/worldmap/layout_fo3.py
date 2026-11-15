@@ -76,20 +76,7 @@ crater_c, crater_r = (0.3, 0.8), 0.04
 craters = [(R.uniform(0.05, 0.62), R.uniform(0.05, 0.95), R.uniform(0.006, 0.014)) for _ in range(26)]
 
 # ---------------------------------------------------------------- places (hand-placed, x/y in 0..1)
-P = dict(
-    haven_flats=(0.42, 0.5), comet_junction=(0.475, 0.465), sawtooth_camp=(0.45, 0.585), shelter_17=(0.3, 0.505),
-    starlight_drivein=(0.52, 0.565), tumbleweed_stop=(0.52, 0.39), rustys_junkyard=(0.36, 0.41), cottonwood_motel=(0.24, 0.57),
-    sundial_ranch=(0.33, 0.66), starliner_wreck=(0.27, 0.4),
-    halcyon_downtown=(0.8, 0.62), halcyon_docks=(0.71, 0.705), halcyon_heights=(0.89, 0.42), halcyon_general=(0.86, 0.69),
-    halcyon_stadium=(0.76, 0.545), big_sky_mall=(0.94, 0.5), halcyon_railyard=(0.87, 0.81), halcyon_airfield=(0.93, 0.91),
-    kettle_point=(0.66, 0.86), kettle_bridge=(0.635, 0.54), copper_kettle=(0.59, 0.37), black_gulch=(0.57, 0.76),
-    millbrook=(0.4, 0.24), cedar_falls=(0.25, 0.075), ranger_station=(0.47, 0.06), paradise_lake=(0.54, 0.18), fire_lookout=(0.35, 0.14),
-    blackwood_pen=(0.56, 0.28), radio_kbsn=(0.47, 0.32), st_agnes=(0.31, 0.3), lakeview=(0.75, 0.1), hollister_dam=(0.66, 0.175),
-    harmony_ridge=(0.82, 0.22), helios_labs=(0.94, 0.28),
-    mount_vigil=(0.065, 0.09), little_eden=(0.14, 0.17), ironback_tunnel=(0.1, 0.3), whitestone_quarry=(0.19, 0.36), gallows_pass=(0.04, 0.47),
-    bright_flats=(0.12, 0.6), prospect=(0.17, 0.74), silver_vein=(0.07, 0.83), red_canyon=(0.21, 0.86), the_glow=(0.3, 0.8),
-    dustwater=(0.43, 0.76), thunder_mesa=(0.51, 0.9), fort_liberty=(0.36, 0.93), silo_delta9=(0.15, 0.95),
-)
+P = {l["id"]: l["pos"] for l in LOC.L}   # hand-placed positions live in locations.py
 assert set(P) == {l["id"] for l in LOC.L}, set(l["id"] for l in LOC.L) ^ set(P)
 
 # ---------------------------------------------------------------- roads
@@ -97,29 +84,29 @@ ROADS = [
     # beltway around the city
     ("interstate", densify([(0.7, 0.44), (0.82, 0.4), (0.95, 0.47), (0.97, 0.62), (0.93, 0.78), (0.82, 0.84), (0.72, 0.8), (0.69, 0.62), (0.7, 0.44)], 0.01)),
     # radial highways into the city from the wasteland
-    ("interstate", densify([(0.0, 0.48), P["gallows_pass"], P["cottonwood_motel"], P["shelter_17"], P["haven_flats"], P["comet_junction"], P["kettle_bridge"], (0.69, 0.56)], 0.01, 0.004, 21)),
-    ("highway", densify([(0.0, 0.3), P["ironback_tunnel"], P["whitestone_quarry"], P["starliner_wreck"], P["rustys_junkyard"], P["tumbleweed_stop"], P["copper_kettle"], (0.62, 0.4), (0.7, 0.44)], 0.01, 0.004, 22)),
-    ("highway", densify([(0.44, 0.0), P["ranger_station"], P["fire_lookout"], P["millbrook"], P["radio_kbsn"], P["tumbleweed_stop"]], 0.01, 0.004, 23)),
-    ("highway", densify([P["haven_flats"], P["sawtooth_camp"], P["dustwater"], P["thunder_mesa"], (0.55, 1.0)], 0.01, 0.004, 24)),
-    ("highway", densify([(0.72, 0.8), P["kettle_point"], P["black_gulch"], P["dustwater"], P["the_glow"], P["prospect"], P["bright_flats"], (0.0, 0.62)], 0.01, 0.004, 25)),
-    ("highway", densify([(0.82, 0.4), P["harmony_ridge"], P["lakeview"], (0.8, 0.0)], 0.01, 0.004, 26)),
-    ("highway", densify([(0.95, 0.47), P["big_sky_mall"], (1.0, 0.5)], 0.01)),
-    ("road", densify([P["millbrook"], P["st_agnes"], P["whitestone_quarry"]], 0.01, 0.004, 27)),
-    ("road", densify([P["millbrook"], P["paradise_lake"], P["hollister_dam"], P["lakeview"]], 0.01, 0.004, 28)),
-    ("road", densify([P["cedar_falls"], P["little_eden"], P["mount_vigil"]], 0.01, 0.004, 29)),
-    ("road", densify([P["cedar_falls"], P["fire_lookout"]], 0.01, 0.004, 30)),
-    ("road", densify([P["fort_liberty"], P["sundial_ranch"], P["cottonwood_motel"]], 0.01, 0.004, 31)),
-    ("road", densify([P["fort_liberty"], P["silo_delta9"]], 0.01, 0.004, 32)),
-    ("road", densify([P["prospect"], P["red_canyon"], P["silver_vein"]], 0.01, 0.004, 33)),
-    ("road", densify([P["blackwood_pen"], P["radio_kbsn"]], 0.01, 0.004, 34)),
-    ("road", densify([P["helios_labs"], P["halcyon_heights"]], 0.01, 0.004, 35)),
-    ("road", densify([P["halcyon_airfield"], (0.93, 0.78)], 0.01)),
-    ("track", [P["haven_flats"], P["starlight_drivein"]]),
-    ("track", [P["shelter_17"], P["starliner_wreck"]]),
-    ("track", [P["gallows_pass"], P["bright_flats"]]),
-    ("track", [P["sundial_ranch"], P["the_glow"]]),
+    ("interstate", densify([(0.0, 0.48), P["hangmans_gap"], P["bluebird_lodge"], P["bunker_echo"], P["patchwork"], P["starlite_crossing"], P["founders_bridge"], (0.69, 0.56)], 0.01, 0.004, 21)),
+    ("highway", densify([(0.0, 0.3), P["devils_throat"], P["granite_bowl"], P["silver_comet_wreck"], P["gus_salvage"], P["big_wheel_stop"], P["ferrymans_landing"], (0.62, 0.4), (0.7, 0.44)], 0.01, 0.004, 22)),
+    ("highway", densify([(0.44, 0.0), P["lookout_station_3"], P["owls_perch"], P["goldenrod"], P["radio_kzap"], P["big_wheel_stop"]], 0.01, 0.004, 23)),
+    ("highway", densify([P["patchwork"], P["rattlebone_camp"], P["wellspring"], P["buzzard_mesa"], (0.55, 1.0)], 0.01, 0.004, 24)),
+    ("highway", densify([(0.72, 0.8), P["bright_hope_plant"], P["blackrock_refinery"], P["wellspring"], P["hollow_sun"], P["copperhead"], P["bonewhite_flats"], (0.0, 0.62)], 0.01, 0.004, 25)),
+    ("highway", densify([(0.82, 0.4), P["sunbeam_commune"], P["fishers_rest"], (0.8, 0.0)], 0.01, 0.004, 26)),
+    ("highway", densify([(0.95, 0.47), P["atomic_plaza"], (1.0, 0.5)], 0.01)),
+    ("road", densify([P["goldenrod"], P["our_lady_mission"], P["granite_bowl"]], 0.01, 0.004, 27)),
+    ("road", densify([P["goldenrod"], P["camp_whispering_pines"], P["ridgeback_dam"], P["fishers_rest"]], 0.01, 0.004, 28)),
+    ("road", densify([P["splinter_creek"], P["hushwood"], P["starwatch"]], 0.01, 0.004, 29)),
+    ("road", densify([P["splinter_creek"], P["owls_perch"]], 0.01, 0.004, 30)),
+    ("road", densify([P["fort_steadfast"], P["double_bar_ranch"], P["bluebird_lodge"]], 0.01, 0.004, 31)),
+    ("road", densify([P["fort_steadfast"], P["launch_site_zulu"]], 0.01, 0.004, 32)),
+    ("road", densify([P["copperhead"], P["scorch_canyon"], P["deep_seven"]], 0.01, 0.004, 33)),
+    ("road", densify([P["iron_gate_pen"], P["radio_kzap"]], 0.01, 0.004, 34)),
+    ("road", densify([P["prometheus_research"], P["maple_grove"]], 0.01, 0.004, 35)),
+    ("road", densify([P["sterling_airfield"], (0.93, 0.78)], 0.01)),
+    ("track", [P["patchwork"], P["moonbeam_drivein"]]),
+    ("track", [P["bunker_echo"], P["silver_comet_wreck"]]),
+    ("track", [P["hangmans_gap"], P["bonewhite_flats"]]),
+    ("track", [P["double_bar_ranch"], P["hollow_sun"]]),
 ]
-METRO = densify([(0.5, 0.47), (0.56, 0.5), P["kettle_bridge"], (0.74, 0.6), P["halcyon_downtown"], (0.86, 0.66), (0.9, 0.75), P["halcyon_railyard"]], 0.01)
+METRO = densify([(0.5, 0.47), (0.56, 0.5), P["founders_bridge"], (0.74, 0.6), P["sterling_downtown"], (0.86, 0.66), (0.9, 0.75), P["union_railyard"]], 0.01)
 
 
 def draw(out):
@@ -185,7 +172,7 @@ def draw(out):
         x, y = P[l["id"]][0] * S, P[l["id"]][1] * S
         r = RAD[l["type"]]
         d.ellipse((x - r, y - r, x + r, y + r), fill=TC[l["type"]], outline=(20, 20, 20), width=2)
-        name = l["name"].replace("New Halcyon - ", "Halcyon ")
+        name = l["name"].replace("Port Sterling - ", "")
         ff = fb if l["type"] in ("city", "town") else f
         tw = d.textlength(name, font=ff)
         for (ox, oy) in ((r + 4, -8), (-tw - r - 4, -8), (-tw / 2, r + 2), (-tw / 2, -r - 17), (r + 4, 4), (-tw - r - 4, 4)):
@@ -196,8 +183,8 @@ def draw(out):
             d.text((box[0] + dx, box[1] + dy), name, font=ff, fill=(240, 234, 214))
         d.text((box[0], box[1]), name, font=ff, fill=(20, 16, 12))
     tf = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSerif-BoldItalic.ttf", 20)
-    for (t, x, y) in (("Kettle River", 0.585, 0.46), ("Lake Mercy", 0.665, 0.1), ("Iron Hills", 0.09, 0.22), ("Pinewood (dead)", 0.44, 0.11),
-                      ("NEW HALCYON", 0.8, 0.58), ("The Wasteland", 0.32, 0.55)):
+    for (t, x, y) in ((LOC.NAMES["river"], 0.6, 0.665), (LOC.NAMES["lake"], 0.665, 0.1), (LOC.NAMES["hills"], 0.09, 0.22), (LOC.NAMES["woods"], 0.44, 0.11),
+                      (LOC.NAMES["city"], 0.8, 0.58), (LOC.NAMES["waste"], 0.32, 0.55)):
         tw = d.textlength(t, font=tf)
         d.text((x * S - tw / 2 + 1, y * S + 1), t, font=tf, fill=(240, 234, 214)); d.text((x * S - tw / 2, y * S), t, font=tf, fill=(50, 40, 30))
     im.save(out)
