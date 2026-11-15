@@ -50,7 +50,7 @@ func setup(w: World, bld: World.Bld) -> void:
 		var r: Rect2i = p.r
 		var rz: float = b.h0 + p.fl * World.FLOOR_H
 		var style := b.roof
-		if b.ruined and style != "flat": style = "flat"
+		if b.ruined: continue              # ruins have no roof: the top storey is open
 		var pdepth := float(r.end.x + r.end.y)
 		match style:
 			"pitched":
@@ -67,7 +67,7 @@ func setup(w: World, bld: World.Bld) -> void:
 						var t := _tile(tex, x, y, rz, Iso.z_for(x + y + 1.95, 6 + p.fl * 2))
 						roofs.append(t)
 	# parapets on flat roofs / fascia on the canopy
-	if b.roof in ["flat", "canopy", "tin"] or b.ruined:
+	if b.roof in ["flat", "canopy", "tin"] and not b.ruined:
 		for s in b.segs:
 			if s.side == "i" or s.mode == "stub": continue
 			var cf: int = b.floors_at(s.cell)
@@ -287,7 +287,13 @@ func update_view(pb: int, pfl: int) -> void:
 	_state = key
 	for wn in walls:
 		var s: World.Seg = wn.seg
-		if not inside:
+		if not inside and b.ruined:
+			# open shell seen from outside: everything of the top storey shows; lower storeys only where
+			# no storey sits above them (as when upstairs)
+			var top: int = b.floors_at(s.cell) - 1
+			wn.full.visible = s.fl >= top or (s.side != "i" and not ((s.side == "n" or s.side == "w") and b.floors_at(s.cell) > s.fl + 1))
+			wn.low.visible = false
+		elif not inside:
 			wn.full.visible = true
 			wn.low.visible = false
 		elif s.fl > pfl:
@@ -314,7 +320,7 @@ func update_view(pb: int, pfl: int) -> void:
 	for r in roofs:
 		r.visible = not inside
 	for f in upper:
-		f.visible = inside and pfl >= 1
+		f.visible = (inside and pfl >= 1) or (not inside and b.ruined)
 	if stairs_up:
 		stairs_up.visible = inside and pfl == 0
 	if inside:

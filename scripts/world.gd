@@ -1438,6 +1438,10 @@ func _dress_walls(b: Bld, info: Dictionary) -> void:
 		elif s.mode == "plain" and w < 0.12:
 			s.mode = "cracked"
 
+## Ruined building: the roof is gone and the top storey is a broken shell you can see into.
+## The collapse comes from one corner and works down: near the corner the top storey is gone entirely
+## and the storey below is broken off; further out the top storey walls are ragged stubs, front walls
+## mostly broken so the inside shows. Nothing is left floating over a broken wall.
 func _ruin(b: Bld) -> void:
 	var edge_cells := []
 	for c in b.cells:
@@ -1446,12 +1450,29 @@ func _ruin(b: Bld) -> void:
 	var cc: Vector2i = edge_cells[ri(0, edge_cells.size() - 1)]
 	var corner := Vector2(cc) + Vector2(rf(0, 1), rf(0, 1))
 	var cr := rf(1.6, 2.6)
+	var broken_low := {}            # wall positions broken off on a lower storey
 	for s in b.segs:
-		if ((s.a + s.b) * 0.5).distance_to(corner) < cr:
-			s.mode = "stub"
-			s.solid = false
+		var d: float = ((s.a + s.b) * 0.5).distance_to(corner)
+		var top: int = b.floors_at(s.cell) - 1
+		if s.fl < top and d < cr * 0.6 and not s.is_door:
+			s.mode = "stub"; s.solid = false
+			broken_low["%s|%s" % [str(s.a), str(s.b)]] = s.fl
+	var keep := []
+	for s in b.segs:
+		var k := "%s|%s" % [str(s.a), str(s.b)]
+		if broken_low.has(k) and s.fl > broken_low[k]:
+			continue                  # fell down with the wall below it
+		var top: int = b.floors_at(s.cell) - 1
+		if s.fl == top and not s.is_door and s.mode != "stub":
+			var d: float = ((s.a + s.b) * 0.5).distance_to(corner)
+			var front: bool = s.side == "s" or s.side == "e"
+			if d < cr or (front and rng.randf() < 0.65) or (s.side == "i" and rng.randf() < 0.5) or rng.randf() < 0.2:
+				s.mode = "stub"; s.solid = false
+		keep.append(s)
+	b.segs = keep
 	for c in b.cells:
-		if Vector2(c.x + 0.5, c.y + 0.5).distance_to(corner) < cr + 0.3 and c != b.stairs:
+		if b.cells[c] < 2: continue
+		if Vector2(c.x + 0.5, c.y + 0.5).distance_to(corner) < cr * 0.6 + 0.5 and c != b.stairs:
 			b.holes[c] = true
 		elif rng.randf() < 0.08 and c != b.stairs:
 			b.holes[c] = true
@@ -1459,6 +1480,14 @@ func _ruin(b: Bld) -> void:
 	if b.cells.has(Vector2i(int(rp.x), int(rp.y))):
 		add_decor("rubble%d" % ri(0, 2), rp)
 		add_decor("bricks", rp + Vector2(rf(-0.5, 0.5), rf(-0.5, 0.5)))
+
+## True when (x, y) on storey fl can be seen from outside: open structures, and the roofless top
+## storey of a ruin.
+func open_from_outside(x: float, y: float, fl: int) -> bool:
+	var id := building_at(x, y)
+	if id == 0: return fl == 0
+	var b := bld(id)
+	return b.open or (b.ruined and fl == b.floors_at(Vector2i(int(x), int(y))) - 1)
 
 const SHOP_SIGNS := ["grocery", "hardware", "clinic", "radio", "bar"]
 

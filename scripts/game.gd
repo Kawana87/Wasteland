@@ -136,6 +136,8 @@ func _ready() -> void:
 			_debug_upstairs.call_deferred()
 		if "--desks" in args:
 			_debug_desks.call_deferred()
+		if "--ruins" in args:
+			_debug_ruins.call_deferred()
 		return
 	hud.show_title("A new world is generated every time: rolling hills and cliffs out west, a ruined city to the east.\nRaiders hold plateau camps; feral ghouls haunt the ruins; brutes and shellbacks roam the wilds.\nFriendly settlements trade gear for scrap. Set up camps anywhere and fast travel between them.\n\nPC: WASD move · mouse aim · left click shoot · F / right click melee · Space jump · C sneak\nE use / talk / chop / climb / stairs · I inventory · H heal · B camp menu · T fast travel · V CRT filter\nGamepad: left stick move · right stick aim · RT shoot · A jump · X use · B melee · Y sneak\nTouch: left thumb move · right thumb aim and shoot · buttons on the right", start_new_world)
 
@@ -1353,8 +1355,9 @@ func _update_visibility() -> void:
 	if pb < 0: pb = 0
 	var vis := func(x: float, y: float, fl: int) -> bool:
 		var b := world.building_at(x, y)
-		if b > 0 and world.bld(b).open: b = 0
-		return (b == 0 and fl == 0) or (b == pb and fl == p.fl)
+		if b == pb and fl == p.fl: return true
+		if b == 0: return fl == 0
+		return pb != b and world.open_from_outside(x, y, fl)
 	for e in enemies:
 		e.visible = not e.dead and vis.call(e.wpos.x, e.wpos.y, e.fl)
 	for c in crate_nodes:
@@ -1362,12 +1365,12 @@ func _update_visibility() -> void:
 		s.visible = vis.call(c.pos.x, c.pos.y, c.fl) and s.texture != null
 	for f in furn_nodes:
 		var fs: Sprite2D = furn_nodes[f]
-		fs.visible = f.bid == pb and f.fl == p.fl
+		fs.visible = (f.bid == pb and f.fl == p.fl) or (f.bid != pb and world.open_from_outside(f.pos.x, f.pos.y, f.fl))
 		if f.crate != null and f.crate.open: fs.modulate = Color(0.78, 0.74, 0.7)
 	for pair in decor_nodes:
 		var d: World.Decor = pair[0]
 		if d.bid > 0:
-			(pair[1] as Sprite2D).visible = d.bid == pb and p.fl == 0
+			(pair[1] as Sprite2D).visible = (d.bid == pb and p.fl == 0) or (d.bid != pb and world.open_from_outside(d.pos.x, d.pos.y, 0))
 	for n in npcs:
 		if n.type != "crow":
 			n.visible = vis.call(n.wpos.x, n.wpos.y, 0)
@@ -1537,6 +1540,23 @@ func _debug_shots() -> void:
 			_snap(out + "/11_night_%s.png" % b.kind)
 			break
 	print("SHOTS DONE ", ProjectSettings.globalize_path(out))
+	get_tree().quit()
+
+func _debug_ruins() -> void:
+	var out := "user://shots"
+	DirAccess.make_dir_recursive_absolute(out)
+	await get_tree().create_timer(1.0).timeout
+	for e in enemies: e.aw = 0.0
+	var n := 0
+	for b in world.buildings:
+		if not b.ruined or n >= 8: continue
+		player.fl = 0
+		player.wpos = Vector2(b.x0 + b.w + 1.5, b.y0 + b.h + 1.5)
+		for t in 20:
+			if world.can_stand(player.wpos, 0.25, 0): break
+			player.wpos += Vector2(0.5, 0.3)
+		await get_tree().create_timer(0.4).timeout
+		await _snap(out + "/r_%d_f%d.png" % [n, b.floors]); n += 1
 	get_tree().quit()
 
 func _debug_desks() -> void:
