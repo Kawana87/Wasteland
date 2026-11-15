@@ -6,9 +6,9 @@ extends MeshInstance2D
 const LIGHT := Vector3(0.40, 0.22, 0.89)
 
 const MAT_COL := {
-	0: Color("6b7548"),   # grass
-	1: Color("7a7848"),   # dry grass
-	2: Color("7a6648"),   # dirt patch
+	0: Color("6f6f48"),   # grass (dry, like the pre-rendered ground)
+	1: Color("837a50"),   # dry grass
+	2: Color("7c664a"),   # dirt patch
 	3: Color("8a8478"),   # gravel
 	4: Color("7e786c"),   # rock (steep slopes)
 	5: Color("4a484e"),   # road

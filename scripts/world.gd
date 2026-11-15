@@ -535,6 +535,7 @@ func generate(sd: int) -> void:
 				break
 	_tidy()
 	_fix_spawns()
+	_fix_critters()
 
 ## Final real-world-logic pass over everything placed: nothing solid inside walls or in front of doors,
 ## no trees growing through props, wrecks that collide with props are scrapped, door exits are clear.
@@ -602,6 +603,24 @@ func _tidy() -> void:
 	for b in buildings:
 		var o := Vector2i(b.out)
 		if in_bounds(o.x, o.y) and T[idx(o.x, o.y)] == TREE: T[idx(o.x, o.y)] = GRASS
+
+## Livestock and crows start (and keep their home) outdoors on open ground; settlers on standable ground.
+func _fix_critters() -> void:
+	for cr in critters:
+		var outdoor: bool = cr.type in ["cattle", "crow"]
+		for key in ["pos", "home"]:
+			if not cr.has(key): continue
+			var p: Vector2 = cr[key]
+			var ok := func(q: Vector2) -> bool:
+				return in_bounds(int(q.x), int(q.y)) and can_stand(q, 0.3, 0) and (not outdoor or _clear_of_buildings(q, 0.6))
+			if ok.call(p): continue
+			for ring in range(1, 24):
+				var found := false
+				for k in 12:
+					var q: Vector2 = p + Vector2.from_angle(k * TAU / 12.0) * ring * 0.35
+					if ok.call(q):
+						cr[key] = q; found = true; break
+				if found: break
 
 ## Move any spawn that landed inside a wall, furniture, tree or wreck to the nearest spot it can stand on.
 func _fix_spawns() -> void:

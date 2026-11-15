@@ -93,7 +93,7 @@ void fragment() {
 		float g = vnoise(wpos * 2.3);
 		if (n < 0.05) { extra = -1.0; } else if (n < 0.09) { extra = 1.0; }
 		if (g > 0.7) { base = mix(base, vec3(0.55, 0.52, 0.32), 0.35); }
-		if (g < 0.22) { base = mix(base, vec3(0.36, 0.40, 0.24), 0.35); }
+		if (g < 0.22) { base = mix(base, vec3(0.38, 0.39, 0.25), 0.35); }
 		// short grass strokes
 		if (mod(cell.x + floor(cell.y * 0.5) * 3.0, 7.0) < 1.0 && hash(cell * 0.37) < 0.35) { extra = -1.0; }
 	}
