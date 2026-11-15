@@ -200,7 +200,7 @@ func start_new_world() -> void:
 	for s in world.survivors:
 		var a := Actor.new()
 		root.add_child(a)
-		a.make_body("survivor", 6, 16, 24)
+		if not a.use_rendered("survivor", 8): a.make_body("survivor", 6, 16, 24)
 		a.wpos = s.pos
 		a.set_meta("name", s.name)
 		a.set_meta("recruited", false)
@@ -1376,8 +1376,12 @@ func _update_visibility() -> void:
 			s.visible = true
 		else:
 			s.visible = vis.call(s.wpos.x, s.wpos.y, 0)
-		s.body.frame = 0
-		s.body.flip_h = (main.wpos.x - s.wpos.x) < 0 if s.get_meta("recruited") else (p.wpos.x - p.wpos.y) < (s.wpos.x - s.wpos.y)
+		if s.rendered:
+			var look: Vector2 = (main.wpos - s.wpos) if s.get_meta("recruited") else (p.wpos - s.wpos)
+			s.face(Actor.world_to_screen_dir(look), 0)
+		else:
+			s.body.frame = 0
+			s.body.flip_h = (main.wpos.x - s.wpos.x) < 0 if s.get_meta("recruited") else (p.wpos.x - p.wpos.y) < (s.wpos.x - s.wpos.y)
 		s.sync()
 	dog.visible = dog.fl == p.fl or pb == 0
 

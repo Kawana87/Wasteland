@@ -1009,11 +1009,11 @@ def phone_booth(x, y, rng):
 
 
 @prop
-def car_wreck(x, y, rng, style=None):
+def car_wreck(x, y, rng, style=None, col=None, hood=True):
     """50s sedan / truck wreck. style: sedan, truck, burned."""
     style = style or rng.choice(["sedan", "sedan", "truck", "burned"])
-    col = rng.choice(["#5e9a90", "#a85444", "#c8a858", "#5a6a8a", "#8a8a7a", "#d8d0b8"])
-    body = MAT("paint:%s:%.2f" % (col, rng.uniform(0.3, 0.6))) if style != "burned" else MAT("paint:#3a3430:0.8")
+    col = col or rng.choice(["#5e9a90", "#a85444", "#c8a858", "#5a6a8a", "#8a8a7a", "#d8d0b8"])
+    body = MAT("paint:%s:%.2f" % (col, rng.uniform(0.3, 0.6))) if style != "burned" else MAT("flat:#38322c:0.95")
     roof = MAT("paint:%s:0.35" % rng.choice(["#d8d0b8", col])) if style != "burned" else MAT("paint:#2a2420:0.9")
     glass = MAT("flat:#2a3a40:0.15") if style != "burned" else MAT("flat:#141210:0.9")
     chrome = MAT("metal:#c0c0b8") if style != "burned" else MAT("flat:#2a2420")
@@ -1042,7 +1042,7 @@ def car_wreck(x, y, rng, style=None):
     if style == "burned":
         for o in bpy.context.scene.objects:
             pass
-    if rng.random() < 0.4 and style != "truck":   # hood popped open
+    if hood and rng.random() < 0.4 and style != "truck":   # hood popped open
         o = B(x + 0.45, y - W + .05, 0.55, x + L - .05, y + W - .05, 0.58, body)
         o.rotation_euler.y = math.radians(-35)
 

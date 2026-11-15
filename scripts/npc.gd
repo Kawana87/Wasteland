@@ -15,6 +15,7 @@ var target := Vector2.ZERO
 var wait := 0.0
 var walk_t := 0.0
 var walk_f := 0
+var face_dir := Vector2(0, 1)
 var settlement := -1
 var patrol: Array = []
 var pi := 0
@@ -33,17 +34,17 @@ func setup(d: Dictionary) -> void:
 	target = wpos
 	match type:
 		"settler":
-			make_body("settler%d" % d.get("look", 1), 6, 16, 24)
+			if not use_rendered("settler%d" % d.get("look", 1), 8): make_body("settler%d" % d.get("look", 1), 6, 16, 24)
 			home_r = 4.5
 		"trader", "wanderer":
-			make_body("trader", 6, 16, 24)
+			if not use_rendered("trader", 8): make_body("trader", 6, 16, 24)
 			home_r = 0.6 if type == "trader" else 0.0
 		"cattle":
-			make_body("cattle", 2, 20, 11)
+			if not use_rendered("cattle", 2): make_body("cattle", 2, 20, 11)
 			shadow_w = 14
 			home_r = 3.5
 		"crow":
-			make_body("crow", 3, 8, 6)
+			if not use_rendered("crow", 3): make_body("crow", 3, 8, 6)
 			shadow_w = 4
 	bark_t = randf_range(4.0, 12.0)
 
@@ -73,15 +74,23 @@ func step(delta: float, p: Player) -> void:
 		if not move(dir * sp * delta):
 			target = wpos
 		body.flip_h = (dir.x - dir.y) < 0
+		face_dir = world_to_screen_dir(dir)
 		walk_t += delta
 		if walk_t > 0.22:
 			walk_t = 0.0
 			walk_f ^= 1
+			walk_n += 1
 	else:
 		walk_f = 0
 		if type != "cattle":
 			body.flip_h = (p.wpos.x - p.wpos.y) < (wpos.x - wpos.y)
-	if type == "cattle":
+			face_dir = world_to_screen_dir(p.wpos - wpos)
+	if rendered:
+		if type == "cattle":
+			face(face_dir, walk_f)
+		else:
+			face(face_dir, (1 + walk_n % 4) if sp > 0.0 else 0)
+	elif type == "cattle":
 		body.frame = walk_f
 	else:
 		body.frame = walk_f
@@ -112,8 +121,11 @@ func _crow(delta: float, p: Player) -> void:
 		if walk_t > 0.1:
 			walk_t = 0.0
 			walk_f ^= 1
-		body.frame = 1 + walk_f
-		body.flip_h = fly_dir.x - fly_dir.y < 0
+		if rendered:
+			face(world_to_screen_dir(fly_dir), 1 + walk_f)
+		else:
+			body.frame = 1 + walk_f
+			body.flip_h = fly_dir.x - fly_dir.y < 0
 		if jz >= 60.0:
 			gone_t = randf_range(20.0, 40.0)
 	else:
@@ -123,7 +135,11 @@ func _crow(delta: float, p: Player) -> void:
 			if randf() < 0.5:
 				wpos += Vector2(randf_range(-0.3, 0.3), randf_range(-0.3, 0.3))
 				body.flip_h = randf() < 0.5
-		body.frame = 0
+				face_dir = Vector2.from_angle(randi_range(0, 7) * PI / 4.0)
+		if rendered:
+			face(face_dir, 0)
+		else:
+			body.frame = 0
 	position = Iso.to_screen(wpos.x, wpos.y, world().hz(clampf(wpos.x, 0, 63.9), clampf(wpos.y, 0, 63.9))).round()
 	z_index = Iso.z_for(wpos.x + wpos.y, 4)
 	body.position.y = -round(jz)

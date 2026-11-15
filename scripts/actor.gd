@@ -48,6 +48,26 @@ func sync() -> void:
 		body.position.y = -round(jz)
 	queue_redraw()
 
+var rendered := false        # body uses a pre-rendered 8-direction sheet (rows = screen directions)
+var walk_n := 0              # step counter for multi-frame walk cycles
+
+## Use the pre-rendered 8-direction sheet <name>_r if it exists (tools/render3d); returns true if it did.
+func use_rendered(name: String, cols: int) -> bool:
+	if not ResourceLoader.exists("res://assets/sprites/%s_r.png" % name):
+		return false
+	make_body(name + "_r", cols, 0, 0, 8)
+	rendered = true
+	return true
+
+## Pick the sheet row facing a screen-space direction and show column col.
+func face(screen_dir: Vector2, col: int) -> void:
+	var row := posmod(int(round(screen_dir.angle() / (PI / 4.0))), 8) if screen_dir.length() > 0.01 else 2
+	body.frame = row * body.hframes + clampi(col, 0, body.hframes - 1)
+	body.flip_h = false
+
+static func world_to_screen_dir(d: Vector2) -> Vector2:
+	return Vector2(d.x - d.y, (d.x + d.y) * 0.5)
+
 func make_body(tex_name: String, frames: int, fw: int, fh: int, rows: int = 1) -> void:
 	body = Sprite2D.new()
 	body.texture = Assets.tex(tex_name)

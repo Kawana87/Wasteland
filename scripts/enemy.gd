@@ -37,6 +37,7 @@ var dead := false
 var seed_off := 0.0
 var walk_t := 0.0
 var walk_f := 0
+var last_vis := Vector2.ZERO
 var weapon := "pipe_pistol"
 var icon: Sprite2D
 var gun: Line2D
@@ -60,7 +61,7 @@ func setup(spawn: Dictionary) -> void:
 	last = wpos
 	match type:
 		"raider":
-			make_body("raider", 6, 16, 24)
+			if not use_rendered("raider", 8): make_body("raider", 6, 16, 24)
 			weapon = ["pipe_pistol", "pipe_pistol", "pistol_10mm", "shotgun"][randi_range(0, 3)]
 			gun = Line2D.new()
 			gun.width = 1.0
@@ -68,17 +69,17 @@ func setup(spawn: Dictionary) -> void:
 			gun.antialiased = false
 			add_child(gun)
 		"ghoul":
-			make_body("ghoul", 6, 16, 24)
+			if not use_rendered("ghoul", 8): make_body("ghoul", 6, 16, 24)
 		"brute":
-			make_body("brute", 4, 20, 26)
+			if not use_rendered("brute", 8): make_body("brute", 4, 20, 26)
 			shadow_w = 14
 			radius = 0.35
 		"shellback":
-			make_body("shellback", 2, 22, 11)
+			if not use_rendered("shellback", 2): make_body("shellback", 2, 22, 11)
 			shadow_w = 18
 			radius = 0.38
 		"rat":
-			make_body("rat", 2, 8, 6)
+			if not use_rendered("rat", 2): make_body("rat", 2, 8, 6)
 			shadow_w = 6
 			radius = 0.18
 	icon = Sprite2D.new()
@@ -220,6 +221,7 @@ func think(delta: float, p: Player, p_safe: bool) -> void:
 		if walk_t > (0.14 if sp > 1.5 else 0.25):
 			walk_t = 0.0
 			walk_f ^= 1
+			walk_n += 1
 	_visual(p)
 
 func _visual(p: Player) -> void:
@@ -228,16 +230,24 @@ func _visual(p: Player) -> void:
 		var t := p.wpos - wpos
 		sd = Vector2(t.x - t.y, (t.x + t.y) * 0.5)
 	sd = sd.normalized() if sd.length() > 0.01 else Vector2(0, 1)
-	if type in ["raider", "ghoul", "brute"]:
-		body.frame = (2 if sd.y < -0.3 else 0) + walk_f
+	var moving := wpos.distance_squared_to(last_vis) > 0.000001
+	last_vis = wpos
+	if rendered:
+		if type in ["raider", "ghoul", "brute"]:
+			face(sd, (1 + walk_n % 4) if moving else 0)
+		else:
+			face(sd, walk_f if moving else 0)
 	else:
-		body.frame = walk_f
-	body.flip_h = sd.x < 0
+		if type in ["raider", "ghoul", "brute"]:
+			body.frame = (2 if sd.y < -0.3 else 0) + walk_f
+		else:
+			body.frame = walk_f
+		body.flip_h = sd.x < 0
 	if gun:
-		var base := Vector2(0, -14)
+		var base := Vector2(0, -24 if rendered else -14)
 		gun.points = PackedVector2Array([(base + sd * 3).round(), (base + sd * (11 if weapon == "shotgun" else 9)).round()])
 	body.position.x = (1 if hit_t > 0.0 else 0) + (round(sin(Game.I.time * 40.0)) if wind > 0.0 else 0)
-	var top: int = {"raider": -42, "ghoul": -42, "brute": -48, "shellback": -24, "rat": -16}[type]
+	var top: int = ({"raider": -50, "ghoul": -48, "brute": -64, "shellback": -26, "rat": -18} if rendered else {"raider": -42, "ghoul": -42, "brute": -48, "shellback": -24, "rat": -16})[type]
 	if st == 2:
 		icon.texture = Assets.tex("icon_alert"); icon.visible = true; icon.position = Vector2(-1, top)
 	elif st == 1:

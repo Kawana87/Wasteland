@@ -16,7 +16,7 @@ import props as P
 from PIL import Image, ImageFilter
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-OUT = sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, "assets", "sprites")
+OUT = os.path.join(ROOT, "assets", "sprites")
 CELL_W, CELL_H = 32, 48
 ANCHOR = (16, 45)
 SS = 4                                   # supersampling
@@ -25,7 +25,31 @@ MAT = P.MAT
 
 C = {"suit": "fab:#3a5f94", "suit_d": "fab:#2e4c78", "stripe": "flat:#e0b640:0.5", "skin": "flat:#e0b090:0.6",
      "hair": "flat:#5a3a24:0.8", "boot": "flat:#3a2a20:0.6", "belt": "flat:#5a4030:0.6", "pack": "fab:#7a5a38",
-     "roll": "fab:#8a7a5a", "glove": "flat:#4a3a2c:0.7", "metal": "metal:#8a8a84"}
+     "roll": "fab:#8a7a5a", "glove": "flat:#4a3a2c:0.7", "metal": "metal:#8a8a84",
+     "legs": None, "hair_style": "short", "backpack": True, "stripe_on": True, "hat": None, "vest": None, "pads": None,
+     "hunch": 0.0, "eyes": "flat:#2a2020:0.4", "mohawk": None, "beard": None, "coat": None, "goggles": False}
+
+BASE = dict(C)
+
+OUTFITS = {
+    "player": {},
+    "survivor": {"suit": "fab:#5e6e44", "suit_d": "fab:#4e5c38", "legs": "fab:#4a4038", "skin": "flat:#c89070:0.6", "hair": "flat:#2a2020:0.8",
+                 "stripe_on": False, "hat": ("cap", "fab:#7a6a3a"), "pack": "fab:#6a5a40"},
+    "settler1": {"suit": "fab:#8a6a44", "suit_d": "fab:#7a5a3a", "legs": "fab:#4a4a52", "skin": "flat:#d8a07a:0.6", "hair": "flat:#6a4a2a:0.8",
+                 "stripe_on": False, "backpack": False, "hat": ("brim", "fab:#7a5a34"), "vest": "fab:#5a4a34"},
+    "settler2": {"suit": "fab:#7a4a4a", "suit_d": "fab:#6a3e3e", "legs": "fab:#4a4038", "skin": "flat:#b07a5a:0.6", "hair": "flat:#2a2020:0.8",
+                 "stripe_on": False, "backpack": False, "hair_style": "long"},
+    "settler3": {"suit": "fab:#6a7a8a", "suit_d": "fab:#5a6a7a", "legs": "fab:#5a4a3a", "skin": "flat:#e8c0a0:0.6", "hair": "flat:#a8a090:0.8",
+                 "stripe_on": False, "backpack": False, "beard": "flat:#a8a090:0.8"},
+    "trader": {"suit": "fab:#7a6a4e", "suit_d": "fab:#6a5a42", "legs": "fab:#4a3e30", "skin": "flat:#c89070:0.6", "hair": "flat:#3a2a20:0.8",
+               "stripe_on": False, "hat": ("brim", "fab:#4a3a2a"), "pack": "fab:#8a6a3a", "coat": "fab:#6a5a42", "goggles": True},
+    "raider": {"suit": "fab:#5a3a28", "suit_d": "fab:#4a3022", "legs": "fab:#2e2a28", "skin": "flat:#d8a080:0.6", "hair": "flat:#2a1a14:0.8",
+               "stripe_on": False, "backpack": False, "mohawk": "flat:#c83a24:0.6", "hair_style": "bald", "pads": "metal:#7a7064",
+               "vest": "fab:#4a3a30", "glove": "flat:#2a2420:0.7"},
+    "ghoul": {"suit": "fab:#5a5448", "suit_d": "fab:#4a463c", "legs": "fab:#3e3a34", "skin": "flat:#9a8458:0.8", "hair": "flat:#4a3a28:0.8",
+              "stripe_on": False, "backpack": False, "hair_style": "patchy", "hunch": 14.0, "eyes": "glow:#e8d870",
+              "glove": "flat:#8a7450:0.8", "boot": "flat:#3a3028:0.8"},
+}
 
 
 # ------------------------------------------------------------------ geometry helpers (local frame: +X forward, +Y left, +Z up)
@@ -97,8 +121,12 @@ def sag(a_deg, length):
 
 
 # ------------------------------------------------------------------ the survivor
-def build(pose):
+def build(pose, outfit="player"):
     """pose: dict hipL/hipR (thigh swing, deg), kneeL/kneeR (bend), lean (torso pitch), arms ('aim' or swing deg)."""
+    global C
+    C = dict(BASE); C.update(OUTFITS[outfit])
+    if C["legs"] is None: C["legs"] = C["suit"]
+    pose = dict(pose); pose["lean"] = pose.get("lean", 0) + C["hunch"]
     R = Rig()
     hip_y = 0.075
     Lt, Ls = 0.27, 0.27
@@ -115,8 +143,10 @@ def build(pose):
     z0 = 0.075 - lowest                       # pelvis height that puts the lowest ankle at boot height
     off = Vector((0, 0, z0))
     for (s, hip, knee, ankle) in legs:
-        R.limb(hip + off, knee + off, 0.058, 0.05, C["suit"])
-        R.limb(knee + off, ankle + off + Vector((0, 0, 0.03)), 0.05, 0.042, C["suit"])
+        R.limb(hip + off, knee + off, 0.058, 0.05, C["legs"])
+        R.limb(knee + off, ankle + off + Vector((0, 0, 0.03)), 0.05, 0.042, C["legs"])
+        if C["pads"]:
+            R.ball(knee + off + Vector((0.03, 0, 0)), 0.045, C["pads"], (1, 1, 0.8))
         a = ankle + off
         R.box((a.x + 0.035, a.y, a.z - 0.04), (0.17, 0.085, 0.075), C["boot"])
         R.box((a.x + 0.0, a.y, a.z + 0.02), (0.1, 0.09, 0.07), C["boot"])
@@ -130,20 +160,47 @@ def build(pose):
         return U @ Vector(v)
     # torso: tapered, wider at the shoulders
     R.limb(up((0, 0, 0.06)), up((0, 0, 0.36)), 0.105, 0.125, C["suit"], 10).scale = (1.0, 1.0, 1.0)
-    R.box((0.11, 0, 0.21), (0.012, 0.03, 0.3), C["stripe"], U)              # front stripe
-    R.limb(up((0, 0, 0.35)), up((0, 0, 0.385)), 0.075, 0.055, C["stripe"], 10)   # collar
-    # backpack + bedroll
-    R.box((-0.15, 0, 0.21), (0.11, 0.2, 0.24), C["pack"], U)
-    R.box((-0.21, 0, 0.17), (0.02, 0.14, 0.1), C["belt"], U)
-    o = R.limb(up((-0.15, 0.12, 0.37)), up((-0.15, -0.12, 0.37)), 0.05, 0.05, C["roll"], 8)
+    if C["stripe_on"]:
+        R.box((0.11, 0, 0.21), (0.012, 0.03, 0.3), C["stripe"], U)              # front stripe
+        R.limb(up((0, 0, 0.35)), up((0, 0, 0.385)), 0.075, 0.055, C["stripe"], 10)   # collar
+    if C["vest"]:
+        R.box((0.0, 0, 0.23), (0.235, 0.255, 0.22), C["vest"], U)
+    if C["coat"]:
+        R.limb(up((0, 0, -0.18)), up((0, 0, 0.1)), 0.14, 0.11, C["coat"], 10)   # long coat skirt
+    if C["pads"]:
+        for sy in (1, -1):
+            R.ball(up((0.0, sy * 0.15, 0.36)), 0.065, C["pads"], (1, 1, 0.7))
+    if C["backpack"]:
+        R.box((-0.15, 0, 0.21), (0.11, 0.2, 0.24), C["pack"], U)
+        R.box((-0.21, 0, 0.17), (0.02, 0.14, 0.1), C["belt"], U)
+        o = R.limb(up((-0.15, 0.12, 0.37)), up((-0.15, -0.12, 0.37)), 0.05, 0.05, C["roll"], 8)
     # head
     neck = up((0.0, 0, 0.385))
     R.limb(neck, up((0.005, 0, 0.43)), 0.04, 0.04, C["skin"], 8)
     hc = up((0.01, 0, 0.5))
     R.ball(hc, 0.092, C["skin"], (1.0, 0.92, 1.05))
-    R.ball(up((-0.012, 0, 0.53)), 0.094, C["hair"], (1.02, 0.96, 0.9))     # hair cap (sits back and high)
-    R.ball(up((0.085, 0.035, 0.505)), 0.012, "flat:#2a2020:0.4")            # eyes
-    R.ball(up((0.085, -0.035, 0.505)), 0.012, "flat:#2a2020:0.4")
+    hs = C["hair_style"]
+    if hs in ("short", "long"):
+        R.ball(up((-0.012, 0, 0.53)), 0.094, C["hair"], (1.02, 0.96, 0.9))     # hair cap (sits back and high)
+    if hs == "long":
+        R.box((-0.06, 0, 0.44), (0.08, 0.17, 0.16), C["hair"], U)
+    if hs == "patchy":
+        R.ball(up((-0.03, 0.03, 0.54)), 0.06, C["hair"], (1, 1, 0.6))
+    if C["mohawk"]:
+        R.box((-0.005, 0, 0.6), (0.17, 0.03, 0.07), C["mohawk"], U)
+    if C["beard"]:
+        R.ball(up((0.06, 0, 0.45)), 0.065, C["beard"], (0.8, 1.0, 0.8))
+    if C["hat"]:
+        kind, hm = C["hat"]
+        R.limb(up((0.0, 0, 0.55)), up((0.0, 0, 0.62)), 0.1, 0.09, hm, 12)
+        if kind == "brim":
+            R.limb(up((0.0, 0, 0.55)), up((0.0, 0, 0.565)), 0.16, 0.16, hm, 14)
+        else:
+            R.box((0.1, 0, 0.555), (0.09, 0.15, 0.015), hm, U)
+    if C["goggles"]:
+        R.box((0.08, 0, 0.6), (0.03, 0.14, 0.03), "flat:#3a3430:0.5", U)
+    R.ball(up((0.085, 0.035, 0.505)), 0.012, C["eyes"])            # eyes
+    R.ball(up((0.085, -0.035, 0.505)), 0.012, C["eyes"])
     # arms
     for side, s in (("L", 1), ("R", -1)):
         sh = up((0.0, s * 0.155, 0.33))
@@ -155,6 +212,8 @@ def build(pose):
             sw = pose.get("arm" + side, 0)
             elbow = sh + U.to_3x3() @ sag(sw, 0.24)
             hand = elbow + U.to_3x3() @ sag(sw + 20, 0.22)
+        if C["hunch"] and pose.get("arms") == "aim":   # ghouls reach forward, claws out
+            elbow = up((0.16, s * 0.17, 0.2)); hand = up((0.33, s * 0.12, 0.12))
         R.limb(sh, elbow, 0.045, 0.04, C["suit"])
         R.limb(elbow, hand, 0.04, 0.034, C["suit_d"])
         R.ball(hand, 0.036, C["glove"])
@@ -248,8 +307,11 @@ def resheet(big_path="/tmp/r3d/player_r_big.png"):
     sheet.save(os.path.join(OUT, "player_r.png"))
 
 
-def main():
+def main(outfit="player"):
+    global _CUBE
     reset()
+    _CUBE = None
+    P._MC.clear()
     sc = bpy.context.scene
     sc.view_settings.view_transform = 'Standard'
     lights()
@@ -259,7 +321,7 @@ def main():
     big = Image.new("RGBA", (CELL_W * SS * 8, CELL_H * SS * 8), (0, 0, 0, 0))
     for col, pose in enumerate(poses()):
         for row in range(8):
-            rig = build(pose)
+            rig = build(pose, outfit)
             rig.root.rotation_euler = (0, 0, facing_yaw(row))
             sc.render.filepath = tmp
             bpy.ops.render.render(write_still=True)
@@ -268,22 +330,24 @@ def main():
             sheet.paste(downsample(im), (col * CELL_W, row * CELL_H))
             rig.clear()
         print("frame", col, flush=True)
-    sheet.save(os.path.join(OUT, "player_r.png"))
-    big.save("/tmp/r3d/player_r_big.png")
+    nm = "%s_r" % outfit
+    sheet.save(os.path.join(OUT, nm + ".png"))
+    big.save("/tmp/r3d/%s_big.png" % nm)
     # anchor for Assets.off(): feet pixel inside one cell
     ap = os.path.join(ROOT, "assets", "rendered_anchors.json")
     an = json.load(open(ap)) if os.path.exists(ap) else {}
-    an["player_r"] = list(ANCHOR)
+    an[nm] = list(ANCHOR)
     json.dump(an, open(ap, "w"), indent=0, sort_keys=True)
     # also patch the live anchors.json (make_assets.py merges rendered_anchors.json on its next run)
     gp = os.path.join(ROOT, "assets", "anchors.json")
     g = json.load(open(gp)); g.update(an)
     json.dump(g, open(gp, "w"), separators=(",", ":"), sort_keys=True)
-    print("wrote", os.path.join(OUT, "player_r.png"))
+    print("wrote", nm)
 
 
 if __name__ == "__main__":
     if os.environ.get("RESHEET"):
         resheet()
     else:
-        main()
+        for o in (sys.argv[1:] or ["player"]):
+            main(o)

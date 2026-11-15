@@ -16,7 +16,6 @@ var moving := false
 var walk_t := 0.0
 var walk_f := 0
 var walk_i := 0                # 0..3 step of the 4-frame walk cycle (rendered sprite)
-var rendered := false          # true when using the pre-rendered 8-direction sheet
 var carry := {"scrap": 0, "cloth": 0, "wood": 0}
 var kills := 0
 var regen := 0.0

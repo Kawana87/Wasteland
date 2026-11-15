@@ -4,9 +4,11 @@ extends Actor
 
 var walk_t := 0.0
 var walk_f := 0
+var face_dir := Vector2(1, 0)
+var moving_now := false
 
 func _ready() -> void:
-	make_body("dog", 2, 14, 10)
+	if not use_rendered("dog", 2): make_body("dog", 2, 14, 10)
 	radius = 0.2
 	shadow_w = 8
 
@@ -21,9 +23,15 @@ func step(delta: float, p: Player) -> void:
 		if not move(dir * 3.8 * delta) and d > 3.0:
 			wpos += dir * 3.8 * delta
 		body.flip_h = (dir.x - dir.y) < 0
+		face_dir = world_to_screen_dir(dir)
+		moving_now = true
 		walk_t += delta
 		if walk_t > 0.12:
 			walk_t = 0.0
 			walk_f ^= 1
-	body.frame = walk_f
+	if rendered:
+		face(face_dir, walk_f if moving_now else 0)
+	else:
+		body.frame = walk_f
+	moving_now = false
 	sync()
