@@ -6,6 +6,9 @@ Needs Pillow (pip install pillow). Output: assets/sprites/*.png and assets/ancho
 """
 import os, sys, shutil
 HERE = os.path.dirname(os.path.abspath(__file__))
+if os.path.exists(os.path.join(HERE, "..", "assets", "rendered_anchors.json")) and "--force" not in sys.argv:
+    sys.exit("The sprites are now pre-rendered in Blender (tools/render3d/port_*.py, character.py).\n"
+             "Running this would replace them with the old pixel art. Use --force if you really want that.")
 sys.path.insert(0, HERE)
 import px2
 OUT = os.path.join(HERE, "..", "assets", "sprites")

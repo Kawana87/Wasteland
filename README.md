@@ -80,12 +80,29 @@ scripts/
 shaders/terrain.gdshader   Dithered pixel-art terrain shading
 shaders/crt.gdshader       Optional CRT effect
 shaders/grade.gdshader     Wasteland colour grade + day/night
-assets/sprites/        Generated sprites (+ assets/anchors.json: where each sprite touches the ground)
-tools/make_assets.py   Regenerates the sprites (python3 tools/make_assets.py, needs Pillow)
-  px2.py, art_chars.py, art_world.py, art_build.py   drawing helpers and the art itself
+assets/sprites/        Sprites (+ assets/anchors.json: where each sprite touches the ground)
+tools/render3d/        Pre-rendered art pipeline (Blender as a Python module: pip install bpy)
+  port_walls.py        walls, doors, windows, broken walls (12 palettes)
+  port_tiles.py        floors, flat roofs, stairs, shingle + gable textures
+  port_props.py        props, trees, cars (8 directions), furniture
+  character.py         8-direction people (player, survivor, settlers, trader, raider, ghoul)
+  port_creatures.py    dog, rat, cattle, shellback, crow, brute
+  kit.py, props.py, landmarks.py, scenes.py, world_scene.py   the render lab (look-test scenes)
+tools/audit_world.gd   Headless placement audit: godot --headless --path . -s tools/audit_world.gd -- 30
+tools/make_assets.py   The original pixel-art generator (refuses to run over the renders without --force)
 ```
 
-To swap in real art later, replace PNGs in `assets/sprites/` keeping the same names, and update their anchors in `assets/anchors.json`.
+## Art pipeline
+
+All sprites are rendered in Blender at the game's exact camera (true 2:1 dimetric, 24/12 px per tile,
+1.5 px per unit of height), supersampled 4x and filtered down, keeping the old sprite names, canvases and
+anchors, so the game code doesn't care. People and creatures use 8-direction sheets (`<name>_r.png`: rows
+are screen directions, columns are idle / walk / crouch frames); if a `_r` sheet is missing the game falls
+back to the old pixel sheet. After re-rendering, open the project in the editor (or run
+`godot --headless --import`) so Godot picks up the new images.
+
+Debug runs (desktop): `godot --path . -- --autostart --shots | --tour | --soak | --fade | --char | --bestiary`
+write screenshots to `user://shots`.
 
 ## Next up (Milestone 2+)
 

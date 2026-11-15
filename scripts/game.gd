@@ -130,6 +130,8 @@ func _ready() -> void:
 			_debug_fade.call_deferred()
 		if "--tour" in args:
 			_debug_tour.call_deferred()
+		if "--bestiary" in args:
+			_debug_bestiary.call_deferred()
 		return
 	hud.show_title("A new world is generated every time: rolling hills and cliffs out west, a ruined city to the east.\nRaiders hold plateau camps; feral ghouls haunt the ruins; brutes and shellbacks roam the wilds.\nFriendly settlements trade gear for scrap. Set up camps anywhere and fast travel between them.\n\nPC: WASD move · mouse aim · left click shoot · F / right click melee · Space jump · C sneak\nE use / talk / chop / climb / stairs · I inventory · H heal · B camp menu · T fast travel · V CRT filter\nGamepad: left stick move · right stick aim · RT shoot · A jump · X use · B melee · Y sneak\nTouch: left thumb move · right thumb aim and shoot · buttons on the right", start_new_world)
 
@@ -1515,6 +1517,23 @@ func _debug_shots() -> void:
 			_snap(out + "/11_night_%s.png" % b.kind)
 			break
 	print("SHOTS DONE ", ProjectSettings.globalize_path(out))
+	get_tree().quit()
+
+func _debug_bestiary() -> void:
+	var out := "user://shots"
+	DirAccess.make_dir_recursive_absolute(out)
+	await get_tree().create_timer(1.0).timeout
+	player.hp = 9999.0; player.max_hp = 9999.0
+	var done := {}
+	for e in enemies:
+		if done.has(e.type): continue
+		done[e.type] = true
+		for o in enemies: o.aw = 0.0; o.st = 0
+		player.fl = e.fl
+		player.wpos = e.wpos + Vector2(1.6, 1.6)
+		e.st = 2; e.aw = 1.0
+		await get_tree().create_timer(0.6).timeout
+		await _snap(out + "/b_%s.png" % e.type)
 	get_tree().quit()
 
 func _debug_tour() -> void:
