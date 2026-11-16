@@ -18,6 +18,7 @@ const SIDE := 7
 const STUMP := 8
 const DIRT_ROAD := 9
 const WATER := 10
+const ROCK := 11                # solid underground rock / bunker wall
 
 class Seg:
 	var a: Vector2
@@ -105,6 +106,7 @@ class Decor:
 	var flat := false
 	var bid := 0
 	var info := ""            # "Title|text" — something to look at (vignettes)
+	var portal := ""          # entrance to an underground map ("kind:id"), or "exit"
 
 class Settlement:
 	var name: String
@@ -158,21 +160,26 @@ const STEP := 10.0               # you can walk up a ledge this high (px) onto o
 func idx(x: int, y: int) -> int:
 	return y * N + x
 
+## Underground maps reuse World with only the first `rows` rows allocated (see Underground).
+var interior := false
+var rows := N
+var bounds := Vector2i(NC, NC)
+
 func in_bounds(x: int, y: int) -> bool:
-	return x >= 0 and y >= 0 and x < N and y < N
+	return x >= 0 and y >= 0 and x < N and y < rows
 
 func vh(x: int, y: int) -> float:
-	return VH[clampi(y, 0, N) * NV + clampi(x, 0, N)]
+	return VH[clampi(y, 0, mini(N, rows)) * NV + clampi(x, 0, N)]
 
 func set_vh(x: int, y: int, h: float) -> void:
-	if x < 0 or y < 0 or x > N or y > N:
+	if x < 0 or y < 0 or x > N or y > mini(N, rows):
 		return
 	VH[y * NV + x] = h
 
 ## Ground height (pixels) at a world position, bilinear between corner heights.
 func hz(wx: float, wy: float) -> float:
 	wx = clampf(wx, 0.0, N - 0.001)
-	wy = clampf(wy, 0.0, N - 0.001)
+	wy = clampf(wy, 0.0, mini(N, rows) - 0.001)
 	var x0 := int(floor(wx))
 	var y0 := int(floor(wy))
 	var fx := wx - x0
@@ -279,7 +286,7 @@ func can_stand(p: Vector2, r: float, fl: int) -> bool:
 		return false
 	if furn_hit(p, r, fl):
 		return false
-	if fl == 0 and tile(p.x, p.y) == WATER:
+	if fl == 0 and (tile(p.x, p.y) == WATER or tile(p.x, p.y) == ROCK):
 		return false
 	if fl > 0:
 		var id := building_at(p.x, p.y)
@@ -309,7 +316,7 @@ func blocks_shot(p: Vector2, z: float, fl: int) -> bool:
 	if furn_hit(p, 0.0, fl, true):
 		return true
 	if fl == 0:
-		if tree_hit(p, 0.02) or car_hit(p, -0.1):
+		if tree_hit(p, 0.02) or car_hit(p, -0.1) or tile(p.x, p.y) == ROCK:
 			return true
 		if building_at(p.x, p.y) == 0 and hz(p.x, p.y) > z:
 			return true
@@ -1204,13 +1211,16 @@ static func chunk_of(p: Vector2) -> Vector2i:
 	return Vector2i(clampi(int(p.x) / CH, 0, NC - 1), clampi(int(p.y) / CH, 0, NC - 1))
 
 func hn(x: int, y: int) -> float:
+	if interior: return 0.0
 	var i := clampi(y, 0, N - 1) * N + clampi(x, 0, N - 1)
 	return hraw.decode_u16(i * 2) / 65535.0 * (hmax - hmin) + hmin
 
 func biome(x: int, y: int) -> int:
+	if interior: return B_WASTE
 	return braw[(clampi(y, 0, N - 1) * N + clampi(x, 0, N - 1)) * 4]
 
 func density(x: int, y: int) -> int:
+	if interior: return 0
 	return braw[(clampi(y, 0, N - 1) * N + clampi(x, 0, N - 1)) * 4 + 1]
 
 func biome_name(p: Vector2) -> String:
@@ -1921,6 +1931,17 @@ func _chunk_poi(cx: int, cy: int, r: Rect2i) -> void:
 	var flat: bool = hs.max() - hs.min() < 26.0
 	var near_road_pt := _road_near(c, 9.0)
 	var roll := rng.randf()
+	var ug := rng.randf()
+	if ug < 0.2:
+		var kind := ""
+		if b in [B_HILLS, B_PEAK, B_WOODS]: kind = "cave" if rng.randf() < 0.6 else "mine"
+		elif b in [B_CANYON, B_GORGE, B_CRATER]: kind = "mine" if rng.randf() < 0.6 else "cave"
+		elif b in [B_WASTE, B_SALT, B_FARM]:
+			var q := rng.randf()
+			kind = "vault" if q < 0.25 else ("cave" if q < 0.5 else ("mine" if q < 0.65 else ""))
+		if kind != "" and _clear_of_buildings(c, 3.0):
+			_add_portal(kind, c)
+			return
 	if rng.randf() < 0.3 and flat:
 		_poi_vignette(c)
 		return
@@ -1941,6 +1962,15 @@ func _chunk_poi(cx: int, cy: int, r: Rect2i) -> void:
 	else:
 		if _free_spot(c) and _clear_of_buildings(c, 2.0):
 			add_decor("watertower" if rng.randf() < 0.5 else "billboard_x", c, true, Vector2(0.55, 0.55))
+
+const PORTAL_SPR := {"cave": "cave_mouth", "mine": "mine_entrance", "vault": "vault_door", "sewer": "manhole"}
+
+func _add_portal(kind: String, c: Vector2) -> void:
+	var d := add_decor(PORTAL_SPR[kind], c, kind != "sewer", Vector2(0.9, 0.9) if kind != "sewer" else Vector2(0.3, 0.3), kind == "sewer")
+	d.portal = "%s:%d_%d" % [kind, int(c.x), int(c.y)]
+	if kind != "sewer":
+		for k in 3:
+			_try_decor(["bones", "rubble2", "rock1", "barrel_rust"][ri(0, 3)], c + Vector2(rf(1.2, 2.4), rf(1.2, 2.4)), false)
 
 func _road_near(c: Vector2, rad: float) -> Vector2:
 	for k in 40:
@@ -2242,6 +2272,14 @@ func _chunk_debris(cx: int, cy: int, r: Rect2i) -> void:
 			if _free_spot(p):
 				var pick: String = ["rubble0", "rubble1", "rubble2", "bricks", "papers", "trashbag", "barrel_rust", "tire"][ri(0, 7)]
 				add_decor(pick, p, pick == "barrel_rust", Vector2(0.17, 0.17), pick == "papers")
+		# a manhole down into the sewers now and then
+		if rng.randf() < 0.22:
+			for t in 20:
+				var x := ri(r.position.x + 3, r.end.x - 4)
+				var y := ri(r.position.y + 3, r.end.y - 4)
+				if T[idx(x, y)] == SIDE and _free_spot(Vector2(x + 0.5, y + 0.5)):
+					_add_portal("sewer", Vector2(x + 0.5, y + 0.5))
+					break
 		# grid-street lamps at corners
 		for y in range(r.position.y, r.end.y):
 			for x in range(r.position.x, r.end.x):

@@ -81,6 +81,10 @@ The first open takes a moment while Godot imports the sprites.
 - **Things to find:** notes and holotapes in containers (read them again from the inventory), scenes in the wilds that
   tell a story when you look closer, people who talk as you pass. Discovering a place or clearing a dungeon gets a
   title card and a mark on the map.
+- **Underground:** caves in the hills, mines in the canyons, manholes down into Port Sterling's sewers and old
+  civil-defense shelters set into the rock. Each is its own map (dark, lantern-lit, built the same every time from
+  its entrance), with creatures thickening toward a named boss guarding a hoard at the far end. Clear one out for a
+  title card and XP; the ladder by the entrance takes you back up.
 - **Saving:** the game autosaves (and saves when you leave the app); **Continue** on the title screen picks up where
   you left off — your gear, camps, stash, bases, discoveries, and what you've looted and killed.
 - **Wasteland feel:** rubble, toxic spills, dead bushes, bones, crows that scatter when you get close, drifting dust, a washed-out colour grade and a day/night cycle (8 minutes per day).

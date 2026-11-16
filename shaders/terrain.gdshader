@@ -18,7 +18,7 @@ uniform float shadow_strength = 1.0;
 uniform vec2 origin = vec2(0.0);     // chunk origin in tiles (UV holds tile position within the chunk)
 uniform float city = 0.0;
 uniform sampler2D mat_map : filter_nearest, repeat_disable;   // tile materials of the chunk + 1-tile border (34x34)
-uniform vec3 pal[25];                                         // material mid-tones (TerrainMesh.MAT_COL)
+uniform vec3 pal[30];                                         // material mid-tones (TerrainMesh.MAT_COL)
 
 varying vec2 lpos;
 varying float mat;
@@ -165,6 +165,11 @@ void fragment() {
 	if (m == 22.0) { if (n < 0.08) { extra = -1.0; } if (vnoise(wpos * 3.0) > 0.7) { base = mix(base, vec3(0.42, 0.33, 0.2), 0.5); } }
 	if (m == 23.0) { vec2 f = fract(wpos * 0.5); if (f.x < 0.03 || f.y < 0.03) { extra = 1.0; } if (abs(vnoise(wpos * 2.0) - 0.5) < 0.025) { extra = 1.0; } if (vnoise(wpos * 1.1 + 4.0) > 0.75 && n < 0.3) { base = vec3(0.42, 0.46, 0.28); } }
 	water = abs(m - 15.0) < 0.5;
+	if (m == 26.0) { vec2 f = fract(wpos * 2.0); if (f.x < 0.12 || f.y < 0.12) { extra = -1.0; } if (fract(wpos.x * 0.5) < 0.04) { extra = 1.0; } }
+	if (m == 27.0) { vec2 f = fract(wpos * vec2(1.0, 0.5)); if (f.x < 0.04 || f.y < 0.03) { extra = -1.0; } if (vnoise(wpos * 1.5) > 0.7) { base = mix(base, vec3(0.32, 0.4, 0.28), 0.5); } }
+	if (m == 28.0) { if (n < 0.1) { extra = -1.0; } if (abs(vnoise(wpos * 1.3) - 0.5) < 0.03) { extra = 1.0; } }
+	if (m == 29.0) { vec2 f = fract(wpos * 0.5); if (f.x < 0.04 || f.y < 0.04) { extra = -1.0; } }
+	if (m == 25.0) { if (n < 0.12) { extra = -1.0; } if (vnoise(wpos * 2.0) > 0.72) { base = mix(base, vec3(0.36, 0.33, 0.28), 0.6); } }
 	if (water) {
 		float t = TIME * 0.6;
 		float wv = vnoise(wpos * 1.3 + vec2(t, t * 0.6)) + vnoise(wpos * 3.1 - vec2(t * 0.8, 0.0)) * 0.5;

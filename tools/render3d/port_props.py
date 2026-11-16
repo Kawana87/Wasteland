@@ -26,6 +26,8 @@ ORIG = "/tmp/sprites_orig"
 ALIAS = {"tree3": "tree0", "tree4": "tree0", "tree5": "tree0", "tree6": "tree0", "tree7": "tree0",
          "tree_dead1": "tree_dead", "tree_dead2": "tree_dead",
          "rock0": "rubble0", "rock1": "rubble0", "rock2": "deadbush", "boulder": "tree0", "cactus0": "tree0", "cactus1": "tree0",
+         "cave_mouth": "billboard_x", "mine_entrance": "billboard_x", "vault_door": "billboard_x", "manhole": "rubble0",
+         "ladder_up": "lamp", "minecart": "tent", "mine_support": "tent", "stalagmite": "tree0", "pipes": "tent", "crystal": "rubble0",
          "reeds0": "deadbush", "reeds1": "deadbush", "tumbleweed": "deadbush", "saltrock": "rubble0", "redrock": "tree0"}
 
 
@@ -517,6 +519,117 @@ def _rot(fn, deg):
             rot_z(o, deg, (0, 0))
 
 
+# ---- underground entrances and props
+def cave_mouth(rng):
+    m = P.MAT("rock:#7a6e60:#56504a")
+    for x, y, sz in ((0.0, 0.0, 1.05), (-0.7, 0.5, 0.7), (0.6, -0.7, 0.75), (-0.2, -0.6, 0.6), (0.4, 0.6, 0.55)):
+        P.rock(x, y, 0, rng, size=sz)
+    dark = P.MAT("flat:#050403:1.0")
+    sphere(0.62, 0.62, 0.25, 0.62, dark, scale=(1.0, 1.0, 0.9))
+
+
+def mine_entrance(rng):
+    P.rock(-0.3, -0.3, 0, rng, size=1.0)
+    P.rock(0.6, -0.6, 0, rng, size=0.65)
+    P.rock(-0.6, 0.6, 0, rng, size=0.65)
+    w = P.MAT("wood:#6a4a2e:#4a3220")
+    dark = P.MAT("flat:#0a0806:1.0")
+    box(0.1, -0.35, 0.0, 0.55, 0.35, 0.95, dark)
+    for y in (-0.42, 0.42):
+        box(0.5, y - 0.07, 0.0, 0.64, y + 0.07, 1.05, w)
+    box(0.5, -0.55, 1.0, 0.66, 0.55, 1.14, w)
+    box(0.66, -0.3, 1.16, 0.7, 0.3, 1.42, P.MAT("wood:#8a6a48:#74583a"))
+    for k in range(4):
+        box(0.7 + k * 0.28, -0.32, 0.0, 0.8 + k * 0.28, 0.32, 0.04, w)
+    for y in (-0.2, 0.2):
+        box(0.6, y - 0.02, 0.04, 1.8, y + 0.02, 0.07, P.MAT("metal:#5a5048"))
+
+
+def vault_door(rng):
+    for x, y, sz in ((-0.4, -0.2, 1.1), (0.3, -0.8, 0.8), (-0.8, 0.6, 0.8), (0.0, 0.5, 0.7)):
+        P.rock(x, y, 0, rng, size=sz)
+    conc = P.MAT("conc:#8a8478")
+    box(0.35, -0.8, 0.0, 0.75, 0.8, 1.55, conc)
+    o = cyl(0.8, 0.0, 0.0, 0.18, 0.62, P.MAT("paint:#b8a040:0.3"), 24)
+    o.rotation_euler = (0, 1.5708, 0)
+    o.location = g2b(0.8, 0.0, 0.72)
+    for k in range(12):
+        import math
+        a = k * math.tau / 12
+        t = cyl(0.8, 0.0, 0.0, 0.2, 0.08, P.MAT("metal:#6a6458"), 8)
+        t.rotation_euler = (0, 1.5708, 0)
+        t.location = g2b(0.82, math.cos(a) * 0.62, 0.72 + math.sin(a) * 0.62)
+    c = cyl(0.8, 0.0, 0.0, 0.24, 0.16, P.MAT("metal:#3a3630"), 12)
+    c.rotation_euler = (0, 1.5708, 0)
+    c.location = g2b(0.88, 0.0, 0.72)
+    box(0.75, -0.95, 0.0, 1.6, 0.95, 0.06, conc)
+
+
+def manhole():
+    cyl(0, 0, 0.0, 0.04, 0.42, P.MAT("metal:#4a4640"), 24)
+    for k in range(5):
+        box(-0.3 + k * 0.15, -0.3, 0.04, -0.27 + k * 0.15, 0.3, 0.06, P.MAT("metal:#2e2c28"))
+
+
+def ladder_up():
+    m = P.MAT("metal:#7a7064")
+    for y in (-0.22, 0.22):
+        box(-0.04, y - 0.03, 0.0, 0.04, y + 0.03, 2.4, m)
+    for k in range(9):
+        box(-0.03, -0.22, 0.2 + k * 0.25, 0.03, 0.22, 0.24 + k * 0.25, m)
+
+
+
+def minecart(rng):
+    rust = P.MAT("paint:#6a5a4a:0.7")
+    box(-0.45, -0.3, 0.18, 0.45, 0.3, 0.62, rust)
+    for x in (-0.3, 0.3):
+        for y in (-0.32, 0.32):
+            c = cyl(x, y, 0, 0.06, 0.12, P.MAT("metal:#2e2c28"), 12)
+            c.rotation_euler = (1.5708, 0, 0)
+            c.location = g2b(x, y, 0.13)
+    for k in range(6):
+        P.rock(rng.uniform(-0.3, 0.3), rng.uniform(-0.2, 0.2), 0, rng, size=0.13)
+        FAST.LAST[0].location.z += 0.6
+
+
+def mine_support(rng):
+    w = P.MAT("wood:#6a4a2e:#4a3220")
+    for y in (-0.5, 0.5):
+        box(-0.07, y - 0.07, 0.0, 0.07, y + 0.07, 1.25, w)
+    box(-0.09, -0.62, 1.2, 0.09, 0.62, 1.36, w)
+    cyl(0, 0, 1.0, 1.18, 0.07, P.MAT("glow:#ffcc66"), 10)
+
+
+def stalagmites(rng):
+    m = P.MAT("rock:#8a7e6c:#5e564a")
+    for k in range(4):
+        x, y = rng.uniform(-0.3, 0.3), rng.uniform(-0.25, 0.25)
+        h = rng.uniform(0.4, 1.1)
+        FAST.primitive_cone_add(vertices=7, radius1=rng.uniform(0.1, 0.2), radius2=0.01, depth=h, location=g2b(x, y, h / 2))
+        FAST.LAST[0].data.materials.append(m)
+
+
+def pipes():
+    m = P.MAT("metal:#6a6050")
+    for z in (0.25, 0.55):
+        c = cyl(0, 0, 0, 1.6, 0.08, m, 12)
+        c.rotation_euler = (1.5708, 0, 0)
+        c.location = g2b(0, 0.8, z)
+    v = cyl(0, 0, 0.0, 0.04, 0.16, P.MAT("paint:#a83a2a:0.4"), 12)
+    v.rotation_euler = (0, 1.5708, 0)
+    v.location = g2b(0.12, 0.0, 0.55)
+
+
+def crystal(rng):
+    m = P.MAT("glow:#6aff9a")
+    for k in range(5):
+        x, y = rng.uniform(-0.15, 0.15), rng.uniform(-0.12, 0.12)
+        h = rng.uniform(0.25, 0.6)
+        FAST.primitive_cone_add(vertices=5, radius1=0.07, radius2=0.0, depth=h, location=g2b(x, y, h / 2), rotation=(rng.uniform(-0.4, 0.4), rng.uniform(-0.4, 0.4), 0))
+        FAST.LAST[0].data.materials.append(m)
+
+
 def red_spire(rng):
     m = P.MAT("rock:#a8603e:#7a4028")
     z = 0.0
@@ -609,6 +722,16 @@ def specs():
     S["reeds1"] = dict(build=lambda: reeds(R(91), 22))
     S["tumbleweed"] = dict(build=lambda: P.tumbleweed(0, 0, 0, R(92)))
     S["saltrock"] = dict(build=lambda: salt_crust(R(93)))
+    S["cave_mouth"] = dict(build=lambda: cave_mouth(R(100)), match=False, scale=LAB2GAME * 0.95)
+    S["mine_entrance"] = dict(build=lambda: mine_entrance(R(101)), match=False, scale=LAB2GAME * 0.95)
+    S["vault_door"] = dict(build=lambda: vault_door(R(102)), match=False, scale=LAB2GAME * 0.95)
+    S["manhole"] = dict(build=lambda: manhole(), match="w", outline=False)
+    S["ladder_up"] = dict(build=lambda: ladder_up(), match="h")
+    S["minecart"] = dict(build=lambda: minecart(R(103)), match="w")
+    S["mine_support"] = dict(build=lambda: mine_support(R(104)), match="w")
+    S["stalagmite"] = dict(build=lambda: stalagmites(R(105)), match="h")
+    S["pipes"] = dict(build=lambda: pipes(), match="w")
+    S["crystal"] = dict(build=lambda: crystal(R(106)), match="w")
     S["stump"] = dict(build=stump)
     S["tent"] = dict(build=tent)
     S["tire"] = dict(build=lambda: P.tire_stack(0, 0, 0, R(23), n=1))

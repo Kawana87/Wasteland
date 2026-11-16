@@ -49,6 +49,9 @@ var marker: Control
 var _blink := 0.0
 
 func open() -> void:
+	if game.under != "":
+		game.hud.toast("No signal underground. The map works again on the surface.")
+		return
 	visible = true
 	game.audio.play("pipboy", Vector2.INF, -6.0, 0.0)
 	_layout()

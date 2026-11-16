@@ -3206,5 +3206,45 @@
 "tumbleweed": [
 18,
 21
+],
+"cave_mouth": [
+66,
+110
+],
+"crystal": [
+21,
+22
+],
+"ladder_up": [
+6,
+99
+],
+"manhole": [
+21,
+22
+],
+"mine_entrance": [
+66,
+110
+],
+"mine_support": [
+24,
+36
+],
+"minecart": [
+24,
+36
+],
+"pipes": [
+24,
+36
+],
+"stalagmite": [
+18,
+54
+],
+"vault_door": [
+66,
+110
 ]
 }

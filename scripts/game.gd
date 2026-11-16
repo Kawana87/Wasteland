@@ -139,6 +139,8 @@ func _ready() -> void:
 			if a.begins_with("--origin="): oid = a.substr(9)
 		if "--continue" in args: load_game.call_deferred()
 		else: start_new_world.call_deferred({}, oid)
+		if "--under" in args:
+			_debug_under.call_deferred()
 		if "--imm" in args:
 			_debug_immersion.call_deferred()
 		if "--play" in args:
@@ -316,8 +318,9 @@ func start_new_world(save: Dictionary = {}, oid: String = "drifter") -> void:
 	dog = Dog.new()
 	root.add_child(dog)
 	dog.wpos = player.wpos + Vector2(-1, 0)
+	under = ""; ow = {}
 	if save.is_empty():
-		xp = 0; level = 1; perks = {}; jobs = []; notes_read = []; examined = {}
+		xp = 0; level = 1; perks = {}; jobs = []; notes_read = []; examined = {}; under_state = {}
 	greeted = {}
 	weather = Weather.new()
 	root.add_child(weather)
@@ -416,7 +419,7 @@ func _stream(sync: bool) -> void:
 	var ahead := []
 	for cy in range(c0.y - 3, c0.y + 4):
 		for cx in range(c0.x - 3, c0.x + 4):
-			if cx < 0 or cy < 0 or cx >= World.NC or cy >= World.NC: continue
+			if cx < 0 or cy < 0 or cx >= world.bounds.x or cy >= world.bounds.y: continue
 			var d := _chunk_dist(cx, cy, p)
 			var key := World.ckey(cx, cy)
 			if d <= LOAD_R and not loaded.has(key): want.append([d, cx, cy])
@@ -637,6 +640,10 @@ func _spawn_enemy(s: Dictionary) -> Enemy:
 	e.setup(s)
 	e.set_meta("sp", s)
 	s.active = true
+	if s.has("boss"):
+		e.set_meta("boss", s.boss)
+		e.hp *= 6.0
+		e.max_hp = e.hp
 	enemies.append(e)
 	return e
 
@@ -652,6 +659,9 @@ func _sprite(tex: String, at: Vector2, z: float, off: Vector2, depth_bias: float
 
 const LIGHTS := {   # decor name -> [height (logical px), screen x offset, colour, radius, flicker]
 	"lamp": [58.0, 14.0, Color(1.0, 0.85, 0.55), 46.0, false],
+	"crystal": [8.0, 0.0, Color(0.45, 1.0, 0.6), 40.0, false],
+	"mine_support": [16.0, 0.0, Color(1.0, 0.75, 0.4), 36.0, true],
+	"ladder_up": [60.0, 0.0, Color(0.9, 0.9, 0.75), 40.0, false],
 	"campfire_decor": [6.0, 0.0, Color(1.0, 0.55, 0.2), 54.0, true],
 	"sign_motel": [70.0, 18.0, Color(0.35, 0.95, 0.9), 60.0, false],
 	"sign_gas": [78.0, 0.0, Color(0.4, 0.85, 0.8), 56.0, false],
@@ -1187,6 +1197,9 @@ func find_target() -> Dictionary:
 		if dd < bd: bd = dd; best = {"k": "door", "o": dn}
 	if p.fl == 0 and pb == 0:
 		for d in world.near(p.wpos, "decor"):
+			if d.portal != "":
+				var dd: float = p.wpos.distance_to(d.pos)
+				if dd < 1.9 and dd < bd: bd = dd; best = {"k": "portal", "o": d}
 			if d.info != "":
 				var dd: float = p.wpos.distance_to(d.pos)
 				if dd < 1.8 and dd < bd: bd = dd; best = {"k": "examine", "o": d}
@@ -1245,6 +1258,10 @@ func interact() -> void:
 				add_text(tp, "+%d wood" % wd, Color("d8b880"))
 		"crate":
 			_loot(t.o)
+		"portal":
+			var pd: World.Decor = t.o
+			if pd.portal == "exit": exit_under()
+			else: enter_under(pd.portal, pd.pos)
 		"examine":
 			var d: World.Decor = t.o
 			hud.show_menu(d.info.get_slice("|", 0), [d.info.get_slice("|", 1)], [["Move on", hud.hide_menu, false]])
@@ -1284,7 +1301,7 @@ func _loot(c: World.Crate) -> void:
 	if origin().get("scav", false) and c.kind != "bag" and not c.has_meta("loot"): mats[0] += 1
 	if perk("scrounger") > 0 and randf() < 0.35 * perk("scrounger") and not c.has_meta("loot"):
 		items.append([gun_info().get("ammo", "ammo_pistol"), randi_range(2, 5)])
-	if not c.has_meta("loot") and c.kind not in ["car", "bag", "brute"] and randf() < 0.13:
+	if not c.has_meta("loot") and c.kind not in ["car", "bag", "brute"] and randf() < (0.3 if under != "" else 0.13):
 		_find_note.call_deferred()
 	p.carry.scrap += mats[0]; p.carry.cloth += mats[1]; p.carry.wood += mats[2]
 	var parts := []
@@ -1301,6 +1318,95 @@ func _loot(c: World.Crate) -> void:
 	add_text(c.pos, " · ".join(parts) if parts.size() else "empty", Color("f2e6c8"), 2.2)
 	if found_gear != "":
 		hud.toast("Found %s! Press %s to open your inventory and equip it." % [found_gear, "INV" if using_touch else "I"])
+
+# ------------------------------------------------------------------ underground
+## Entering a cave/mine/sewer/shelter swaps the World for that place's own map; the overworld is kept
+## as it was and put back when you climb out.
+var under := ""                 # portal id while underground
+var under_state := {}           # portal id -> {opened, killed, cleared, visited}
+var ow := {}                    # overworld kept while underground: world, pos, lights
+
+func enter_under(portal: String, at: Vector2) -> void:
+	if danger():
+		hud.toast("Not with enemies on your tail.")
+		return
+	var inf := Underground.info(portal)
+	travel = {"to": {"cname": inf.name, "wpos": at}, "t": 0.0, "done": false, "text": "Going down into %s…" % inf.name,
+		"swap": func(): _swap_under(portal, at)}
+	state = "travel"
+
+func exit_under() -> void:
+	if under == "": return
+	travel = {"to": {"cname": "The Sable Wastes", "wpos": ow.pos}, "t": 0.0, "done": false, "text": "Climbing back out…", "swap": _swap_out}
+	state = "travel"
+
+func _despawn_all() -> void:
+	for key in loaded.keys(): _unload_chunk(key)
+	for e in enemies:
+		var sp = e.get_meta("sp") if e.has_meta("sp") else null
+		if sp != null: sp.active = false; sp.pos = e.wpos
+		e.queue_free()
+	enemies.clear()
+	for n in npcs:
+		var d = n.get_meta("sp") if n.has_meta("sp") else null
+		if d != null: d.active = false
+		n.queue_free()
+	npcs.clear()
+	for s in survivors:
+		if not s.get_meta("recruited"):
+			if s.has_meta("sp"): s.get_meta("sp").active = false
+			s.queue_free()
+	survivors = survivors.filter(func(s): return not s.is_queued_for_deletion())
+	bullets.clear(); particles.clear(); smoke_spots.clear()
+	locked = null
+
+func _swap_under(portal: String, outside: Vector2) -> void:
+	_despawn_all()
+	ow = {"world": world, "pos": outside + Vector2(0.0, 1.6), "lights": lights.lights.duplicate()}
+	lights.lights.clear()
+	for c in camps: c.visible = false
+	base.visible = false
+	if not under_state.has(portal): under_state[portal] = {"opened": {}, "killed": {}, "cleared": false}
+	world = Underground.build(portal, ow.world.seed_value, under_state[portal])
+	under = portal
+	player.wpos = world.start
+	player.fl = 0
+	player.climb = {}
+	dog.wpos = player.wpos + Vector2(-0.8, 0.3)
+	player.sync()
+	rebase()
+	_stream(true)
+	for e in enemies: e.aw = 0.0
+	if not under_state[portal].get("visited", false):
+		under_state[portal].visited = true
+		gain_xp(20, "")
+	hud.toast("%s. Find the way down to whatever lives at the bottom — the ladder by the entrance takes you back up." % Underground.info(portal).name)
+
+func _swap_out() -> void:
+	_despawn_all()
+	lights.lights.clear()
+	world = ow.world
+	lights.lights = ow.lights
+	for c in camps: c.visible = true
+	base.visible = true
+	under = ""
+	player.wpos = ow.pos
+	player.fl = 0
+	dog.wpos = player.wpos + Vector2(-0.8, 0.3)
+	player.sync()
+	rebase()
+	_stream(true)
+	for e in enemies: e.aw = 0.0
+	ow = {}
+
+func _check_under_cleared() -> void:
+	if under == "" or under_state[under].get("cleared", false): return
+	for s in world.spawns:
+		if not s.get("dead", false): return
+	under_state[under].cleared = true
+	hud.show_card("%s\nCLEARED" % Underground.info(under).name.to_upper())
+	audio.play("discover", Vector2.INF, -3.0, 0.0)
+	gain_xp(100, "")
 
 # ------------------------------------------------------------------ jobs and cleared sites
 func _check_cleared(loc_id: String) -> void:
@@ -1637,7 +1743,9 @@ func kill_enemy(e: Enemy, silent: bool) -> void:
 	audio.play({"ghoul": "ghoul_die", "brute": "ghoul_die", "rat": "rat_squeak"}.get(e.type, "hit_flesh"), e.wpos, -2.0)
 	var boss := e.has_meta("boss")
 	gain_xp(60 if boss else {"rat": 3, "ghoul": 6, "raider": 8, "shellback": 10, "brute": 25, "robot": 15}.get(e.type, 5), "")
-	if sp != null and sp.has("loc"): _check_cleared(sp.loc)
+	if sp != null and sp.has("loc"):
+		if under != "": _check_under_cleared()
+		else: _check_cleared(sp.loc)
 	if boss:
 		for j in jobs:
 			if j.kind == "bounty" and j.get("boss") == e.get_meta("boss"): _complete_job(j)
@@ -1663,6 +1771,7 @@ func kill_enemy(e: Enemy, silent: bool) -> void:
 	e.visible = false
 
 func respawn() -> void:
+	if under != "": _swap_out()
 	var p := player
 	var lost: int = p.carry.scrap + p.carry.cloth + p.carry.wood
 	p.carry = {"scrap": 0, "cloth": 0, "wood": 0}
@@ -1778,6 +1887,9 @@ func claim_den(rc) -> void:
 
 func open_camp_menu() -> void:
 	if state != "play": return
+	if under != "":
+		hud.toast("No camping down here. Find the ladder back up.")
+		return
 	var c = camp_near(player.wpos, 3.2)
 	var line := "Shared stash: %d scrap · %d cloth · %d wood" % [stash.scrap, stash.cloth, stash.wood]
 	var btns := []
@@ -1871,7 +1983,10 @@ func _process(delta: float) -> void:
 	time += delta
 	if state == "travel":
 		travel.t += delta / 1.4
-		if travel.t >= 0.5 and not travel.done:
+		if travel.t >= 0.5 and not travel.done and travel.has("swap"):
+			travel.done = true
+			travel.swap.call()
+		elif travel.t >= 0.5 and not travel.done:
 			travel.done = true
 			var c = travel.to
 			player.wpos = c.wpos + Vector2(0, 1.4)
@@ -1885,9 +2000,10 @@ func _process(delta: float) -> void:
 			_discover()
 		if travel.t >= 1.0:
 			state = "play"
-			hud.toast("Arrived at %s. A few hours pass." % travel.to.cname)
+			if travel.has("swap"): hud.show_card(travel.to.cname.to_upper())
+			else: hud.toast("Arrived at %s. A few hours pass." % travel.to.cname)
 		fx.fade = 1.0 - absf(travel.t * 2.0 - 1.0)
-		fx.fade_text = "Traveling to %s…" % travel.to.cname
+		fx.fade_text = travel.get("text", "Traveling to %s…" % travel.to.cname)
 		_update_camera()
 		return
 	fx.fade = 0.0
@@ -1968,7 +2084,7 @@ func _process(delta: float) -> void:
 	noise_level = maxf(0.0, noise_level - delta * 30.0)
 	_world_life(delta)
 	spawn_t += delta
-	if spawn_t > 40.0:
+	if spawn_t > 40.0 and under == "":
 		spawn_t = 0.0
 		var mutants := 0
 		for e in enemies:
@@ -1980,7 +2096,7 @@ func _process(delta: float) -> void:
 			world.add_monster(p.wpos, 22.0, cps)
 			for i in range(before, world.spawns.size()): _spawn_enemy(world.spawns[i])
 	patrol_t += delta
-	if patrol_t > 90.0:
+	if patrol_t > 90.0 and under == "":
 		patrol_t = 0.0
 		var has := false
 		for e in enemies:
@@ -1989,8 +2105,9 @@ func _process(delta: float) -> void:
 			var before := world.spawns.size()
 			world.add_patrol(p.wpos)
 			for i in range(before, world.spawns.size()): _spawn_enemy(world.spawns[i])
-	_encounters(delta)
-	_update_jobs()
+	if under == "":
+		_encounters(delta)
+		_update_jobs()
 	_immersion(delta)
 	_update_bullets(delta)
 	_update_visibility()
@@ -2003,6 +2120,11 @@ func _process(delta: float) -> void:
 ## what you've discovered, looted and killed.
 func save_game() -> void:
 	if world == null or player == null or state == "title": return
+	var w_saved := world
+	var pos_saved := player.wpos
+	if under != "":
+		world = ow.world
+		player.wpos = ow.pos
 	var cps := []
 	for c in camps:
 		cps.append({"x": c.wpos.x, "y": c.wpos.y, "name": c.cname, "main": c.main, "up": c.up})
@@ -2028,6 +2150,9 @@ func save_game() -> void:
 		"camps": cps, "pieces": pcs, "floors": fls, "founds": fds, "vh": vhs, "claimed": claimed, "recruited": rec,
 		"discovered": world.discovered, "opened": world.opened, "killed": world.killed, "origin": origin_id,
 		"xp": xp, "level": level, "perks": perks, "jobs": jobs, "notes": notes_read, "examined": examined, "cleared": world.cleared}
+	d["under"] = under_state
+	world = w_saved
+	player.wpos = pos_saved
 	var f := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
 	if f: f.store_string(JSON.stringify(d))
 
@@ -2079,6 +2204,7 @@ func _apply_save(d: Dictionary) -> void:
 	notes_read = []
 	for n in d.get("notes", []): notes_read.append(int(n))
 	examined = d.get("examined", {})
+	under_state = d.get("under", {})
 	jobs = []
 	for j in d.get("jobs", []):
 		if j.has("target") and typeof(j.target) == TYPE_STRING: j.target = str_to_var("Vector2" + j.target) if not j.target.begins_with("Vector2") else str_to_var(j.target)
@@ -2110,10 +2236,13 @@ func _notification(what: int) -> void:
 ## Sound beds, footsteps, weather, people talking as you pass, enemies shouting when they spot you.
 func _immersion(delta: float) -> void:
 	var p := player
-	weather.step(delta, self)
+	if under == "": weather.step(delta, self)
+	else:
+		weather.amt = 0.0; weather.target = 0.0; weather.kind = "clear"
+		audio.set_bed("amb_rain", 0.0)
 	var sun := sin(day_t * TAU)
 	var night := clampf(-sun * 1.6 + 0.3, 0.0, 1.0)
-	var inside := world.building_at(p.wpos.x, p.wpos.y) != 0
+	var inside := world.building_at(p.wpos.x, p.wpos.y) != 0 or under != ""
 	var wet: bool = weather.kind == "rain" or weather.kind == "rad"
 	var storm: float = weather.amt if weather.kind in ["dust", "rad"] else 0.0
 	audio.set_bed("amb_wind", (0.15 if inside else 0.45 + storm * 0.5) * (0.7 if night > 0.5 else 1.0))
@@ -2254,11 +2383,18 @@ func _world_life(delta: float) -> void:
 	var tint := Vector3(1.0, 0.97, 0.9).lerp(Vector3(0.62, 0.72, 1.0), 1.0 - dayness)
 	tint = tint.lerp(Vector3(1.12, 0.86, 0.7), dusk * 0.6)
 	if weather: tint *= weather.tint()
+	if under != "":
+		tint = Vector3(0.86, 0.88, 0.95)
+		dayness = 0.35
 	if grade:
 		grade.set_shader_parameter("tint", tint)
 		grade.set_shader_parameter("bright", lerpf(0.58, 1.0, dayness) * (weather.dim() if weather else 1.0))
 		grade.set_shader_parameter("sat", lerpf(0.55, 0.82, dayness))
 	lights.strength = clampf((1.0 - dayness) * 1.1, 0.0, 0.9)
+	# your lantern: a soft light that follows you at night and underground
+	lights.lights = lights.lights.filter(func(l): return l.tag != -2)
+	if dayness < 0.6:
+		lights.add(Iso.to_screen(p.wpos.x, p.wpos.y, p.ground_z() + 16.0), Color(1.0, 0.9, 0.7), 70.0 if under != "" else 40.0, false, -2)
 	# settlement greeting
 	var si := world.settlement_at(p.wpos)
 	if si != in_settlement:
@@ -2434,9 +2570,15 @@ func _update_hud() -> void:
 		var known := world.discovered.has(l.id)
 		if known and d < 400.0: mk.append([(l.pos - p.wpos).angle(), "loc"])
 		elif not known and d < 160.0: mk.append([(l.pos - p.wpos).angle(), "loc_new"])
+	if under != "":
+		mk.clear()
+		var ex: Vector2 = world.start - Vector2(1, 1)
+		if ex.distance_to(p.wpos) > 3.0: mk.append([(ex - p.wpos).angle(), "camp"])
 	for c in camps:
+		if under != "": break
 		if c.wpos.distance_to(p.wpos) > 6.0: mk.append([(c.wpos - p.wpos).angle(), "camp"])
 	for j in jobs:
+		if under != "": break
 		var tgt: Vector2 = j.target
 		if j.kind == "supply": tgt = world.settlements[j.si].pos
 		if tgt.distance_to(p.wpos) > 4.0: mk.append([(tgt - p.wpos).angle(), "job"])
@@ -2464,6 +2606,12 @@ func _update_hud() -> void:
 					"sealed": msg = "Boarded up"
 			"camp": msg = "%s Camp menu" % ("CAMP" if using_touch else "[B]")
 			"examine": msg = "%s Look: %s" % [k, t.o.info.get_slice("|", 0)]
+			"portal":
+				if t.o.portal == "exit": msg = "%s Climb back up to the surface" % k
+				else:
+					var ui := Underground.info(t.o.portal)
+					var cl: bool = under_state.get(t.o.portal, {}).get("cleared", false)
+					msg = "%s Enter %s%s" % [k, ui.name, "  (cleared)" if cl else ""]
 	if not busy.is_empty():
 		msg = "Picking lock… %d%%" % int(100.0 * busy.t / busy.total)
 	hud.set_prompt(msg)
@@ -2802,6 +2950,35 @@ func _debug_immersion() -> void:
 	await _snap("user://shots/imm_note.png")
 	hud.hide_menu()
 	print("IMM jobs ", jobs.size(), " level ", level, " perks ", perks, " notes ", notes_read, " radio ", audio.radio_on, " beds ", audio.bed_target)
+	get_tree().quit()
+
+## Underground check: go down into one of each kind, look around, fight a little, climb out.
+func _debug_under() -> void:
+	DirAccess.make_dir_recursive_absolute("user://shots")
+	await get_tree().create_timer(1.0).timeout
+	for kind in ["cave", "mine", "sewer", "vault"]:
+		var t0 := Time.get_ticks_msec()
+		var portal := "%s:%d_%d" % [kind, 500 + kind.length(), 700]
+		_swap_under(portal, player.wpos)
+		var t1 := Time.get_ticks_msec()
+		await get_tree().create_timer(0.5).timeout
+		await _snap("user://shots/under_%s.png" % kind)
+		var boss = null
+		for s in world.spawns:
+			if s.has("boss"): boss = s
+		# jump next to the boss
+		player.wpos = boss.pos + Vector2(-3, -3)
+		for t in 20:
+			if world.can_stand(player.wpos, 0.3, 0): break
+			player.wpos += Vector2(randf_range(-1, 1), randf_range(-1, 1))
+		player.sync(); _stream(true)
+		await get_tree().create_timer(0.6).timeout
+		await _snap("user://shots/under_%s_boss.png" % kind)
+		print("UNDER %s: %s, built in %d ms, %d spawns, %d crates, %d decor, start %s, boss %s at %s, enemies active %d" % [kind, Underground.info(portal).name, t1 - t0, world.spawns.size(), world.crates.size(), world.decor.size(), str(world.start), boss.boss, str(boss.pos), enemies.size()])
+		_swap_out()
+		await get_tree().create_timer(0.3).timeout
+	print("UNDER back on surface at ", player.wpos, " world interior=", world.interior, " loaded ", loaded.size())
+	await _snap("user://shots/under_back.png")
 	get_tree().quit()
 
 ## Walk along the interstate for a while, measuring frame times while chunks stream in.

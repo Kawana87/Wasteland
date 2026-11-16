@@ -31,9 +31,14 @@ const MAT_COL := {
 	22: Color("4f5a34"),  # forest floor
 	23: Color("6e6a62"),  # cracked concrete lot
 	24: Color("a87a50"),  # red sand
+	25: Color("4a4238"),  # cave floor
+	26: Color("5a6268"),  # bunker floor grating
+	27: Color("4e5650"),  # sewer concrete
+	28: Color("2e2a26"),  # rock mass (underground walls)
+	29: Color("6a6a64"),  # bunker wall concrete
 }
 
-const G_MAT := {1: 1, 2: 2, 4: 3, 5: 16, 6: 17, 7: 18, 8: 19, 9: 20, 10: 21, 11: 22, 12: 24, 13: 23}
+const G_MAT := {1: 1, 2: 2, 4: 3, 5: 16, 6: 17, 7: 18, 8: 19, 9: 20, 10: 21, 11: 22, 12: 24, 13: 23, 14: 25, 15: 26, 16: 27, 17: 28, 18: 29}
 
 var chunk := Vector2i()
 
@@ -77,7 +82,7 @@ func build(w: World, ccx: int, ccy: int, near: Array) -> void:
 	for y in range(-1, World.CH + 1):
 		for x in range(-1, World.CH + 1):
 			var X := clampi(x0 + x, 0, World.N - 1)
-			var Y := clampi(y0 + y, 0, World.N - 1)
+			var Y := clampi(y0 + y, 0, mini(World.N, w.rows) - 1)
 			var mm := tile_mat(w, X, Y)
 			mi.set_pixel(x + 1, y + 1, Color8(mm, 0, 0))
 	mat.set_shader_parameter("mat_map", ImageTexture.create_from_image(mi))
@@ -92,7 +97,7 @@ static var PAL := _pal()
 
 static func _pal() -> PackedVector3Array:
 	var out := PackedVector3Array()
-	for k in 25:
+	for k in 30:
 		var c: Color = MAT_COL.get(k, Color.MAGENTA)
 		out.append(Vector3(c.r, c.g, c.b))
 	return out
@@ -136,11 +141,11 @@ func tile_mat(w: World, X: int, Y: int) -> int:
 	return _material(w, X + 0.5, Y + 0.5, 0.0 if wet else steep)
 
 func _material(w: World, x: float, y: float, steep: float) -> int:
-	if steep > 1.25:
+	if steep > 1.25 and not w.interior:
 		var bb := w.biome(int(x), int(y))
 		return 17 if bb == World.B_CANYON or bb == World.B_GORGE else 4
 	var tx := clampi(int(floor(x)), 0, World.N - 1)
-	var ty := clampi(int(floor(y)), 0, World.N - 1)
+	var ty := clampi(int(floor(y)), 0, mini(World.N, w.rows) - 1)
 	var i := w.idx(tx, ty)
 	var t := w.T[i]
 	var g := w.G[i]
@@ -154,4 +159,6 @@ func _material(w: World, x: float, y: float, steep: float) -> int:
 		return [7, 8, 9, 10, 14][b.fkind] if b else 7
 	if t == World.WATER:
 		return 15
+	if t == World.ROCK:
+		return 29 if g == 18 else 28
 	return G_MAT.get(g, 0)
