@@ -112,7 +112,14 @@ static func migrate(d: Dictionary) -> Dictionary:
 			if not d.has(k): d[k] = {}
 		if not d.has("days"): d.days = 0
 		if not d.has("bruised"): d.bruised = 0.0
-		# v1 kept scrap in the stash for trading; hand back what was carried
+	if v < 3:
+		# v3: markets and jobs keyed by town id. v2 keyed them by settlements[] index, which
+		# changes with streaming order, so the old market state can't be trusted: let it reset
+		# (it recovers in a day anyway). Supply jobs keep their target position to find the town.
+		d.econ = {"sat": {}, "purse": {}, "stock": {}}
+		d.trade_xp_day = {}
+		for j in d.get("jobs", []):
+			j.erase("si")
 	d.v = SAVE_VERSION
 	return d
 
@@ -201,7 +208,7 @@ func _apply_save(d: Dictionary) -> void:
 			recovery.crate = cr
 	days = int(d.get("days", 0))
 	trade_xp_day = {}
-	for k in d.get("trade_xp_day", {}): trade_xp_day[int(k)] = int(d.trade_xp_day[k])
+	for k in d.get("trade_xp_day", {}): trade_xp_day[str(k)] = int(d.trade_xp_day[k])
 	xp = int(d.get("xp", 0)); level = int(d.get("level", 1)); perks = d.get("perks", {})
 	notes_read = []
 	for n in d.get("notes", []): notes_read.append(int(n))
@@ -210,7 +217,7 @@ func _apply_save(d: Dictionary) -> void:
 	jobs = []
 	for j in d.get("jobs", []):
 		if j.has("target") and typeof(j.target) == TYPE_STRING: j.target = str_to_var("Vector2" + j.target) if not j.target.begins_with("Vector2") else str_to_var(j.target)
-		for k in ["reward", "xp", "n", "si"]:
+		for k in ["reward", "xp", "n"]:
 			if j.has(k): j[k] = int(j[k])
 		jobs.append(j)
 	var main: Camp = camps[0] if camps.size() > 0 else null

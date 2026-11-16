@@ -125,7 +125,7 @@ func _layout() -> void:
 			cm.draw_rect(Rect2(2, 2, 10, 10), Color(1, 0.85, 0.4), false, 2.0))
 		map_rect.add_child(cm)
 	for j in game.jobs:
-		var tgt: Vector2 = j.target if j.kind != "supply" else game.world.settlements[j.si].pos
+		var tgt: Vector2 = j.target
 		var jm := Control.new()
 		jm.size = Vector2(18, 18)
 		jm.position = tgt / float(World.N) * big - jm.size * 0.5

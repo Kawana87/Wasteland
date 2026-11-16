@@ -154,6 +154,12 @@ var pole_lines: Array = []       # Array of PackedVector2Array (power poles alon
 var critters: Array = []         # {type, pos, home}
 var road_d := PackedFloat32Array()
 var start := Vector2(10.5, 10.5)
+var gen_ms := 0                 # time spent building all locations at load (perf check)
+## While a chunk's content is generated, everything solid it makes must stay inside this rect
+## (the chunk minus a 2-tile border). Neighbouring chunks then never see each other's content, so a
+## chunk comes out the same whichever neighbour streamed in first (Review 2). Empty = no limit.
+var gen_rect := Rect2()
+var reserve_r := 0.0            # nothing solid is generated this close to the home camp (set once start is known)
 var plat := {}                   # Vector2i -> top height of a player-built foundation on that tile
 const STEP := 10.0               # you can walk up a ledge this high (px) onto or off a foundation
 
@@ -297,6 +303,23 @@ func can_stand(p: Vector2, r: float, fl: int) -> bool:
 		return bb.floors_at(c) > fl and not bb.holes.has(c)
 	return not tree_hit(p, r) and not car_hit(p, r) and not decor_hit(p, r)
 
+## Nearest spot within maxr where something of radius r can stand, on floor fl. When outside
+## (fl 0) and not allowed indoors, building tiles don't count. Returns Vector2.INF if none.
+func nearest_free(p: Vector2, r: float, fl: int = 0, maxr: float = 2.0, indoors_ok: bool = true) -> Vector2:
+	var ok := func(q: Vector2) -> bool:
+		if not can_stand(q, r, fl): return false
+		return indoors_ok or fl > 0 or building_at(q.x, q.y) == 0
+	if ok.call(p): return p
+	var step := 0.25
+	var ring := step
+	while ring <= maxr + 0.001:
+		var n := maxi(8, int(ring * 16))
+		for k in n:
+			var q := p + Vector2.from_angle(k * TAU / n) * ring
+			if ok.call(q): return q
+		ring += step
+	return Vector2.INF
+
 ## Can you walk from a to b? Uphill steeper than 26 px/tile is a cliff (jumping adds a little lift).
 func slope_ok(a: Vector2, b: Vector2, fl: int, lift: float = 0.0) -> bool:
 	if fl > 0:
@@ -433,6 +456,8 @@ func add_decor(name: String, p: Vector2, solid: bool = false, half: Vector2 = Ve
 	var d := Decor.new()
 	d.name = name; d.pos = p; d.solid = solid; d.half = half; d.flat = flat
 	d.bid = building_at(p.x, p.y)
+	if solid and reserved(p, -3.0): return d     # keep the camp's inner 5 tiles clear (not added)
+	if solid and gen_rect.size.x > 0.0 and not gen_rect.grow(-d.half.x).has_point(p): return d
 	decor.append(d)
 	if solid:
 		var k := int(floor(p.y)) * N + int(floor(p.x))
@@ -865,6 +890,10 @@ func _can_place(parts: Array, raider: bool = false, allow_clear: bool = false) -
 				cells[Vector2i(x, y)] = 1
 	if bb.position.x < 2 or bb.position.y < 2 or bb.end.x >= N - 2 or bb.end.y >= N - 2:
 		return false
+	if gen_rect.size.x > 0.0 and not gen_rect.encloses(Rect2(bb)): return false
+	if reserve_r > 0.0:
+		var nearest := start.clamp(Vector2(bb.position), Vector2(bb.end))
+		if nearest.distance_to(start) < reserve_r: return false
 	for y in range(bb.position.y - 1, bb.end.y + 1):
 		for x in range(bb.position.x - 1, bb.end.x + 1):
 			var i := idx(x, y)
@@ -1266,7 +1295,12 @@ func load_data(sd: int, start_id: String = "patchwork") -> void:
 		if _road_near(q, 8.0) != Vector2.ZERO: score += 20.0
 		if score > bs: bs = score; best = q
 	start = Vector2(floor(best.x) + 0.5, floor(best.y) + 0.5)
+	reserve_r = 8.0
 	ensure_content(chunk_of(start).x, chunk_of(start).y)
+
+## Inside the home camp's clear zone (Review 2: a gas station once generated on top of it).
+func reserved(p: Vector2, pad: float = 0.0) -> bool:
+	return reserve_r > 0.0 and p.distance_to(start) < reserve_r + pad
 
 ## Road polylines become dense point lists with a height profile: smoothed along the road, and carried
 ## level over water and gorges as a causeway.
@@ -1506,6 +1540,13 @@ func _begin() -> void:
 		"critters": critters.size(), "poles": pole_lines.size(), "posts": posts.size(), "flags": raider_flags.size(), "ropes": ropes.size(), "survivors": survivors.size()}
 
 func _finish() -> void:
+	if gen_rect.size.x > 0.0:
+		# loose items a chunk made must stay inside it too (see gen_rect)
+		var gr := gen_rect.grow(1.0)
+		for nm in ["crates", "spawns", "critters", "survivors"]:
+			var arr: Array = {"crates": crates, "spawns": spawns, "critters": critters, "survivors": survivors}[nm]
+			for i in range(arr.size() - 1, _mark[nm] - 1, -1):
+				if not gr.has_point(arr[i].pos): arr.remove_at(i)
 	_tidy_new()
 	var lists := {"buildings": buildings, "decor": decor, "cars": cars, "crates": crates, "spawns": spawns, "critters": critters,
 		"poles": pole_lines, "posts": posts, "flags": raider_flags, "ropes": ropes, "survivors": survivors}
@@ -1545,26 +1586,38 @@ func ensure_content(cx: int, cy: int) -> void:
 		for ox in range(-1, 2):
 			ensure_base(cx + ox, cy + oy)
 	var rect := Rect2(cx * CH, cy * CH, CH, CH)
+	# named places reach a little past their rect (levelled yards, fences): build any that come
+	# near this chunk first, so the chunk always sees them
 	for l in locs:
-		if not l.done and l.rect.intersects(rect):
+		if not l.done and l.rect.grow(10.0).intersects(rect):
 			_gen_location(l)
-	rng.seed = hash(key * 104729 + seed_value * 31)
+	var base_seed := hash(key * 104729 + seed_value * 31)
 	_begin()
 	var r := chunk_rect(cx, cy)
-	var dens := density(r.position.x + 16, r.position.y + 16)
+	gen_rect = Rect2(r.position + Vector2i(2, 2), r.size - Vector2i(4, 4))
 	var dmax := 0
 	for k in 9:
 		dmax = maxi(dmax, density(r.position.x + 4 + (k % 3) * 12, r.position.y + 4 + (k / 3) * 12))
+	# each step gets its own seed, so one step using more or fewer rolls can't shift the next
+	rng.seed = base_seed
 	if dmax > 100:
 		_chunk_city(r)
+	rng.seed = base_seed + 1
 	_chunk_roadside(cx, cy, r)
+	rng.seed = base_seed + 2
 	if dmax < 60 and nearest_loc(Vector2(r.get_center()), 30.0).is_empty():
 		_chunk_poi(cx, cy, r)
+	rng.seed = base_seed + 3
 	_chunk_trees(r)
+	rng.seed = base_seed + 4
 	_chunk_cars(cx, cy, r)
+	rng.seed = base_seed + 5
 	_chunk_debris(cx, cy, r)
+	rng.seed = base_seed + 6
 	_chunk_creatures(r)
+	rng.seed = base_seed + 7
 	_finish()
+	gen_rect = Rect2()
 
 ## Everything a chunk needs before it can be shown: content in it and all around it.
 func ensure_ready(cx: int, cy: int) -> void:
@@ -1581,10 +1634,31 @@ func is_ready(cx: int, cy: int) -> bool:
 			if not content_done[ckey(x, y)]: return false
 	return true
 
+## Shift a building up to `most` tiles so it sits m tiles inside the chunk; [] if it can't.
+func _nudge_inside(parts: Array, r: Rect2i, m: int, most: int) -> Array:
+	var bb: Rect2i = parts[0]
+	for q in parts: bb = bb.merge(q)
+	var lo := r.position + Vector2i(m, m)
+	var hi := r.end - Vector2i(m + 1, m + 1)
+	var d := Vector2i(maxi(0, lo.x - bb.position.x) - maxi(0, bb.end.x - hi.x), maxi(0, lo.y - bb.position.y) - maxi(0, bb.end.y - hi.y))
+	if absi(d.x) > most or absi(d.y) > most: return []
+	var out := []
+	for q in parts: out.append(Rect2i(q.position + d, q.size))
+	return out if _inside(out, r, m) else []
+
 func _inside(parts: Array, r: Rect2i, m: int = 1) -> bool:
 	var bb: Rect2i = parts[0]
 	for q in parts: bb = bb.merge(q)
 	return bb.position.x >= r.position.x + m and bb.position.y >= r.position.y + m and bb.end.x <= r.end.x - m - 1 and bb.end.y <= r.end.y - m - 1
+
+## Fisher-Yates with the seeded rng. Array.shuffle() uses Godot's global
+## random generator, which made the city different on every load.
+func _shuffle(a: Array) -> void:
+	for i in range(a.size() - 1, 0, -1):
+		var j := rng.randi_range(0, i)
+		var t = a[i]
+		a[i] = a[j]
+		a[j] = t
 
 ## Port Sterling and its suburbs: a block on every grid cell, the kind of building set by density.
 func _chunk_city(r: Rect2i) -> void:
@@ -1595,7 +1669,7 @@ func _chunk_city(r: Rect2i) -> void:
 			var gy := posmod(y, GRID)
 			if (gx == 3 or gx == 7 or gx == 10) and (gy == 3 or gy == 7 or gy == 10):
 				lots.append(Vector2i(x, y))
-	lots.shuffle()
+	_shuffle(lots)
 	for lot in lots:
 		var d := density(lot.x + 2, lot.y + 2)
 		var b := biome(lot.x + 2, lot.y + 2)
@@ -1613,7 +1687,10 @@ func _chunk_city(r: Rect2i) -> void:
 			if q < 0.25: continue
 			kind = "house" if q < 0.9 else "garage"
 		var parts := shape_for(kind, lot.x, lot.y)
-		if not _inside(parts, r, -6): continue      # may reach into neighbours (they have a base; not yet shown)
+		# stay 2 tiles inside the chunk: placing a building reads tiles 1 beyond it and levels the
+		# ground 1-2 beyond it, so this keeps chunks from depending on which neighbour loaded first
+		parts = _nudge_inside(parts, r, 2, 4)
+		if parts.is_empty(): continue
 		place_shape(parts, kind)
 
 ## Houses strung along roads where density is light, and roadside stops (gas, diner, motel) along
@@ -1645,8 +1722,8 @@ func _chunk_roadside(cx: int, cy: int, r: Rect2i) -> void:
 		var side := 1.0 if rng.randf() < 0.5 else -1.0
 		var off: float = pth.w + rf(1.6, 3.2)
 		var at := p + dir.orthogonal() * side * (off + 2.5)
-		var parts := shape_for(kind, int(at.x) - 2, int(at.y) - 2)
-		if not _inside(parts, r, -6): continue
+		var parts := _nudge_inside(shape_for(kind, int(at.x) - 2, int(at.y) - 2), r, 2, 3)
+		if parts.is_empty(): continue
 		place_shape(parts, kind)
 
 # ---------------------------------------------------------------- towns and sites
@@ -1655,6 +1732,7 @@ const TOWN_NAMES_SMALL := ["Survivor camp", "Drifter camp", "Scav camp", "Wayfar
 func _flatten(c: Vector2, r: float, h0: float, clear: bool) -> void:
 	for vy in range(int(c.y - r - 4), int(c.y + r + 5)):
 		for vx in range(int(c.x - r - 4), int(c.x + r + 5)):
+			if gen_rect.size.x > 0.0 and not gen_rect.grow(1.0).has_point(Vector2(vx, vy)): continue
 			var d := Vector2(vx, vy).distance_to(c)
 			set_vh(vx, vy, lerpf(vh(vx, vy), h0, sstep(1.0 - (d - r) / 4.0)))
 	if clear:
@@ -1664,6 +1742,18 @@ func _flatten(c: Vector2, r: float, h0: float, clear: bool) -> void:
 					CL[idx(x, y)] = 1
 
 func _gen_location(l: Dictionary) -> void:
+	# places close to each other are always built in list order, whichever is reached first
+	var saved := gen_rect
+	gen_rect = Rect2()
+	for o in locs:
+		if o == l: break
+		if not o.done and o.rect.grow(10.0).intersects(l.rect.grow(10.0)):
+			_gen_location(o)
+	_gen_location_raw(l)
+	gen_rect = saved
+
+func _gen_location_raw(l: Dictionary) -> void:
+	if l.done: return
 	l.done = true
 	var rr: Rect2 = l.rect
 	var c0 := chunk_of(rr.position)
@@ -2019,6 +2109,7 @@ func _poi_survivors(c: Vector2) -> void:
 	var st := Settlement.new()
 	st.name = TOWN_NAMES_SMALL[ri(0, TOWN_NAMES_SMALL.size() - 1)]
 	st.pos = c
+	st.id = "camp_%d_%d" % [int(round(c.x)), int(round(c.y))]   # stable across sessions (index isn't)
 	st.radius = 4.5
 	st.small = true
 	settlements.append(st)
@@ -2087,6 +2178,7 @@ func _poi_scav(c: Vector2, r: Rect2i) -> void:
 		var st := Settlement.new()
 		st.name = "Scavenger shack"
 		st.pos = Vector2(b.out) + Vector2(0.5, 0.5)
+		st.id = "shack_%d_%d" % [b.out.x, b.out.y]
 		st.radius = 3.0
 		st.small = true
 		settlements.append(st)
@@ -2159,6 +2251,7 @@ func _car_fits(c: Car) -> bool:
 	return not car_hit(c.pos, 1.6)
 
 func _add_car(c: Car) -> void:
+	if gen_rect.size.x > 0.0 and not gen_rect.grow(-1.0).has_point(c.pos): return
 	cars.append(c)
 	for yy in range(int(c.pos.y) - 2, int(c.pos.y) + 3):
 		for xx in range(int(c.pos.x) - 2, int(c.pos.x) + 3):
@@ -2349,6 +2442,7 @@ func _tidy_new() -> void:
 			for ring in range(1, 9):
 				for k in 12:
 					var q: Vector2 = d.pos + Vector2.from_angle(k * TAU / 12.0) * ring * 0.25
+					if gen_rect.size.x > 0.0 and not gen_rect.grow(-d.half.x).has_point(q): continue
 					if in_bounds(int(q.x), int(q.y)) and building_at(q.x, q.y) == 0 and _clear_of_buildings(q, d.half.x + 0.05) and not near_door.call(q):
 						d.pos = q; moved = true; break
 				if moved: break

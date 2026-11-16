@@ -221,8 +221,8 @@ func open_goods(npc: Npc) -> void:
 		var have := inv_count(gd)
 		var bbase := maxi(1, int(round(e.buy * pm)))
 		var sbase := maxi(1, int(round(e.sell * sm)))
-		var buy := Economy.buy_price(econ, si, gd, bbase, t)
-		var sell := Economy.sell_price(econ, si, gd, sbase, t)
+		var buy := Economy.buy_price(econ, world.settlements[si].id, gd, bbase, t)
+		var sell := Economy.sell_price(econ, world.settlements[si].id, gd, sbase, t)
 		var stk := Economy.stock(econ, world, si, gd, t) if e.stock else 0
 		var tag := " (local, cheap)" if e.made else (" (in demand)" if e.wanted else "")
 		lines.append("%s%s — buy %s · sell %d · you have %d" % [Items.iname(gd), tag, ("%d (%d left)" % [buy, stk]) if e.stock else "—", sell, have])
@@ -230,7 +230,7 @@ func open_goods(npc: Npc) -> void:
 		if e.stock:
 			var room := goods_cap() - goods_carried()
 			var c5 := 0
-			for k in 5: c5 += Economy.buy_price(econ, si, gd, bbase, t, k)
+			for k in 5: c5 += Economy.buy_price(econ, world.settlements[si].id, gd, bbase, t, k)
 			btns.append(["Buy %s — %d" % [Items.iname(gd), buy], func(): _buy_good(npc, id, 1, bbase), player.carry.scrap < buy or room < 1 or stk < 1])
 			btns.append(["Buy 5 %s — %d" % [Items.iname(gd), c5], func(): _buy_good(npc, id, 5, bbase), player.carry.scrap < c5 or room < 5 or stk < 5])
 		if have > 0:
@@ -239,7 +239,7 @@ func open_goods(npc: Npc) -> void:
 				var tot := 0
 				var n := 0
 				for k in have:
-					var pk := Economy.sell_price(econ, si, gd, sbase, t, k)
+					var pk := Economy.sell_price(econ, world.settlements[si].id, gd, sbase, t, k)
 					if tot + pk > purse: break
 					tot += pk; n += 1
 				if n > 1: btns.append(["Sell %d %s — +%d%s" % [n, Items.iname(gd), tot, "" if n == have else " (all they can pay for)"], func(): _sell_good(npc, id, n, sbase), false])
@@ -252,10 +252,10 @@ func _buy_good(npc: Npc, id: String, n: int, base_each: int) -> void:
 	var si := npc.settlement
 	var t := now()
 	var cost := 0
-	for k in n: cost += Economy.buy_price(econ, si, id, base_each, t, k)
+	for k in n: cost += Economy.buy_price(econ, world.settlements[si].id, id, base_each, t, k)
 	if goods_carried() + n <= goods_cap() and Economy.stock(econ, world, si, id, t) >= n and _pay(cost):
 		inv_add(id, n)
-		Economy.add_sat(econ, si, id, -n, t)
+		Economy.add_sat(econ, world.settlements[si].id, id, -n, t)
 		Economy.take_stock(econ, world, si, id, n, t)
 		Economy.spend_purse(econ, world, si, cost, t)
 		audio.play("coins", Vector2.INF, -6.0)
@@ -269,19 +269,20 @@ func _sell_good(npc: Npc, id: String, n: int, base_each: int) -> void:
 	var sold := 0
 	var purse := Economy.purse(econ, world, si, t)
 	for k in n:
-		var pk := Economy.sell_price(econ, si, id, base_each, t, k)
+		var pk := Economy.sell_price(econ, world.settlements[si].id, id, base_each, t, k)
 		if got + pk > purse: break
 		got += pk; sold += 1
 	if sold > 0 and inv_take(id, sold):
 		player.carry.scrap += got
-		Economy.add_sat(econ, si, id, sold, t)
+		Economy.add_sat(econ, world.settlements[si].id, id, sold, t)
 		Economy.spend_purse(econ, world, si, -got, t)
 		add_text(player.wpos, "+%d scrap" % got, Color("f2e27a"))
 		audio.play("coins", Vector2.INF, -6.0)
 		# trade XP: once per town per day, for a profitable haul brought in from elsewhere
 		var profit: int = got - int(Items.info(id).value) * sold
-		if profit > 0 and trade_xp_day.get(si, -1) != days:
-			trade_xp_day[si] = days
+		var sk: String = world.settlements[si].id
+		if profit > 0 and int(trade_xp_day.get(sk, -1)) != days:
+			trade_xp_day[sk] = days
 			gain_xp(clampi(profit / 3, 2, 30), "trade")
 	open_goods(npc)
 
@@ -311,6 +312,12 @@ func _complete_job(j: Dictionary) -> void:
 	jobs.erase(j)
 
 
+## Supply jobs remember the town by id (old saves only have its position).
+func _supply_here(j: Dictionary, si: int) -> bool:
+	var st: World.Settlement = world.settlements[si]
+	if j.get("st", "") != "": return j.st == st.id
+	return Vector2(j.target).distance_to(st.pos) < 2.0
+
 func open_jobs(npc: Npc) -> void:
 	var si := npc.settlement
 	var lines := ["Active jobs: %d / 3" % jobs.size()]
@@ -320,7 +327,7 @@ func open_jobs(npc: Npc) -> void:
 		if j.kind == "deliver" and world.settlements[si].id == j.loc:
 			var jj = j
 			btns.append(["Hand over the package — +%d" % j.reward, func(): _complete_job(jj); open_jobs(npc), false])
-		if j.kind == "supply" and j.si == si:
+		if j.kind == "supply" and _supply_here(j, si):
 			var jj = j
 			btns.append(["Hand over %d %s — +%d" % [j.n, Items.iname(j.good), j.reward], func():
 				if inv_take(jj.good, jj.n): _complete_job(jj)

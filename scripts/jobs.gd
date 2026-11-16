@@ -45,5 +45,5 @@ static func offer(g, si: int) -> Dictionary:
 			if not m[gd].made: want.append(gd)
 		var gd: String = want[randi() % want.size()] if want.size() else "water"
 		var n := randi_range(5, 10)
-		return {"kind": "supply", "title": "Bring %d %s to %s" % [n, Items.iname(gd), st.name], "target": here, "good": gd, "n": n, "si": si,
+		return {"kind": "supply", "title": "Bring %d %s to %s" % [n, Items.iname(gd), st.name], "target": here, "good": gd, "n": n, "st": st.id,
 			"reward": int(Items.info(gd).value * n * 1.6), "xp": 40 + n * 4, "from": st.name, "desc": "We're short on %s. Bring %d and I'll pay well over the odds." % [Items.iname(gd).to_lower(), n]}

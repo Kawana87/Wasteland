@@ -7,11 +7,11 @@ extends Node
 static var I: Game
 var dbg = null                   # DebugRuns, only with --autostart
 var proc_ms := 0.0               # time spent in Game._process last frame (perf check)
-const SAVE_VERSION := 2
+const SAVE_VERSION := 3
 const BAK_PATH := "user://save.bak.json"
 var econ := {"sat": {}, "purse": {}, "stock": {}}   # the player's effect on markets (see Economy)
 var days := 0                    # whole days passed
-var trade_xp_day := {}           # settlement index -> day trade XP was last given there
+var trade_xp_day := {}           # settlement id -> day trade XP was last given there
 var last_trade_si := -1
 var recovery := {}               # the bag you dropped when you last went down: {pos, under, crate, items, mats}
 var bruised_t := 0.0             # after going down: slower camp healing for an in-game hour

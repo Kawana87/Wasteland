@@ -76,31 +76,32 @@ static func market(w: World, si: int) -> Dictionary:
 	return out
 
 # ------------------------------------------------------------------ the player's effect on markets
-## econ = {"sat": {"si|good": [sold_minus_bought, day]}, "purse": {si: [scrap, day]}, "stock": {"si|good": [units, day]}}
+## econ = {"sat": {"town_id|good": [sold_minus_bought, day]}, "purse": {town_id: [scrap, day]}, "stock": {"town_id|good": [units, day]}}
+## Keyed by the settlement's stable id, never its index: settlements[] fills in streaming order.
 ## Selling floods a market (each unit sold drops that town's price 3%, down to 40%); buying drains it
 ## (each unit bought raises the price 3%, up to +60%). Both drift back over a day or two. Traders
 ## have a purse that refills daily, and only so many units of what they make.
 const SAT_TAU := 0.7            # days for saturation to fall to ~37%
 
-static func _sat(econ: Dictionary, si: int, g: String, now: float) -> float:
-	var k := "%d|%s" % [si, g]
+static func _sat(econ: Dictionary, sk: String, g: String, now: float) -> float:
+	var k := "%s|%s" % [sk, g]
 	var e = econ.sat.get(k)
 	if e == null: return 0.0
 	var s: float = float(e[0]) * exp(-(now - float(e[1])) / SAT_TAU)
 	econ.sat[k] = [s, now]
 	return s
 
-static func sell_price(econ: Dictionary, si: int, g: String, base: int, now: float, k: int = 0) -> int:
-	var s := maxf(0.0, _sat(econ, si, g, now)) + k
+static func sell_price(econ: Dictionary, sk: String, g: String, base: int, now: float, k: int = 0) -> int:
+	var s := maxf(0.0, _sat(econ, sk, g, now)) + k
 	return maxi(1, int(round(base * maxf(0.4, pow(0.97, s)))))
 
-static func buy_price(econ: Dictionary, si: int, g: String, base: int, now: float, k: int = 0) -> int:
-	var s := maxf(0.0, -_sat(econ, si, g, now)) + k
+static func buy_price(econ: Dictionary, sk: String, g: String, base: int, now: float, k: int = 0) -> int:
+	var s := maxf(0.0, -_sat(econ, sk, g, now)) + k
 	return maxi(1, int(round(base * minf(1.6, pow(1.03, s)))))
 
-static func add_sat(econ: Dictionary, si: int, g: String, n: float, now: float) -> void:
-	var s := _sat(econ, si, g, now) + n
-	econ.sat["%d|%s" % [si, g]] = [s, now]
+static func add_sat(econ: Dictionary, sk: String, g: String, n: float, now: float) -> void:
+	var s := _sat(econ, sk, g, now) + n
+	econ.sat["%s|%s" % [sk, g]] = [s, now]
 
 static func purse_cap(w: World, si: int) -> int:
 	var st: World.Settlement = w.settlements[si]
@@ -110,21 +111,22 @@ static func purse_cap(w: World, si: int) -> int:
 
 static func purse(econ: Dictionary, w: World, si: int, now: float) -> int:
 	var cap := purse_cap(w, si)
-	var e = econ.purse.get(str(si))
+	var sk: String = w.settlements[si].id
+	var e = econ.purse.get(sk)
 	if e == null: return cap
 	var v: float = minf(cap, float(e[0]) + cap * (now - float(e[1])))      # refills in a day
-	econ.purse[str(si)] = [v, now]
+	econ.purse[sk] = [v, now]
 	return int(v)
 
 static func spend_purse(econ: Dictionary, w: World, si: int, n: int, now: float) -> void:
-	econ.purse[str(si)] = [purse(econ, w, si, now) + n, now]
+	econ.purse[w.settlements[si].id] = [purse(econ, w, si, now) + n, now]
 
 static func stock_cap(w: World, si: int) -> int:
 	return 12 if w.settlements[si].small else 25
 
 static func stock(econ: Dictionary, w: World, si: int, g: String, now: float) -> int:
 	var cap := stock_cap(w, si)
-	var k := "%d|%s" % [si, g]
+	var k := "%s|%s" % [w.settlements[si].id, g]
 	var e = econ.stock.get(k)
 	if e == null: return cap
 	var v: float = minf(cap, float(e[0]) + cap * (now - float(e[1])))
@@ -132,7 +134,7 @@ static func stock(econ: Dictionary, w: World, si: int, g: String, now: float) ->
 	return int(v)
 
 static func take_stock(econ: Dictionary, w: World, si: int, g: String, n: int, now: float) -> void:
-	econ.stock["%d|%s" % [si, g]] = [stock(econ, w, si, g, now) - n, now]
+	econ.stock["%s|%s" % [w.settlements[si].id, g]] = [stock(econ, w, si, g, now) - n, now]
 
 ## One line for the map card: what's cheap and what pays here.
 static func summary(w: World, loc_id: String) -> String:

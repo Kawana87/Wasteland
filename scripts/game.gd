@@ -78,6 +78,12 @@ func _ready() -> void:
 			if a.begins_with("--origin="): oid = a.substr(9)
 		if "--continue" in args: load_game.call_deferred()
 		else: start_new_world.call_deferred({}, oid)
+		if "--determinism" in args:
+			dbg._debug_determinism.call_deferred()
+		if "--startclear" in args:
+			dbg._debug_start_clear.call_deferred()
+		if "--reloadstate" in args:
+			dbg._debug_reload_state.call_deferred()
 		if "--uicheck" in args:
 			dbg._debug_ui_check.call_deferred()
 		if "--savecheck" in args:
@@ -223,6 +229,8 @@ func start_new_world(save: Dictionary = {}, oid: String = "drifter") -> void:
 	player = Player.new()
 	root.add_child(player)
 	player.wpos = world.start + Vector2(0, 1.5)
+	var pf := world.nearest_free(player.wpos, 0.3, 0, 6.0, false)
+	if pf != Vector2.INF: player.wpos = pf
 	if origin().get("raider", false):
 		c.cname = "Raider Hideout"
 		var fp := world.start + Vector2(2.2, 0.6)
@@ -611,8 +619,7 @@ func _update_hud() -> void:
 		mk.append([(recovery.pos - p.wpos).angle(), "bag"])
 	for j in jobs:
 		if under != "": break
-		var tgt: Vector2 = j.target
-		if j.kind == "supply": tgt = world.settlements[j.si].pos
+		var tgt: Vector2 = j.target   # supply jobs carry their town's position too
 		if tgt.distance_to(p.wpos) > 4.0: mk.append([(tgt - p.wpos).angle(), "job"])
 	for e in enemies:
 		if not e.dead and e.aw > 60.0 and e.wpos.distance_to(p.wpos) < 30.0 and not e.friendly(): mk.append([(e.wpos - p.wpos).angle(), "enemy"])

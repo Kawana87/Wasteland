@@ -110,7 +110,7 @@ static func build(portal: String, seed_value: int, state: Dictionary) -> World:
 		"vault": ["furn_locker_a", "barrel", "papers", "rubble0", "furn_filing_a", "bones"]}[kind]
 	var lights: Array = {"cave": ["crystal"], "mine": ["lamp", "mine_support"], "sewer": ["lamp"], "vault": ["lamp"]}[kind]
 	var solid := ["stalagmite", "minecart", "barrel_rust", "barrel_toxic", "barrel", "furn_locker_a", "furn_filing_a", "pipes", "mine_support"]
-	cells.shuffle()
+	w._shuffle(cells)
 	var placed := 0
 	for c in cells:
 		if placed > 70: break
@@ -239,7 +239,7 @@ static func _carve(open: Dictionary, a: Vector2i, b: Vector2i, wdt: int) -> void
 			for ox in range(0, wdt):
 				var q := p + Vector2i(ox, oy)
 				if q.x > 0 and q.y > 0 and q.x < SIZE - 1 and q.y < SIZE - 1: open[q] = 1
-		if p.x != b.x and (p.y == b.y or randi() % 2 == 0): p.x += signi(b.x - p.x)
+		if p.x != b.x and (p.y == b.y or (p.x * 7 + p.y * 13) % 2 == 0): p.x += signi(b.x - p.x)
 		else: p.y += signi(b.y - p.y)
 
 static func _room(open: Dictionary, c: Vector2i, rx: int, ry: int, v: int = 1) -> void:

@@ -4,8 +4,33 @@ extends RefCounted
 
 var g: Game
 
+var errlog: ErrCounter
+
+## Counts engine and script errors so a check run that hit one fails, even when the broken
+## code path made a check look like it passed (Review 2).
+class ErrCounter extends Logger:
+	var n := 0
+	var first := ""
+	var ignore: Array = []   # substrings of expected errors (e.g. parsing a deliberately corrupt save)
+	var mx := Mutex.new()
+	func _log_error(function: String, file: String, line: int, code: String, rationale: String, editor_notify: bool, error_type: int, script_backtraces: Array[ScriptBacktrace]) -> void:
+		if error_type == ERROR_TYPE_WARNING: return
+		var msg := "%s (%s:%d %s)" % [rationale if rationale != "" else code, file, line, function]
+		for i in ignore:
+			if msg.contains(i): return
+		mx.lock()
+		n += 1
+		if first == "": first = msg
+		mx.unlock()
+	func _log_message(message: String, error: bool) -> void:
+		pass
+
 func _init(game: Game) -> void:
 	g = game
+	errlog = ErrCounter.new()
+	OS.add_logger(errlog)
+	DirAccess.make_dir_recursive_absolute("user://shots")
+	_watchdog.call_deferred()
 
 
 # ------------------------------------------------------------------ debug (used for automated screenshots)
@@ -776,7 +801,24 @@ func check(name: String, ok: bool, detail: String) -> void:
 	print("%s %s — %s" % ["PASS" if ok else "FAIL", name, detail])
 	if not ok: fails += 1
 
+## A script error inside a check stops its coroutine, so finish() would never run and the
+## process would hang. End the run 20 s after the first error, or after 9 minutes regardless.
+var done := false
+func _watchdog() -> void:
+	var t0 := Time.get_ticks_msec()
+	var err_t := -1
+	while not done:
+		await g.get_tree().create_timer(1.0).timeout
+		if errlog.n > 0 and err_t < 0: err_t = Time.get_ticks_msec()
+		if err_t >= 0 and Time.get_ticks_msec() - err_t > 20000:
+			print("FAIL run stopped — script error: ", errlog.first); fails += 1; finish(); return
+		if Time.get_ticks_msec() - t0 > 540000:
+			print("FAIL run timed out"); fails += 1; finish(); return
+
 func finish() -> void:
+	if done: return
+	done = true
+	check("no script errors", errlog.n == 0, "%d errors%s" % [errlog.n, (", first: " + errlog.first) if errlog.n else ""])
 	print("CHECKS done: %d failed" % fails)
 	g.get_tree().quit(1 if fails > 0 else 0)
 
@@ -861,13 +903,22 @@ func _debug_econ_check() -> void:
 	var g2 := "water" if good != "water" else "salt"
 	g.inv_add(g2, 30)
 	var m2 := Economy.market(g.world, dsi2)
-	var first := Economy.sell_price(g.econ, dsi2, g2, m2[g2].sell, g.now())
-	var last := Economy.sell_price(g.econ, dsi2, g2, m2[g2].sell, g.now(), 29)
+	var first := Economy.sell_price(g.econ, g.world.settlements[dsi2].id, g2, m2[g2].sell, g.now())
+	var last := Economy.sell_price(g.econ, g.world.settlements[dsi2].id, g2, m2[g2].sell, g.now(), 29)
 	check("selling saturates", last <= first * 0.7 and last >= first * 0.39, "30th unit %d vs first %d (%.0f%%)" % [last, first, 100.0 * last / first])
-	g.econ.purse[str(dsi2)] = [0, g.now()]
-	var sc: int = g.player.carry.scrap
-	g._sell_good(home, g2, 30, m2[g2].sell)
-	check("trader purse limits", g.player.carry.scrap - sc < first * 30, "an empty purse paid %d" % (g.player.carry.scrap - sc))
+	if home == null:
+		g.player.wpos = hpos; g.player.sync(); g._stream(true)
+		for i in 10: await g.get_tree().process_frame
+		home = _trader_for(hsi)
+	check("home trader found", home != null, "trader at %s" % g.world.settlements[hsi].name)
+	if home:
+		var cap := Economy.purse(g.econ, g.world, hsi, g.now())
+		g.econ.purse[g.world.settlements[hsi].id] = [10, g.now()]
+		var sc: int = g.player.carry.scrap
+		var had := g.inv_count(g2)
+		g._sell_good(home, g2, 30, m2[g2].sell)
+		var paid: int = g.player.carry.scrap - sc
+		check("trader purse limits", paid <= 10 and had - g.inv_count(g2) < 30 and cap > 10, "a 10-scrap purse paid %d for %d units (full purse %d)" % [paid, had - g.inv_count(g2), cap])
 	g.hud.hide_menu()
 	check("stash stays at camp", g._scrap_total() == g.player.carry.scrap, "traders see %d (carry %d, stash %d)" % [g._scrap_total(), g.player.carry.scrap, g.stash.scrap])
 	finish()
@@ -948,6 +999,7 @@ func _debug_combat_check() -> void:
 
 ## Review 1 save safety: backups, corrupted saves, start-over confirmation.
 func _debug_save_check() -> void:
+	errlog.ignore = ["JSON", "Parse", "parse"]
 	await g.get_tree().create_timer(1.0).timeout
 	g.save_game()
 	g.player.carry.scrap = 77
@@ -1021,4 +1073,144 @@ func _debug_ui_check() -> void:
 	await g.get_tree().create_timer(0.3).timeout
 	await _snap("user://shots/ui_touch.png")
 	check("touch prompt wording", not g.hud.prompt_l.text.contains("USE ") or g.hud.prompt_l.text.begins_with("Tap"), "'%s'" % g.hud.prompt_l.text)
+	finish()
+
+# ------------------------------------------------------------------ Review 2 checks
+## Everything generated in a set of chunks, as comparable strings.
+func _chunk_sig(w: World, chunks: Array) -> Dictionary:
+	var rects := []
+	for c in chunks: rects.append(Rect2(Vector2(c) * World.CH, Vector2.ONE * World.CH))
+	var inr := func(p: Vector2) -> bool:
+		for r in rects:
+			if r.has_point(p): return true
+		return false
+	var b := []
+	for x in w.buildings:
+		if inr.call(Vector2(x.x0, x.y0)): b.append("%s@%d,%d %dx%d" % [x.kind, x.x0, x.y0, x.w, x.h])
+	var cr := []
+	for x in w.crates:
+		if inr.call(x.pos): cr.append("%s@%s" % [x.kind, str(x.pos.snapped(Vector2(0.01, 0.01)))])
+	var sp := []
+	for x in w.spawns:
+		if inr.call(x.pos): sp.append("%s@%s" % [x.type, str(x.pos.snapped(Vector2(0.01, 0.01)))])
+	b.sort(); cr.sort(); sp.sort()
+	return {"b": b, "c": cr, "s": sp}
+
+## Same seed, chunks generated in two different orders: the same city every time.
+func _debug_determinism() -> void:
+	await g.get_tree().create_timer(0.5).timeout
+	var sd := 185393
+	var spots := ["sterling_downtown", "patchwork", "redwall"]
+	var probe := World.new()
+	probe.load_data(sd, "patchwork")
+	var chunks := []
+	for id in spots:
+		var l := probe.loc_by_id(id)
+		var ck := World.chunk_of(l.pos)
+		for oy in range(-2, 3):
+			for ox in range(-2, 3):
+				chunks.append(ck + Vector2i(ox, oy))
+	# a suburb block too: somewhere around Port Sterling with low-mid density
+	var sl := probe.loc_by_id("sterling_downtown")
+	chunks.append(World.chunk_of(sl.pos + Vector2(90, 60)))
+	chunks.append(World.chunk_of(sl.pos + Vector2(-80, 70)))
+	var sigs := []
+	for run in 3:
+		var w := World.new()
+		w.load_data(sd, "patchwork")   # same save = same origin; only the load order changes
+		var order := chunks.duplicate()
+		if run == 1: order.reverse()
+		if run == 2:
+			var r := RandomNumberGenerator.new(); r.seed = 7
+			for i in range(order.size() - 1, 0, -1):
+				var j := r.randi_range(0, i); var t = order[i]; order[i] = order[j]; order[j] = t
+		for c in order: w.ensure_content(c.x, c.y)
+		sigs.append(_chunk_sig(w, chunks))
+		print("DET locations built in %d ms" % w.gen_ms)
+		print("DET run %d: %d buildings, %d crates, %d spawns" % [run, sigs[run].b.size(), sigs[run].c.size(), sigs[run].s.size()])
+	for k in ["b", "c", "s"]:
+		var same: bool = sigs[0][k] == sigs[1][k] and sigs[0][k] == sigs[2][k]
+		if not same:
+			for run in [1, 2]:
+				for x in sigs[run][k]:
+					if not sigs[0][k].has(x): print("DET diff run %d %s: %s" % [run, k, x]); break
+		check("same %s every load" % {"b": "buildings", "c": "crates", "s": "spawns"}[k], same, "%d / %d / %d" % [sigs[0][k].size(), sigs[1][k].size(), sigs[2][k].size()])
+	finish()
+
+## 20 new worlds (every origin), home camp in the open.
+func _debug_start_clear() -> void:
+	await g.get_tree().create_timer(0.5).timeout
+	var bad := 0
+	for i in 20:
+		var o: Dictionary = g.ORIGINS[i % g.ORIGINS.size()]
+		var sd := 1000 + i * 7919
+		var w := World.new()
+		w.load_data(sd, o.loc)
+		var ck := World.chunk_of(w.start)
+		w.ensure_ready(ck.x, ck.y)
+		var why := []
+		for y in range(-6, 7):
+			for x in range(-6, 7):
+				var q := w.start + Vector2(x, y)
+				if Vector2(x, y).length() < 6.0 and w.building_at(q.x, q.y) != 0: why.append("building at %s" % str(q)); break
+			if why.size(): break
+		if w.decor_hit(w.start, 3.5): why.append("solid prop at camp")
+		var pp := w.nearest_free(w.start + Vector2(0, 1.5), 0.3, 0, 6.0, false)
+		if pp == Vector2.INF or pp.distance_to(w.start) > 4.0: why.append("no standing room")
+		if why.size():
+			bad += 1
+			print("START %d (%s, seed %d) at %s: %s" % [i, o.id, sd, str(w.start), ", ".join(why)])
+	check("start camp in the open", bad == 0, "%d of 20 new worlds had a blocked camp" % bad)
+	finish()
+
+## Market saturation and a supply job survive saving here and reloading somewhere else.
+func _debug_reload_state() -> void:
+	await g.get_tree().create_timer(1.0).timeout
+	var tr: Npc = null
+	for n in g.npcs:
+		if n.type == "trader" and n.settlement >= 0: tr = n; break
+	check("found a trader", tr != null, "")
+	if tr == null: finish(); return
+	var si := tr.settlement
+	var st: World.Settlement = g.world.settlements[si]
+	var m := Economy.market(g.world, si)
+	var good := "salt"
+	for k in m:
+		if not m[k].made: good = k; break
+	var p0 := Economy.sell_price(g.econ, st.id, good, m[good].sell, g.now())
+	g.inv_add(good, 15)
+	g.econ.purse[st.id] = [9999, g.now()]
+	g._sell_good(tr, good, 15, m[good].sell)
+	g.hud.hide_menu()
+	var p1 := Economy.sell_price(g.econ, st.id, good, m[good].sell, g.now())
+	# a supply job for a town far away (not loaded)
+	var far: Dictionary = {}
+	for l in g.world.locs:
+		if l.type in ["town", "hub"] and l.pos.distance_to(g.player.wpos) > 600: far = l; break
+	g.jobs.append({"kind": "supply", "title": "Bring 5 Salt to %s" % far.name, "target": far.pos, "good": "salt", "n": 5, "st": far.id, "reward": 40, "xp": 40, "from": st.name, "desc": ""})
+	# save standing somewhere else, so settlements stream in a different order on load
+	var away: Vector2 = far.pos + Vector2(20, 20)
+	g.player.wpos = g.world.nearest_free(away, 0.3, 0, 30.0, false)
+	g.player.sync(); g.rebase(); g._stream(true)
+	for i in 30: await g.get_tree().process_frame
+	g.save_game()
+	g.load_game()
+	for i in 90: await g.get_tree().process_frame
+	var e0 := errlog.n
+	for i in 120: await g.get_tree().process_frame   # compass + world map draw the job every frame
+	g.wmap.open()
+	for i in 10: await g.get_tree().process_frame
+	g.wmap.close()
+	check("supply job reloads cleanly", errlog.n == e0 and g.jobs.size() > 0 and g.jobs[0].get("st", "") == far.id, "%d errors in 2 s, job town %s" % [errlog.n - e0, g.jobs[0].get("st", "?") if g.jobs.size() else "none"])
+	var p2 := Economy.sell_price(g.econ, st.id, good, m[good].sell, g.now())
+	check("market state stays with its town", p1 < p0 and absf(p2 - p1) <= 1, "%s at %s: %d before selling, %d after, %d after reload from %d tiles away" % [good, st.name, p0, p1, p2, int(away.distance_to(st.pos))])
+	var other := -1
+	for i in g.world.settlements.size():
+		if g.world.settlements[i].id != st.id: other = i; break
+	if other >= 0:
+		var mo := Economy.market(g.world, other)
+		var po := Economy.sell_price(g.econ, g.world.settlements[other].id, good, mo[good].sell, g.now())
+		check("other towns unaffected", po == mo[good].sell, "%s at %s: %d (base %d)" % [good, g.world.settlements[other].name, po, mo[good].sell])
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(g.SAVE_PATH))
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(g.BAK_PATH))
 	finish()
