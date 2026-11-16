@@ -56,6 +56,7 @@ func build(w: World, ccx: int, ccy: int, near: Array) -> void:
 			var B := Vector3(X + 1, Y, w.vh(X + 1, Y))
 			var C := Vector3(X + 1, Y + 1, w.vh(X + 1, Y + 1))
 			var D := Vector3(X, Y + 1, w.vh(X, Y + 1))
+			_tile_m = _material(w, X + 0.5, Y + 0.5, 0.0)
 			_tri(w, A, B, C, front, verts, cols, uvs, x0, y0)
 			_tri(w, A, C, D, front, verts, cols, uvs, x0, y0)
 	var arr := []
@@ -83,29 +84,32 @@ static func _winding(a: Vector2, b: Vector2, c: Vector2) -> float:
 	return (b.y - c.y) * (a.x - c.x) + (c.x - b.x) * (a.y - c.y)
 
 func _tri(w: World, A: Vector3, B: Vector3, C: Vector3, front: bool, verts: PackedVector2Array, cols: PackedColorArray, uvs: PackedVector2Array, x0: int, y0: int) -> void:
-	var a := Iso.to_screen(A.x, A.y, A.z)
-	var b := Iso.to_screen(B.x, B.y, B.z)
-	var c := Iso.to_screen(C.x, C.y, C.z)
-	var wd := _winding(a, b, c)
+	var a := Vector2((A.x - A.y) * 24.0, (A.x + A.y) * 12.0 - A.z * Iso.S)
+	var b := Vector2((B.x - B.y) * 24.0, (B.x + B.y) * 12.0 - B.z * Iso.S)
+	var c := Vector2((C.x - C.y) * 24.0, (C.x + C.y) * 12.0 - C.z * Iso.S)
+	var wd := (b.y - c.y) * (a.x - c.x) + (c.x - b.x) * (a.y - c.y)
 	if wd == 0.0 or (wd > 0.0) != front:
 		return   # faces away from the camera; something in front will cover it
-	var u := Vector3(B.x - A.x, B.y - A.y, (B.z - A.z) / 16.0)
-	var v := Vector3(C.x - A.x, C.y - A.y, (C.z - A.z) / 16.0)
-	var n := u.cross(v)
+	var n := Vector3(B.x - A.x, B.y - A.y, (B.z - A.z) * 0.0625).cross(Vector3(C.x - A.x, C.y - A.y, (C.z - A.z) * 0.0625))
 	if n.z < 0.0:
 		n = -n
 	n = n.normalized()
 	var lit := maxf(0.0, n.dot(LIGHT))
-	var steep := Vector2(n.x, n.y).length() / maxf(0.05, n.z)
-	var cx := (A.x + B.x + C.x) / 3.0
-	var cy := (A.y + B.y + C.y) / 3.0
-	var m := _material(w, cx, cy, steep)
+	var steep := sqrt(n.x * n.x + n.y * n.y) / maxf(0.05, n.z)
+	var m: int
+	if steep > 1.25:
+		var bb := w.biome(int(A.x), int(A.y))
+		m = 17 if bb == World.B_CANYON or bb == World.B_GORGE else 4
+	else:
+		m = _tile_m
 	var col: Color = MAT_COL[m]
 	col.a = lit
-	for p in [[a, A], [b, B], [c, C]]:
-		verts.append(p[0])
-		cols.append(col)
-		uvs.append(Vector2(p[1].x - x0 + m * 1000.0, p[1].y - y0))
+	verts.append(a); verts.append(b); verts.append(c)
+	cols.append(col); cols.append(col); cols.append(col)
+	var mo := m * 1000.0 - x0
+	uvs.append(Vector2(A.x + mo, A.y - y0)); uvs.append(Vector2(B.x + mo, B.y - y0)); uvs.append(Vector2(C.x + mo, C.y - y0))
+
+var _tile_m := 0
 
 func _material(w: World, x: float, y: float, steep: float) -> int:
 	if steep > 1.25:

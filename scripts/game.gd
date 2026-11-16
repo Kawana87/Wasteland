@@ -2225,7 +2225,7 @@ func _debug_tour() -> void:
 		if a.begins_with("--only="): only = a.substr(7)
 	for l in world.locs:
 		if only == "" or l.id in only.split(","): stops.append([l.id, l.pos + Vector2(0, l.r * 0.3)])
-	if only == "" or only == "biomes":
+	if only == "" or "biomes" in only.split(","):
 		var seen := {}
 		var r := RandomNumberGenerator.new()
 		r.seed = 3

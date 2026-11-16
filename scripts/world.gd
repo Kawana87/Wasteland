@@ -2024,8 +2024,45 @@ func _chunk_trees(r: Rect2i) -> void:
 				T[i] = TREE
 			elif b != B_SALT and b != B_CRATER and (G[i] == 3 or rng.randf() < (0.05 if b != B_WOODS else 0.12)):
 				add_decor("tuft%d" % ri(0, 2), Vector2(x + rf(0.2, 0.8), y + rf(0.2, 0.8)), false, Vector2.ZERO, true)
-			elif (b == B_WASTE or b == B_SALT or b == B_CANYON) and rng.randf() < 0.012:
-				add_decor(["deadbush", "bones", "rubble2", "deadbush"][ri(0, 3)], Vector2(x + rf(0.2, 0.8), y + rf(0.2, 0.8)))
+			else:
+				_scatter(b, x, y, i)
+
+## Rocks, cacti, reeds, salt crusts: what lies about in each kind of country.
+const SCATTER := {
+	B_WASTE: [0.02, ["rock0", "rock1", "rock2", "tumbleweed", "deadbush", "deadbush", "cactus0", "bones"]],
+	B_HILLS: [0.018, ["rock0", "rock1", "rock2", "boulder", "deadbush"]],
+	B_PEAK: [0.04, ["rock0", "rock1", "boulder", "boulder", "rock2"]],
+	B_CANYON: [0.03, ["redrock", "rock1", "cactus0", "cactus1", "rock2", "tumbleweed"]],
+	B_GORGE: [0.03, ["redrock", "redrock", "rock1", "rock2"]],
+	B_SALT: [0.03, ["saltrock", "saltrock", "rock2", "bones"]],
+	B_CRATER: [0.02, ["rock2", "rock0", "saltrock"]],
+	B_MARSH: [0.05, ["reeds0", "reeds1", "reeds0", "deadbush"]],
+	B_BEACH: [0.02, ["reeds0", "rock2", "tire"]],
+	B_FARM: [0.004, ["rock2", "deadbush"]],
+	B_WOODS: [0.01, ["rock1", "deadbush", "rock0"]],
+}
+const SOLID_SCATTER := {"boulder": Vector2(0.55, 0.45), "redrock": Vector2(0.45, 0.4), "cactus0": Vector2(0.12, 0.12), "cactus1": Vector2(0.25, 0.15)}
+
+func _scatter(b: int, x: int, y: int, i: int) -> void:
+	var sc = SCATTER.get(b)
+	if sc == null: return
+	var p: float = sc[0]
+	var wet := false
+	if b != B_MARSH:
+		for o in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+			if in_bounds(x + o.x, y + o.y) and T[idx(x + o.x, y + o.y)] == WATER: wet = true
+	if wet:
+		if rng.randf() < 0.18: add_decor(["reeds0", "reeds1"][ri(0, 1)], Vector2(x + rf(0.2, 0.8), y + rf(0.2, 0.8)))
+		return
+	if rng.randf() >= p: return
+	var pool: Array = sc[1]
+	var nm: String = pool[ri(0, pool.size() - 1)]
+	var at := Vector2(x + rf(0.25, 0.75), y + rf(0.25, 0.75))
+	if SOLID_SCATTER.has(nm):
+		if door_grid.has(i) or not _clear_of_buildings(at, 1.0) or road_d[y * NV + x] < 1.5: return
+		add_decor(nm, at, true, SOLID_SCATTER[nm])
+	else:
+		add_decor(nm, at)
 
 func _car_fits(c: Car) -> bool:
 	var fw := Vector2.from_angle(c.ang)

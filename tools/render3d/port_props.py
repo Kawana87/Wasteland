@@ -24,7 +24,9 @@ ORIG = "/tmp/sprites_orig"
 
 
 ALIAS = {"tree3": "tree0", "tree4": "tree0", "tree5": "tree0", "tree6": "tree0", "tree7": "tree0",
-         "tree_dead1": "tree_dead", "tree_dead2": "tree_dead"}
+         "tree_dead1": "tree_dead", "tree_dead2": "tree_dead",
+         "rock0": "rubble0", "rock1": "rubble0", "rock2": "deadbush", "boulder": "tree0", "cactus0": "tree0", "cactus1": "tree0",
+         "reeds0": "deadbush", "reeds1": "deadbush", "tumbleweed": "deadbush", "saltrock": "rubble0", "redrock": "tree0"}
 
 
 def canvas(name):
@@ -515,6 +517,38 @@ def _rot(fn, deg):
             rot_z(o, deg, (0, 0))
 
 
+def red_spire(rng):
+    m = P.MAT("rock:#a8603e:#7a4028")
+    z = 0.0
+    for k, r in enumerate((0.55, 0.45, 0.38, 0.3)):
+        h = rng.uniform(0.35, 0.55)
+        o = box(-r, -r * 0.8, z, r, r * 0.8, z + h, m)
+        rot_z(o, rng.uniform(-15, 15), (0, 0))
+        z += h
+    P.rock(0.5, 0.3, 0, rng, size=0.25)
+
+
+def reeds(rng, n):
+    bt = FAST.Batch("reeds")
+    ms = [P.MAT("leaf:#7a8a4a:#5a6a34"), P.MAT("leaf:#9a8a5a:#6a5a3a")]
+    for k in range(n):
+        h = rng.uniform(0.45, 0.95)
+        x, y = rng.uniform(-.25, .25), rng.uniform(-.2, .2)
+        bt.cone(g2b(x, y, h / 2), 0.02, 0.004, h, 3, ms[k % 2], rot=(rng.uniform(-.25, .25), rng.uniform(-.25, .25), 0))
+        if k % 4 == 0:
+            cyl(x, y, h - 0.12, h + 0.02, 0.03, P.MAT("flat:#5a3a24:0.9"), 6)
+    bt.done()
+
+
+def salt_crust(rng):
+    m = P.MAT("rock:#e8e2d4:#c8c0ae")
+    for k in range(5):
+        x, y = rng.uniform(-0.3, 0.3), rng.uniform(-0.25, 0.25)
+        h = rng.uniform(0.08, 0.26)
+        o = box(x - 0.09, y - 0.07, 0, x + 0.09, y + 0.07, h, m)
+        rot_z(o, rng.uniform(0, 90), (x, y))
+
+
 def specs():
     R = lambda s=1: random.Random(s)
     S = {}
@@ -564,6 +598,17 @@ def specs():
         S["tuft%d" % k] = dict(build=(lambda k=k: lambda: P.grass_tuft(0, 0, 0, R(40 + k), n=12))(), outline=False)
         S["tree%d" % k] = dict(build=(lambda k=k: lambda: leafy_tree(R(50 + k), 1.0 + k * 0.12))())
     S["shrub"] = dict(build=lambda: P.shrub(0, 0, 0, R(22)))
+    S["rock0"] = dict(build=lambda: P.rock(0, 0, 0, R(80), size=0.42))
+    S["rock1"] = dict(build=lambda: [P.rock(0, 0, 0, R(81), size=0.3), P.rock(0.35, 0.2, 0, R(82), size=0.2)])
+    S["rock2"] = dict(build=lambda: P.pebbles(0, 0, 0, R(83), n=7, r=0.4), outline=False)
+    S["boulder"] = dict(build=lambda: [P.rock(0, 0, 0, R(84), size=0.75), P.rock(0.6, 0.3, 0, R(85), size=0.3)], match=False, scale=LAB2GAME * 1.0)
+    S["redrock"] = dict(build=lambda: red_spire(R(86)), match="h")
+    S["cactus0"] = dict(build=lambda: P.cactus(0, 0, 0, R(87)), match=False, scale=LAB2GAME * 0.9)
+    S["cactus1"] = dict(build=lambda: [P.cactus(0, 0, 0, R(88)), P.cactus(0.4, 0.2, 0, R(89))], match=False, scale=LAB2GAME * 0.8)
+    S["reeds0"] = dict(build=lambda: reeds(R(90), 14))
+    S["reeds1"] = dict(build=lambda: reeds(R(91), 22))
+    S["tumbleweed"] = dict(build=lambda: P.tumbleweed(0, 0, 0, R(92)))
+    S["saltrock"] = dict(build=lambda: salt_crust(R(93)))
     S["stump"] = dict(build=stump)
     S["tent"] = dict(build=tent)
     S["tire"] = dict(build=lambda: P.tire_stack(0, 0, 0, R(23), n=1))
