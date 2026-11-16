@@ -137,6 +137,7 @@ func think(delta: float, p: Player, p_safe: bool) -> void:
 			if p.moving and gain > 0.0:
 				gain *= 1.2
 	if friendly(): gain = 0.0
+	gain *= 1.0 - 0.25 * Game.I.perk("shadow")
 	if gain > 0.0:
 		aw = minf(100.0, aw + gain * delta)
 		last = p.wpos

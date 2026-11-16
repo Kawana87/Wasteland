@@ -50,6 +50,7 @@ var _blink := 0.0
 
 func open() -> void:
 	visible = true
+	game.audio.play("pipboy", Vector2.INF, -6.0, 0.0)
 	_layout()
 	var near := game.world.nearest_loc(game.player.wpos, 20.0)
 	_show_card(_loc(near.id) if not near.is_empty() else {})
@@ -91,6 +92,7 @@ func _layout() -> void:
 	for c in map_rect.get_children(): c.queue_free()
 	for l in locs:
 		var known := _known(l.id)
+		var lid: String = l.id
 		var b := Button.new()
 		b.flat = true
 		b.focus_mode = Control.FOCUS_NONE
@@ -103,9 +105,12 @@ func _layout() -> void:
 			if known:
 				b.draw_arc(b.size * 0.5, r, 0, TAU, 20, col, 2.0)
 				b.draw_circle(b.size * 0.5, 2.5, col)
+				if game.world.cleared.has(lid):
+					var c2 := b.size * 0.5
+					b.draw_line(c2 - Vector2(r, r) * 0.7, c2 + Vector2(r, r) * 0.7, col, 2.0)
+					b.draw_line(c2 + Vector2(-r, r) * 0.7, c2 + Vector2(r, -r) * 0.7, col, 2.0)
 			else:
 				b.draw_arc(b.size * 0.5, r * 0.6, 0, TAU, 12, col, 1.0))
-		var lid: String = l.id
 		b.pressed.connect(func(): _show_card(_loc(lid)))
 		map_rect.add_child(b)
 	for c in game.camps:
@@ -116,6 +121,15 @@ func _layout() -> void:
 		cm.draw.connect(func():
 			cm.draw_rect(Rect2(2, 2, 10, 10), Color(1, 0.85, 0.4), false, 2.0))
 		map_rect.add_child(cm)
+	for j in game.jobs:
+		var tgt: Vector2 = j.target if j.kind != "supply" else game.world.settlements[j.si].pos
+		var jm := Control.new()
+		jm.size = Vector2(18, 18)
+		jm.position = tgt / float(World.N) * big - jm.size * 0.5
+		jm.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		jm.draw.connect(func():
+			jm.draw_colored_polygon(PackedVector2Array([Vector2(2, 2), Vector2(16, 2), Vector2(9, 16)]), Color(1.0, 0.75, 0.25)))
+		map_rect.add_child(jm)
 	marker = Control.new()
 	marker.size = Vector2(20, 20)
 	marker.position = pp - marker.size * 0.5

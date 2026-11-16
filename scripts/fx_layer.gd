@@ -22,6 +22,15 @@ func _draw() -> void:
 				var k := c + Vector2(sx * s * 0.8, sy * s * 1.5)
 				draw_line(k, k - Vector2(sx * 5, 0), col, 1.0)
 				draw_line(k, k - Vector2(0, sy * 5), col, 1.0)
+	# boss names over their heads
+	for e in g.enemies:
+		if not e.dead and e.visible and e.has_meta("boss"):
+			var bp: Vector2 = (e.position + Vector2(0, -44)).round()
+			var nm: String = e.get_meta("boss")
+			var font: Font = ThemeDB.fallback_font
+			draw_string(font, bp + Vector2(-nm.length() * 3, 0), nm, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(1, 0.75, 0.3))
+			draw_rect(Rect2(bp + Vector2(-14, 3), Vector2(28, 3)), Color(0.2, 0.05, 0.05))
+			draw_rect(Rect2(bp + Vector2(-14, 3), Vector2(28 * e.hp / e.max_hp, 3)), Color(1, 0.35, 0.25))
 	for b in g.bullets:
 		var p := Iso.to_screen(b.pos.x, b.pos.y, b.z).round()
 		draw_rect(Rect2(p, Vector2(2, 2)), Color("ff7a4a") if b.enemy else Color("f2e27a"))

@@ -119,6 +119,11 @@ func _ready() -> void:
 	hud = Hud.new()
 	add_child(hud)
 	hud.crt_toggled.connect(toggle_crt)
+	audio = Audio.new()
+	add_child(audio)
+	hud.radio_toggled.connect(func():
+		audio.toggle_radio()
+		hud.radio_btn.text = "RADIO: on" if audio.radio_on else "RADIO: off")
 	hud.touch.action.connect(_on_touch_action)
 	wmap = WorldMap.new()
 	add_child(wmap)
@@ -134,6 +139,8 @@ func _ready() -> void:
 			if a.begins_with("--origin="): oid = a.substr(9)
 		if "--continue" in args: load_game.call_deferred()
 		else: start_new_world.call_deferred({}, oid)
+		if "--imm" in args:
+			_debug_immersion.call_deferred()
 		if "--play" in args:
 			_debug_play.call_deferred()
 		if "--econ" in args:
@@ -263,6 +270,7 @@ func start_new_world(save: Dictionary = {}, oid: String = "drifter") -> void:
 		world.opened = save.get("opened", {})
 		world.killed = save.get("killed", {})
 		world.discovered = save.get("discovered", {})
+		world.cleared = save.get("cleared", {})
 	origin_id = save.get("origin", oid)
 	world.load_data(int(save.get("seed", randi() % 1000000)), origin().loc)
 	Iso.origin = world.start.x + world.start.y
@@ -308,6 +316,11 @@ func start_new_world(save: Dictionary = {}, oid: String = "drifter") -> void:
 	dog = Dog.new()
 	root.add_child(dog)
 	dog.wpos = player.wpos + Vector2(-1, 0)
+	if save.is_empty():
+		xp = 0; level = 1; perks = {}; jobs = []; notes_read = []; examined = {}
+	greeted = {}
+	weather = Weather.new()
+	root.add_child(weather)
 	fx = FxLayer.new()
 	fx.z_index = 4095
 	fx.z_as_relative = false
@@ -344,6 +357,47 @@ var terrain_root: Node2D
 var _parent: Node2D
 var _light_tag := -1
 var encounter_t := 0.0
+# ---- immersion systems
+var audio: Audio
+var weather: Weather
+var xp := 0
+var level := 1
+var perks := {}
+var jobs: Array = []
+var notes_read: Array = []
+var examined := {}
+var step_t := 0.0
+var bark_t := 0.0
+var greeted := {}
+
+func perk(id: String) -> int:
+	return int(perks.get(id, 0))
+
+func gain_xp(n: int, why: String = "") -> void:
+	xp += n
+	if why != "": add_text(player.wpos + Vector2(0, -0.6), "+%d XP  %s" % [n, why], Color(0.95, 0.85, 0.4), 1.8)
+	while xp >= Perks.xp_needed(level):
+		xp -= Perks.xp_needed(level)
+		level += 1
+		audio.play("levelup", Vector2.INF, -2.0, 0.0)
+		hud.show_card("LEVEL %d" % level)
+		_offer_perk.call_deferred()
+
+func _offer_perk() -> void:
+	var opts := Perks.choices(perks)
+	if opts.is_empty(): return
+	var btns := []
+	var lines := ["Level %d. Choose a perk:" % level]
+	for id in opts:
+		var pd: Dictionary = Perks.LIST[id]
+		lines.append("%s (rank %d/%d) — %s" % [pd.name, perk(id) + 1, pd.max, pd.desc])
+		var pid: String = id
+		btns.append([pd.name, func():
+			perks[pid] = perk(pid) + 1
+			hud.hide_menu()
+			recalc_max()
+			hud.toast("%s learned." % Perks.LIST[pid].name), false])
+	hud.show_menu("Level up!", lines, btns)
 var save_t := 0.0
 var _recruited_names := []
 const SAVE_PATH := "user://save.json"
@@ -368,10 +422,17 @@ func _stream(sync: bool) -> void:
 			if d <= LOAD_R and not loaded.has(key): want.append([d, cx, cy])
 			elif d <= AHEAD_R and not world.content_done[key]: ahead.append([d, cx, cy])
 	want.sort_custom(func(a, b): return a[0] < b[0])
+	if sync:
+		while _pending_props.size(): _load_props(_pending_props.pop_front())
+	elif _pending_props.size():
+		_load_props(_pending_props.pop_front())
+		return
 	for w in want:
+		var was_ready: bool = world.is_ready(w[1], w[2])
 		world.ensure_ready(w[1], w[2])
-		_load_chunk(w[1], w[2])
-		if not sync and Time.get_ticks_msec() - t0 > 8: return
+		if not sync and not was_ready and Time.get_ticks_msec() - t0 > 6: return   # generated content this frame: show it next frame
+		_load_chunk(w[1], w[2], sync)
+		if not sync: return
 	if not sync and Time.get_ticks_msec() - t0 < 4 and ahead.size() > 0:
 		ahead.sort_custom(func(a, b): return a[0] < b[0])
 		world.ensure_content(ahead[0][1], ahead[0][2])
@@ -396,7 +457,9 @@ func _stream(sync: bool) -> void:
 			n.queue_free()
 	npcs = npcs.filter(func(n): return is_instance_valid(n) and not n.is_queued_for_deletion())
 
-func _load_chunk(cx: int, cy: int) -> void:
+var _pending_props: Array = []
+
+func _load_chunk(cx: int, cy: int, props: bool = true) -> void:
 	var key := World.ckey(cx, cy)
 	var cn := Node2D.new()
 	root.add_child(cn)
@@ -421,6 +484,20 @@ func _load_chunk(cx: int, cy: int) -> void:
 			at = i; break
 	terrain_root.add_child(tm)
 	terrain_root.move_child(tm, at)
+	_parent = root
+	_light_tag = -1
+	if props: _load_props(key)
+	else: _pending_props.append(key)
+
+## Second half of loading a chunk (sprites, buildings, people), done a frame after the ground so a
+## new chunk never costs one long frame.
+func _load_props(key: int) -> void:
+	var rec: Dictionary = loaded[key]
+	var cn: Node2D = rec.node
+	_parent = cn
+	_light_tag = key
+	var cx := key % World.NC
+	var cy := key / World.NC
 	var w := world
 	var x0 := cx * World.CH
 	var y0 := cy * World.CH
@@ -497,6 +574,7 @@ func _load_chunk(cx: int, cy: int) -> void:
 func _unload_chunk(key: int) -> void:
 	var rec: Dictionary = loaded[key]
 	loaded.erase(key)
+	_pending_props.erase(key)
 	for i in rec.trees: tree_nodes.erase(i)
 	for c in rec.crates: crate_nodes.erase(c)
 	for f in rec.furn: furn_nodes.erase(f)
@@ -734,7 +812,7 @@ func to_hud(px: Vector2) -> Vector2:
 	return (px - cam.get_screen_center_position() + vs * 0.5) * SHRINK
 
 func recalc_max() -> void:
-	player.max_hp = 20 + (4 if any_up("tent") else 0)
+	player.max_hp = 20 + (4 if any_up("tent") else 0) + 4 * perk("toughness") + int(origin().get("hp", 20)) - 20
 	player.hp = minf(player.hp, player.max_hp)
 
 # ------------------------------------------------------------------ inventory
@@ -779,7 +857,8 @@ func equip_item(id: String) -> void:
 func use_item(id: String) -> void:
 	var d := Items.info(id)
 	if d.get("heal", 0) > 0 and player.hp < player.max_hp and inv_take(id):
-		var hl: float = d.heal * (float(origin().get("food", 1.0)) if id != "medkit" else 1.0)
+		var hl: float = d.heal * ((1.0 + 0.5 * perk("medic")) if id == "medkit" else float(origin().get("food", 1.0)) * (1.0 + 0.5 * perk("lead_belly")))
+		audio.play("heal" if id == "medkit" else "eat", Vector2.INF, -4.0)
 		player.hp = minf(player.max_hp, player.hp + hl)
 		add_text(player.wpos, "+%d hp" % int(hl), Color("9fd08a"))
 	if hud.menu_open() or invs.visible: open_inventory()
@@ -797,6 +876,7 @@ func _refresh_gun() -> void:
 
 func open_inventory() -> void:
 	if state != "play": return
+	audio.play("pipboy", Vector2.INF, -6.0, 0.0)
 	if invs.visible: invs.refresh()
 	else: invs.open()
 
@@ -886,6 +966,8 @@ func open_trade(npc: Npc) -> void:
 			btns.append(["Sell %s — +%d scrap" % [d.name, val], func(): _sell(npc, id, val), false])
 	if npc.settlement >= 0 and npc.settlement < world.settlements.size():
 		btns.insert(0, ["Trade goods (water, salt, glass…) »", func(): open_goods(npc), false])
+		if not world.settlements[npc.settlement].small:
+			btns.insert(1, ["Jobs »", func(): open_jobs(npc), false])
 	btns.append(["Leave", hud.hide_menu, false])
 	hud.show_menu("The fence" if fence else ("Trader" if npc.type == "trader" else "Travelling merchant"), lines, btns)
 
@@ -896,15 +978,15 @@ func goods_carried() -> int:
 	return n
 
 func goods_cap() -> int:
-	return 30 + int(origin().get("cap", 0)) + (10 if any_up("tent") else 0)
+	return 30 + int(origin().get("cap", 0)) + (10 if any_up("tent") else 0) + 15 * perk("strong_back")
 
 ## Commodity trading: this town's prices, buy 1 / 5, sell 1 / all.
 func open_goods(npc: Npc) -> void:
 	var st: World.Settlement = world.settlements[npc.settlement]
 	var m := Economy.market(world, npc.settlement)
 	var lines := ["%s market. You have %d scrap. Hauling %d / %d trade goods." % [st.name, _scrap_total(), goods_carried(), goods_cap()]]
-	var pm: float = origin().get("buy", 1.0)
-	var sm: float = origin().get("sell", 1.0)
+	var pm: float = float(origin().get("buy", 1.0)) * (1.0 - 0.08 * perk("barter"))
+	var sm: float = float(origin().get("sell", 1.0)) * (1.0 + 0.08 * perk("barter"))
 	var btns := []
 	for gd in m:
 		var e: Dictionary = m[gd]
@@ -926,13 +1008,17 @@ func open_goods(npc: Npc) -> void:
 	hud.show_menu("Trade goods", lines, btns)
 
 func _buy_good(npc: Npc, id: String, n: int, each: int) -> void:
-	if goods_carried() + n <= goods_cap() and _pay(each * n): inv_add(id, n)
+	if goods_carried() + n <= goods_cap() and _pay(each * n):
+		inv_add(id, n)
+		audio.play("coins", Vector2.INF, -6.0)
 	open_goods(npc)
 
 func _sell_good(npc: Npc, id: String, n: int, each: int) -> void:
 	if inv_take(id, n):
 		player.carry.scrap += each * n
 		add_text(player.wpos, "+%d scrap" % (each * n), Color("f2e27a"))
+		audio.play("coins", Vector2.INF, -6.0)
+		if each > Items.info(id).value: gain_xp(maxi(1, (each - Items.info(id).value) * n / 2), "")
 	open_goods(npc)
 
 # ------------------------------------------------------------------ input
@@ -1099,6 +1185,11 @@ func find_target() -> Dictionary:
 	if dn != null:
 		var dd := p.wpos.distance_to((dn.a + dn.b) * 0.5)
 		if dd < bd: bd = dd; best = {"k": "door", "o": dn}
+	if p.fl == 0 and pb == 0:
+		for d in world.near(p.wpos, "decor"):
+			if d.info != "":
+				var dd: float = p.wpos.distance_to(d.pos)
+				if dd < 1.8 and dd < bd: bd = dd; best = {"k": "examine", "o": d}
 	if best.is_empty() and camp_near(p.wpos, 3.2) != null:
 		best = {"k": "camp"}
 	return best
@@ -1153,12 +1244,19 @@ func interact() -> void:
 				add_text(tp, "+%d wood" % wd, Color("d8b880"))
 		"crate":
 			_loot(t.o)
+		"examine":
+			var d: World.Decor = t.o
+			hud.show_menu(d.info.get_slice("|", 0), [d.info.get_slice("|", 1)], [["Move on", hud.hide_menu, false]])
+			var key := World.pkey(d.pos)
+			if not examined.has(key):
+				examined[key] = true
+				gain_xp(10, "")
 		"door":
 			open_door(t.o)
 		"npc":
 			var n: Npc = t.o
 			if n.type == "settler":
-				add_text(n.wpos + Vector2(0, -0.2), Npc.BARKS[randi() % Npc.BARKS.size()], Color("e8e0c8"), 2.6)
+				add_text(n.wpos + Vector2(0, -0.2), Lore.bark("settler"), Color("e8e0c8"), 2.6)
 			else:
 				open_trade(n)
 
@@ -1172,6 +1270,7 @@ func _loot(c: World.Crate) -> void:
 			spr.texture = Assets.tex(c.kind + "_open")
 		else:
 			spr.texture = null
+	audio.play("crate" if c.kind in ["crate", "cache", "car"] else "pickup", c.pos, -4.0)
 	var q := 0.55 if p.crouch else 1.0
 	noise(c.pos, (5.0 if c.kind == "car" else 4.5) * q, (35.0 if c.kind == "car" else 24.0) * q)
 	var mats := Items.roll_materials(c.kind, rng)
@@ -1182,6 +1281,10 @@ func _loot(c: World.Crate) -> void:
 	if any_up("bench") and rng.randf() < 0.5:
 		items.append([gun_info().get("ammo", "ammo_pistol"), 2])
 	if origin().get("scav", false) and c.kind != "bag" and not c.has_meta("loot"): mats[0] += 1
+	if perk("scrounger") > 0 and randf() < 0.35 * perk("scrounger") and not c.has_meta("loot"):
+		items.append([gun_info().get("ammo", "ammo_pistol"), randi_range(2, 5)])
+	if not c.has_meta("loot") and c.kind not in ["car", "bag", "brute"] and randf() < 0.13:
+		_find_note.call_deferred()
 	p.carry.scrap += mats[0]; p.carry.cloth += mats[1]; p.carry.wood += mats[2]
 	var parts := []
 	if mats[0]: parts.append("+%d scrap" % mats[0])
@@ -1198,6 +1301,118 @@ func _loot(c: World.Crate) -> void:
 	if found_gear != "":
 		hud.toast("Found %s! Press %s to open your inventory and equip it." % [found_gear, "INV" if using_touch else "I"])
 
+# ------------------------------------------------------------------ jobs and cleared sites
+func _check_cleared(loc_id: String) -> void:
+	var l := world.loc_by_id(loc_id)
+	if l.is_empty() or l.get("cleared", false): return
+	for s in world.spawns:
+		if s.get("loc", "") == loc_id and not s.get("dead", false): return
+	l.cleared = true
+	world.cleared[loc_id] = true
+	hud.show_card("%s\nCLEARED" % l.name.to_upper())
+	audio.play("discover", Vector2.INF, -3.0, 0.0)
+	gain_xp(80, "")
+	for j in jobs:
+		if j.kind == "clear" and j.loc == loc_id: _complete_job(j)
+
+func _complete_job(j: Dictionary) -> void:
+	if j.get("done", false): return
+	j.done = true
+	stash.scrap += int(j.reward)
+	audio.play("coins", Vector2.INF, -3.0)
+	hud.toast("Job done: %s. +%d scrap (in your stash), +%d XP." % [j.title, j.reward, j.xp])
+	gain_xp(int(j.xp), "")
+	jobs.erase(j)
+
+func open_jobs(npc: Npc) -> void:
+	var si := npc.settlement
+	var lines := ["Active jobs: %d / 3" % jobs.size()]
+	var btns := []
+	for j in jobs:
+		lines.append("• %s (from %s)" % [j.title, j.from])
+		if j.kind == "deliver" and world.settlements[si].id == j.loc:
+			var jj = j
+			btns.append(["Hand over the package — +%d" % j.reward, func(): _complete_job(jj); open_jobs(npc), false])
+		if j.kind == "supply" and j.si == si:
+			var jj = j
+			btns.append(["Hand over %d %s — +%d" % [j.n, Items.iname(j.good), j.reward], func():
+				if inv_take(jj.good, jj.n): _complete_job(jj)
+				open_jobs(npc), inv_count(j.good) < j.n])
+	if not npc.has_meta("job") or float(npc.get_meta("job_t", -999.0)) < time - 300.0:
+		npc.set_meta("job", Jobs.offer(self, si))
+		npc.set_meta("job_t", time)
+	var off: Dictionary = npc.get_meta("job")
+	if not off.is_empty() and not off.get("taken", false):
+		lines.append("")
+		lines.append("OFFER: %s" % off.title)
+		lines.append(off.desc)
+		lines.append("Pays %d scrap, %d XP." % [off.reward, off.xp])
+		btns.append(["Take the job", func():
+			off.taken = true
+			jobs.append(off)
+			audio.play("pipboy", Vector2.INF, -6.0, 0.0)
+			hud.toast("Job taken: %s. It's on your compass and map." % off.title)
+			open_jobs(npc), jobs.size() >= 3])
+	btns.append(["« Back", func(): open_trade(npc), false])
+	hud.show_menu("Jobs board", lines, btns)
+
+func _update_jobs() -> void:
+	for j in jobs:
+		if j.kind == "bounty" and not j.get("spawned", false) and player.wpos.distance_to(j.target) < 45.0:
+			j.spawned = true
+			var at: Vector2 = j.target
+			var ck := World.chunk_of(at)
+			world.ensure_ready(ck.x, ck.y)
+			for t in 30:
+				if world.can_stand(at, 0.4, 0) and world.building_at(at.x, at.y) == 0: break
+				at += Vector2(randf_range(-3, 3), randf_range(-3, 3))
+			var key := World.ckey(ck.x, ck.y)
+			for k in 4:
+				var sp := {"type": "raider", "pos": at + Vector2.from_angle(k * 1.6) * (0.0 if k == 0 else 2.0), "home": at, "home_r": 4.0, "chunk": key}
+				var e := _spawn_enemy(sp)
+				if k == 0:
+					e.set_meta("boss", j.boss)
+					e.hp *= 6.0
+					e.max_hp = e.hp
+					e.weapon = "smg"
+			hud.toast("You've found %s's camp." % j.boss)
+
+func _find_note() -> void:
+	var unread := []
+	for i in Lore.NOTES.size():
+		if i not in notes_read: unread.append(i)
+	if unread.is_empty(): return
+	var i: int = unread[randi() % unread.size()]
+	notes_read.append(i)
+	gain_xp(5, "")
+	show_note(i)
+
+func show_note(i: int) -> void:
+	var n: Array = Lore.NOTES[i]
+	audio.play("pickup", Vector2.INF, -6.0)
+	hud.show_menu(n[0], [n[1]], [["Keep it  (notes are in your inventory)", hud.hide_menu, false]])
+
+func show_stats() -> void:
+	var lines := ["%s · Level %d · %d / %d XP to next" % [origin().name, level, xp, Perks.xp_needed(level)],
+		"Kills %d · Places found %d / %d · Sites cleared %d · Notes %d / %d" % [player.kills, world.discovered.size(), world.locs.size(), world.cleared.size(), notes_read.size(), Lore.NOTES.size()],
+		"Camps %d · Stash: %d scrap, %d cloth, %d wood" % [camps.size(), stash.scrap, stash.cloth, stash.wood], "", "PERKS:"]
+	if perks.is_empty(): lines.append("None yet — level up to choose one.")
+	for k in perks:
+		lines.append("%s %d/%d — %s" % [Perks.LIST[k].name, perks[k], Perks.LIST[k].max, Perks.LIST[k].desc])
+	if jobs.size():
+		lines.append("")
+		lines.append("JOBS:")
+		for j in jobs: lines.append("• %s — %s" % [j.title, j.desc])
+	hud.show_menu("Your story so far", lines, [["Close", hud.hide_menu, false]])
+
+func show_notes() -> void:
+	var btns := []
+	for i in notes_read:
+		var ii: int = i
+		btns.append([Lore.NOTES[i][0], func(): show_note(ii), false])
+	btns.append(["Close", hud.hide_menu, false])
+	hud.show_menu("Notes & holotapes", ["You've found %d of %d." % [notes_read.size(), Lore.NOTES.size()]], btns)
+
 func toggle_sneak() -> void:
 	player.crouch = not player.crouch
 	hud.toast("Sneaking: slower, but enemies barely notice you. Melee an unaware enemy for a silent takedown." if player.crouch else "Standing up.")
@@ -1210,7 +1425,8 @@ func melee() -> void:
 	p.swing = 0.16
 	var wa := p.world_aim()
 	var loud := false
-	var dmg: float = Items.info(equip.melee).get("dmg", 1) * float(origin().get("melee", 1.0))
+	var dmg: float = Items.info(equip.melee).get("dmg", 1) * float(origin().get("melee", 1.0)) * (1.0 + 0.4 * perk("brawler"))
+	audio.play("swing", Vector2.INF, -8.0)
 	for e in enemies:
 		if e.dead or e.fl != p.fl:
 			continue
@@ -1227,6 +1443,7 @@ func melee() -> void:
 			else:
 				loud = true
 				e.damage(dmg, p.wpos)
+				audio.play("hit_flesh", e.wpos, -3.0)
 	if not loud:
 		var ds := door_near(p.wpos, 1.3, wa)
 		if ds != null:
@@ -1339,9 +1556,14 @@ func shoot() -> void:
 	inv_take(g.ammo)
 	p.cd = g.rate * (0.8 if any_up("bench") else 1.0)
 	var wa := p.world_aim()
+	var spread: float = g.spread * (1.0 - 0.3 * perk("steady"))
+	var dmg_m := 1.0 + 0.2 * perk("gunslinger")
 	for k in g.pellets:
-		var dir := wa.rotated(randf_range(-g.spread, g.spread))
-		bullets.append({"pos": p.wpos + wa * 0.4, "vel": dir * g.speed, "z": p.ground_z() + 10.0, "fl": p.fl, "life": g.life, "enemy": false, "dmg": float(g.dmg)})
+		var dir := wa.rotated(randf_range(-spread, spread))
+		var dm: float = g.dmg * dmg_m * (2.0 if randf() < 0.15 * perk("lucky") else 1.0)
+		bullets.append({"pos": p.wpos + wa * 0.4, "vel": dir * g.speed, "z": p.ground_z() + 10.0, "fl": p.fl, "life": g.life, "enemy": false, "dmg": dm})
+	var gsnd: String = {"shotgun": "gun_shotgun", "rifle": "gun_rifle", "pistol_10mm": "gun_heavy"}.get(equip.gun, "gun_pistol")
+	audio.play(gsnd, Vector2.INF, -3.0)
 	burst(p.wpos + wa * 0.5, 3, [Color("f2d06b"), Color("f28c28")], 9.0, p.fl)
 	noise(p.wpos, 10.0, 70.0)
 
@@ -1352,6 +1574,7 @@ func enemy_shoot(e: Enemy, at: Vector2, weapon: String = "pipe_pistol") -> void:
 		var dir := Vector2.from_angle(base + randf_range(-0.13, 0.13) + randf_range(-g.spread, g.spread) * 0.5)
 		bullets.append({"pos": e.wpos + dir * 0.4, "vel": dir * 8.0, "z": e.ground_z() + 10.0, "fl": e.fl, "life": 1.4 if g.pellets == 1 else 0.6, "enemy": true, "src": e.wpos, "dmg": 3.0 if g.pellets == 1 else 2.0})
 	burst(e.wpos, 2, [Color("f2d06b")], 9.0, e.fl)
+	audio.play("enemy_gun", e.wpos, -4.0)
 	for o in enemies:
 		if o.type == "raider" and not o.dead and o.wpos.distance_to(e.wpos) < 8.0:
 			o.aw = maxf(o.aw, 80.0)
@@ -1369,6 +1592,7 @@ func hurt_player(from: Vector2, dmg: float = 3.0) -> void:
 	p.hp -= taken
 	p.inv = 0.7
 	p.flash = 0.3
+	audio.play("hurt", Vector2.INF, -4.0)
 	var d := p.wpos - from
 	if d.length() > 0.01:
 		p.move(d.normalized() * (0.9 if dmg >= 6.0 else 0.4))
@@ -1408,6 +1632,15 @@ func kill_enemy(e: Enemy, silent: bool) -> void:
 		sp.dead = true
 		if sp.has("key"): world.killed[sp.key] = true
 	player.kills += 1
+	audio.play({"ghoul": "ghoul_die", "brute": "ghoul_die", "rat": "rat_squeak"}.get(e.type, "hit_flesh"), e.wpos, -2.0)
+	var boss := e.has_meta("boss")
+	gain_xp(60 if boss else {"rat": 3, "ghoul": 6, "raider": 8, "shellback": 10, "brute": 25, "robot": 15}.get(e.type, 5), "")
+	if sp != null and sp.has("loc"): _check_cleared(sp.loc)
+	if boss:
+		for j in jobs:
+			if j.kind == "bounty" and j.get("boss") == e.get_meta("boss"): _complete_job(j)
+		var bc := _drop(e.wpos, "cache", e.fl)
+		bc.set_meta("extra", Items.gear_of_tier(3, rng))
 	var cols := [Color("8a6a4a"), Color("5a3a24"), Color("3a2a2a")] if e.type == "shellback" else ([Color("6a8a4a"), Color("8a3a3a"), Color("3a2a2a")] if e.type in ["ghoul", "brute"] else [Color("a83a2a"), Color("5a3a2a"), Color("3a2a2a")])
 	burst(e.wpos, 12, cols, 9.0, e.fl)
 	if e.type == "raider":
@@ -1755,6 +1988,8 @@ func _process(delta: float) -> void:
 			world.add_patrol(p.wpos)
 			for i in range(before, world.spawns.size()): _spawn_enemy(world.spawns[i])
 	_encounters(delta)
+	_update_jobs()
+	_immersion(delta)
 	_update_bullets(delta)
 	_update_visibility()
 	_update_camera()
@@ -1789,7 +2024,8 @@ func save_game() -> void:
 	var d := {"v": 1, "seed": world.seed_value, "px": player.wpos.x, "py": player.wpos.y, "hp": player.hp, "max_hp": player.max_hp,
 		"kills": player.kills, "carry": player.carry, "inventory": inventory, "equip": equip, "stash": stash, "day_t": day_t,
 		"camps": cps, "pieces": pcs, "floors": fls, "founds": fds, "vh": vhs, "claimed": claimed, "recruited": rec,
-		"discovered": world.discovered, "opened": world.opened, "killed": world.killed, "origin": origin_id}
+		"discovered": world.discovered, "opened": world.opened, "killed": world.killed, "origin": origin_id,
+		"xp": xp, "level": level, "perks": perks, "jobs": jobs, "notes": notes_read, "examined": examined, "cleared": world.cleared}
 	var f := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
 	if f: f.store_string(JSON.stringify(d))
 
@@ -1837,6 +2073,16 @@ func _apply_save(d: Dictionary) -> void:
 	day_t = d.day_t
 	origin_id = d.get("origin", "")
 	_recruited_names = d.get("recruited", [])
+	xp = int(d.get("xp", 0)); level = int(d.get("level", 1)); perks = d.get("perks", {})
+	notes_read = []
+	for n in d.get("notes", []): notes_read.append(int(n))
+	examined = d.get("examined", {})
+	jobs = []
+	for j in d.get("jobs", []):
+		if j.has("target") and typeof(j.target) == TYPE_STRING: j.target = str_to_var("Vector2" + j.target) if not j.target.begins_with("Vector2") else str_to_var(j.target)
+		for k in ["reward", "xp", "n", "si"]:
+			if j.has(k): j[k] = int(j[k])
+		jobs.append(j)
 	var main: Camp = camps[0] if camps.size() > 0 else null
 	for c in camps:
 		if c.main: main = c
@@ -1858,6 +2104,64 @@ func _apply_save(d: Dictionary) -> void:
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_CLOSE_REQUEST or what == NOTIFICATION_APPLICATION_PAUSED or what == NOTIFICATION_APPLICATION_FOCUS_OUT:
 		if state == "play": save_game()
+
+## Sound beds, footsteps, weather, people talking as you pass, enemies shouting when they spot you.
+func _immersion(delta: float) -> void:
+	var p := player
+	weather.step(delta, self)
+	var sun := sin(day_t * TAU)
+	var night := clampf(-sun * 1.6 + 0.3, 0.0, 1.0)
+	var inside := world.building_at(p.wpos.x, p.wpos.y) != 0
+	var wet: bool = weather.kind == "rain" or weather.kind == "rad"
+	var storm: float = weather.amt if weather.kind in ["dust", "rad"] else 0.0
+	audio.set_bed("amb_wind", (0.15 if inside else 0.45 + storm * 0.5) * (0.7 if night > 0.5 else 1.0))
+	audio.set_bed("amb_night", 0.0 if inside or wet else night * 0.55)
+	audio.set_bed("amb_town", 0.5 if in_settlement >= 0 and not world.settlements[in_settlement].small else 0.0)
+	var fire := 0.0
+	for s in smoke_spots:
+		fire = maxf(fire, 1.0 - s.distance_to(p.wpos) / 7.0)
+	audio.set_bed("amb_fire", clampf(fire, 0.0, 1.0) * 0.6)
+	audio.set_bed("amb_inside", 0.5 if inside else 0.0)
+	# footsteps
+	if p.moving and p.climb.is_empty():
+		step_t -= delta * (0.65 if p.crouch else 1.0)
+		if step_t <= 0.0:
+			step_t = 0.36
+			var t := world.tile(p.wpos.x, p.wpos.y)
+			var hard := inside or t == World.ROAD or t == World.SIDE
+			audio.play("step_%s%d" % ["hard" if hard else "dirt", randi() % 3], Vector2.INF, -16.0 if p.crouch else -11.0, 0.1)
+	# barks
+	bark_t -= delta
+	if bark_t <= 0.0:
+		bark_t = 0.6
+		for n in npcs:
+			if not n.visible or n.has_meta("barked") and time - float(n.get_meta("barked")) < 30.0: continue
+			if n.wpos.distance_to(p.wpos) < 3.2 and randf() < 0.35:
+				n.set_meta("barked", time)
+				var kind: String = {"trader": "trader", "wanderer": "wanderer", "settler": "settler"}.get(n.type, "")
+				if kind != "": add_text(n.wpos + Vector2(0, -0.3), Lore.bark(kind), Color("e8e0c8"), 2.6)
+				break
+	for e in enemies:
+		if e.dead: continue
+		if e.aw >= 99.0 and not e.has_meta("alerted"):
+			e.set_meta("alerted", true)
+			match e.type:
+				"raider":
+					audio.play("raider_shout", e.wpos, -2.0, 0.15)
+					if randf() < 0.6: add_text(e.wpos + Vector2(0, -0.4), Lore.bark("raider"), Color("ffb0a0"), 2.0)
+				"ghoul", "brute": audio.play("ghoul_groan", e.wpos, -2.0, 0.2)
+				"rat": audio.play("rat_squeak", e.wpos, -4.0, 0.2)
+			if dog and dog.wpos.distance_to(e.wpos) < 14.0: audio.play("dog_bark", dog.wpos, -6.0)
+		elif e.aw < 20.0 and e.has_meta("alerted"):
+			e.remove_meta("alerted")
+		elif e.friendly() and e.wpos.distance_to(p.wpos) < 2.5 and not e.has_meta("barked"):
+			e.set_meta("barked", true)
+			add_text(e.wpos + Vector2(0, -0.4), Lore.bark("raider_friend"), Color("e8e0c8"), 2.4)
+	# ghouls groan now and then
+	if randf() < delta * 0.25:
+		for e in enemies:
+			if not e.dead and e.type == "ghoul" and e.wpos.distance_to(p.wpos) < 16.0:
+				audio.play("ghoul_groan", e.wpos, -8.0, 0.25); break
 
 ## Roaming encounters out in the open: every so often something comes over the rise — a raider
 ## gang, a pack of hounds... er, mutants, a lone merchant with a pack animal. Never next to towns.
@@ -1913,7 +2217,10 @@ func _discover() -> void:
 		if world.discovered.has(l.id): continue
 		if p.distance_to(l.pos) < l.r + 30.0:
 			world.discovered[l.id] = true
-			if time > 1.0: hud.toast("Discovered: %s" % l.name)
+			if time > 1.0:
+				hud.show_card("%s\n%s" % [l.name.to_upper(), "DISCOVERED"])
+				audio.play("discover", Vector2.INF, -3.0, 0.0)
+				gain_xp(40 if l.type == "dungeon" else 25, "")
 
 ## Fast travel to a discovered location from the map.
 func travel_to_loc(l: Dictionary) -> void:
@@ -1944,17 +2251,20 @@ func _world_life(delta: float) -> void:
 	var dusk := clampf(1.0 - absf(sun) * 3.0, 0.0, 1.0)
 	var tint := Vector3(1.0, 0.97, 0.9).lerp(Vector3(0.62, 0.72, 1.0), 1.0 - dayness)
 	tint = tint.lerp(Vector3(1.12, 0.86, 0.7), dusk * 0.6)
+	if weather: tint *= weather.tint()
 	if grade:
 		grade.set_shader_parameter("tint", tint)
-		grade.set_shader_parameter("bright", lerpf(0.58, 1.0, dayness))
+		grade.set_shader_parameter("bright", lerpf(0.58, 1.0, dayness) * (weather.dim() if weather else 1.0))
 		grade.set_shader_parameter("sat", lerpf(0.55, 0.82, dayness))
 	lights.strength = clampf((1.0 - dayness) * 1.1, 0.0, 0.9)
 	# settlement greeting
 	var si := world.settlement_at(p.wpos)
 	if si != in_settlement:
 		in_settlement = si
-		if si >= 0:
-			hud.toast("%s — a settlement. Folks here are friendly. Look for the trader." % world.settlements[si].name)
+		if si >= 0 and time - float(greeted.get(si, -999.0)) > 240.0:
+			greeted[si] = time
+			var stn: World.Settlement = world.settlements[si]
+			hud.toast(("%s. Folks here trade and talk — look for the trader." % stn.name) if not stn.small else "%s. Someone's sitting by the fire." % stn.name)
 	# campfires flicker and smoke
 	var fr := int(time * 6.0) % 2
 	for d in decor_nodes:
@@ -2105,9 +2415,33 @@ func _update_hud() -> void:
 	var nrec := 0
 	for s in survivors:
 		if s.get_meta("recruited"): nrec += 1
-	hud.stats.text = "HP %d/%d   %s   ARMOUR %d   %02d:00%s\nMedkits %d  Food %d   Carrying: %d scrap, %d cloth, %d wood\nShared stash: %d scrap, %d cloth, %d wood\nCamps: %d   Survivors: %d   Kills: %d   %s" % [
-		int(ceil(p.hp)), int(p.max_hp), gun_s, armor_total(), hh, "   [SNEAKING]" if p.crouch else "", inv_count("medkit"), inv_count("food"), p.carry.scrap, p.carry.cloth, p.carry.wood,
-		stash.scrap, stash.cloth, stash.wood, camps.size(), 1 + nrec, p.kills, "Floor 2" if p.fl == 1 else ""]
+	var wx: String = {"dust": "  · dust", "rain": "  · rain", "rad": "  · RADSTORM"}.get(weather.kind, "") if weather and weather.amt > 0.2 else ""
+	hud.stats.text = "%s   ARM %d   %02d:00%s\nScrap %d  ·  Med %d  ·  Goods %d/%d%s" % [
+		gun_s, armor_total(), hh, wx, p.carry.scrap + stash.scrap, inv_count("medkit"), goods_carried(), goods_cap(), "   [SNEAKING]" if p.crouch else ""]
+	hud.hp = p.hp
+	hud.hp_max = p.max_hp
+	hud.level = level
+	hud.xp_frac = clampf(float(xp) / Perks.xp_needed(level), 0.0, 1.0)
+	var wa := p.world_aim()
+	if p.moving and locked == null: wa = p.walk_dir
+	hud.facing = lerp_angle(hud.facing, wa.angle(), 0.15)
+	var mk := []
+	for l in world.locs:
+		var d: float = p.wpos.distance_to(l.pos)
+		if d < 8.0: continue
+		var known := world.discovered.has(l.id)
+		if known and d < 400.0: mk.append([(l.pos - p.wpos).angle(), "loc"])
+		elif not known and d < 160.0: mk.append([(l.pos - p.wpos).angle(), "loc_new"])
+	for c in camps:
+		if c.wpos.distance_to(p.wpos) > 6.0: mk.append([(c.wpos - p.wpos).angle(), "camp"])
+	for j in jobs:
+		var tgt: Vector2 = j.target
+		if j.kind == "supply": tgt = world.settlements[j.si].pos
+		if tgt.distance_to(p.wpos) > 4.0: mk.append([(tgt - p.wpos).angle(), "job"])
+	for e in enemies:
+		if not e.dead and e.aw > 60.0 and e.wpos.distance_to(p.wpos) < 30.0 and not e.friendly(): mk.append([(e.wpos - p.wpos).angle(), "enemy"])
+	hud.marks = mk
+	hud.job_l.text = ("JOB: " + jobs[0].title + ("  (+%d more)" % (jobs.size() - 1) if jobs.size() > 1 else "")) if jobs.size() else ""
 	var t := find_target()
 	var k := "USE" if using_touch else "[E]"
 	var msg := ""
@@ -2120,13 +2454,14 @@ func _update_hud() -> void:
 			"crate": msg = "%s Search %s" % [k, {"car": "car trunk", "bag": "remains", "brute": "remains", "cache": "raider stash", "crate": "crate"}.get(t.o.kind, t.o.kind.replace("_", " "))]
 			"npc": msg = "%s %s" % [k, "Talk" if t.o.type == "settler" else "Trade"]
 			"door":
-				var mk := "MELEE" if using_touch else "[F]"
+				var cmk := "MELEE" if using_touch else "[F]"
 				match t.o.door:
 					"closed": msg = "%s Open door" % k
-					"locked": msg = ("%s Pick lock (%d)   %s Bash (loud)" % [k, inv_count("lockpick"), mk]) if inv_count("lockpick") > 0 else "Locked — %s Bash it in (loud)" % mk
-					"barred": msg = "Barricaded — %s Bash (loud)" % mk
+					"locked": msg = ("%s Pick lock (%d)   %s Bash (loud)" % [k, inv_count("lockpick"), cmk]) if inv_count("lockpick") > 0 else "Locked — %s Bash it in (loud)" % cmk
+					"barred": msg = "Barricaded — %s Bash (loud)" % cmk
 					"sealed": msg = "Boarded up"
 			"camp": msg = "%s Camp menu" % ("CAMP" if using_touch else "[B]")
+			"examine": msg = "%s Look: %s" % [k, t.o.info.get_slice("|", 0)]
 	if not busy.is_empty():
 		msg = "Picking lock… %d%%" % int(100.0 * busy.t / busy.total)
 	hud.set_prompt(msg)
@@ -2425,6 +2760,46 @@ func _debug_econ() -> void:
 	load_game()
 	await get_tree().create_timer(1.0).timeout
 	print("ECON reload same inv: ", str(inventory) == inv_before, " origin ", origin_id, " pos ", player.wpos)
+	get_tree().quit()
+
+## Immersion check: weather, radio line, compass, a job, a note, a level up.
+func _debug_immersion() -> void:
+	DirAccess.make_dir_recursive_absolute("user://shots")
+	await get_tree().create_timer(1.0).timeout
+	var tr: Npc = null
+	for n in npcs:
+		if n.type == "trader" and n.settlement >= 0: tr = n; break
+	if tr:
+		player.wpos = tr.wpos + Vector2(0.8, 0.8)
+		player.sync()
+		open_jobs(tr)
+		await get_tree().create_timer(0.3).timeout
+		await _snap("user://shots/imm_jobs.png")
+		var off: Dictionary = tr.get_meta("job")
+		off.taken = true
+		jobs.append(off)
+		hud.hide_menu()
+	audio.toggle_radio()
+	weather.kind = "rad"; weather.amt = 0.9; weather.target = 0.9; weather.t_left = 99
+	hud.show_card("PATCHWORK\nDISCOVERED")
+	await get_tree().create_timer(1.0).timeout
+	await _snap("user://shots/imm_rad.png")
+	weather.kind = "rain"
+	await get_tree().create_timer(0.5).timeout
+	await _snap("user://shots/imm_rain.png")
+	weather.kind = "dust"
+	await get_tree().create_timer(0.5).timeout
+	await _snap("user://shots/imm_dust.png")
+	weather.amt = 0.0; weather.target = 0.0
+	gain_xp(500, "test")
+	await get_tree().create_timer(0.5).timeout
+	await _snap("user://shots/imm_level.png")
+	hud.hide_menu()
+	_find_note()
+	await get_tree().create_timer(0.3).timeout
+	await _snap("user://shots/imm_note.png")
+	hud.hide_menu()
+	print("IMM jobs ", jobs.size(), " level ", level, " perks ", perks, " notes ", notes_read, " radio ", audio.radio_on, " beds ", audio.bed_target)
 	get_tree().quit()
 
 ## Walk along the interstate for a while, measuring frame times while chunks stream in.

@@ -3,7 +3,7 @@ class_name Items
 
 const DB := {
 	# guns: dmg per bullet, rate = seconds between shots, spread (radians), speed (tiles/s), life (s), pellets, ammo type
-	"pipe_pistol": {"name": "Pipe Pistol", "slot": "gun", "dmg": 2, "rate": 0.34, "spread": 0.10, "speed": 14.0, "life": 0.9, "pellets": 1, "ammo": "ammo_pistol", "len": 6, "value": 12, "tier": 1},
+	"pipe_pistol": {"name": "Pipe Pistol", "slot": "gun", "dmg": 2, "rate": 0.34, "spread": 0.065, "speed": 14.0, "life": 0.9, "pellets": 1, "ammo": "ammo_pistol", "len": 6, "value": 12, "tier": 1},
 	"pistol_10mm": {"name": "10mm Pistol", "slot": "gun", "dmg": 3, "rate": 0.28, "spread": 0.06, "speed": 16.0, "life": 1.0, "pellets": 1, "ammo": "ammo_pistol", "len": 6, "value": 25, "tier": 2},
 	"smg": {"name": "Scrap SMG", "slot": "gun", "dmg": 2, "rate": 0.11, "spread": 0.14, "speed": 15.0, "life": 0.9, "pellets": 1, "ammo": "ammo_pistol", "len": 8, "value": 40, "tier": 3},
 	"shotgun": {"name": "Sawed-off Shotgun", "slot": "gun", "dmg": 2, "rate": 0.8, "spread": 0.35, "speed": 13.0, "life": 0.4, "pellets": 5, "ammo": "ammo_shell", "len": 7, "value": 35, "tier": 2},
@@ -28,7 +28,7 @@ const DB := {
 	"lockpick": {"name": "Lockpick", "slot": "tool", "value": 2},
 	# trade goods: worth more in some towns than others (see Economy). Water and produce can be eaten.
 	"water": {"name": "Purified Water", "slot": "use", "heal": 3, "value": 6, "trade": true, "desc": "Clean water in old bottles. Worth a fortune in dry country."},
-	"produce": {"name": "Fresh Produce", "slot": "use", "heal": 2, "value": 4, "trade": true, "desc": "Mutfruit, tatos and corn from the farms."},
+	"produce": {"name": "Fresh Produce", "slot": "use", "heal": 2, "value": 4, "trade": true, "desc": "Glowberries, potatoes and corn from the farms."},
 	"salt": {"name": "Salt", "slot": "trade", "value": 5, "trade": true, "desc": "Sacks of salt from the flats. Keeps meat, cleans wounds."},
 	"glass": {"name": "Crater Glass", "slot": "trade", "value": 9, "trade": true, "desc": "Green glass fused by the bomb. Lens makers and jewellers want it."},
 	"copper": {"name": "Copper Wire", "slot": "trade", "value": 8, "trade": true, "desc": "Coils of salvaged wire from the canyon mines."},

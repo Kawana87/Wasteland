@@ -67,6 +67,13 @@ func setup(g: Game) -> void:
 	header = Hud.term_label(20)
 	header.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	top.add_child(header)
+	for bd in [["  NOTES  ", func(): close_screen(); game.show_notes()], ["  PERKS & STATS  ", func(): close_screen(); game.show_stats()]]:
+		var nb := Button.new()
+		nb.text = bd[0]
+		nb.focus_mode = Control.FOCUS_NONE
+		Hud.term_button(nb)
+		nb.pressed.connect(bd[1])
+		top.add_child(nb)
 	var close := Button.new()
 	close.text = "  CLOSE  [I]  "
 	close.focus_mode = Control.FOCUS_NONE

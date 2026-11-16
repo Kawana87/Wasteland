@@ -17,6 +17,24 @@ var title_layer: Control
 var touch: TouchControls
 var crt_btn: Button
 var floaters := []
+var bars: Control
+var compass: Control
+var job_l: Label
+var card_l: Label
+var card_t := 0.0
+var radio_box: PanelContainer
+var radio_l: Label
+var radio_t := 0.0
+var radio_btn: Button
+signal radio_toggled
+# filled by Game each frame
+var hp := 20.0
+var hp_max := 20.0
+var xp_frac := 0.0
+var level := 1
+var ammo_s := ""
+var facing := 0.0
+var marks: Array = []      # [world angle, kind]
 
 func _ready() -> void:
 	layer = 5
@@ -29,12 +47,62 @@ func _ready() -> void:
 	touch.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(touch)
 	var stats_panel := PanelContainer.new()
-	stats_panel.add_theme_stylebox_override("panel", term_box())
+	var sb := term_box()
+	sb.set_content_margin_all(8)
+	stats_panel.add_theme_stylebox_override("panel", sb)
 	stats_panel.position = Vector2(10, 8)
 	stats_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(stats_panel)
-	stats = _label(16)
-	stats_panel.add_child(stats)
+	var sv := VBoxContainer.new()
+	sv.add_theme_constant_override("separation", 3)
+	sv.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	stats_panel.add_child(sv)
+	bars = Control.new()
+	bars.custom_minimum_size = Vector2(230, 30)
+	bars.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bars.draw.connect(_draw_bars)
+	sv.add_child(bars)
+	stats = _label(14)
+	sv.add_child(stats)
+	# compass strip, top centre
+	compass = Control.new()
+	compass.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	compass.position = Vector2(-200, 8)
+	compass.size = Vector2(400, 34)
+	compass.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	compass.draw.connect(_draw_compass)
+	root.add_child(compass)
+	job_l = _label(14)
+	job_l.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	job_l.position = Vector2(-300, 44)
+	job_l.size = Vector2(600, 20)
+	job_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	root.add_child(job_l)
+	# big centred card for discoveries and level ups
+	card_l = Label.new()
+	card_l.add_theme_font_size_override("font_size", 30)
+	card_l.add_theme_color_override("font_color", INK)
+	card_l.add_theme_color_override("font_outline_color", Color(0, 0.05, 0.01))
+	card_l.add_theme_constant_override("outline_size", 8)
+	card_l.set_anchors_preset(Control.PRESET_CENTER)
+	card_l.position = Vector2(-400, -150)
+	card_l.size = Vector2(800, 90)
+	card_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	card_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	card_l.modulate.a = 0.0
+	root.add_child(card_l)
+	# radio subtitle
+	radio_box = PanelContainer.new()
+	radio_box.add_theme_stylebox_override("panel", term_box())
+	radio_box.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	radio_box.position = Vector2(-300, -120)
+	radio_box.custom_minimum_size = Vector2(600, 0)
+	radio_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	radio_l = _label(15)
+	radio_l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	radio_box.add_child(radio_l)
+	radio_box.visible = false
+	root.add_child(radio_box)
 	crt_btn = Button.new()
 	crt_btn.text = "CRT: off"
 	crt_btn.focus_mode = Control.FOCUS_NONE
@@ -43,6 +111,13 @@ func _ready() -> void:
 	crt_btn.position = Vector2(14, 118)
 	crt_btn.pressed.connect(func(): crt_toggled.emit())
 	root.add_child(crt_btn)
+	radio_btn = Button.new()
+	radio_btn.text = "RADIO: off"
+	radio_btn.focus_mode = Control.FOCUS_NONE
+	term_button(radio_btn)
+	radio_btn.add_theme_font_size_override("font_size", 14)
+	radio_btn.pressed.connect(func(): radio_toggled.emit())
+	root.add_child(radio_btn)
 	prompt_l = _label(18)
 	prompt_l.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
 	prompt_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -127,6 +202,62 @@ func toast(msg: String) -> void:
 	toast_box.visible = true
 	toast_t = 3.6
 
+func show_card(t: String) -> void:
+	card_l.text = t
+	card_t = 3.2
+
+func radio_line(t: String) -> void:
+	radio_l.text = "SABLE RADIO 88.1 — " + t
+	radio_t = 8.0
+	radio_box.visible = true
+
+func _draw_bars() -> void:
+	var f: Font = ThemeDB.fallback_font
+	# health bar
+	var w := 150.0
+	bars.draw_rect(Rect2(0, 2, w, 11), Color(0.05, 0.15, 0.07))
+	var fr := clampf(hp / maxf(hp_max, 1.0), 0.0, 1.0)
+	var col := INK if fr > 0.35 else Color(1.0, 0.45, 0.35)
+	bars.draw_rect(Rect2(0, 2, w * fr, 11), col)
+	for k in range(1, int(hp_max / 5.0) + 1):
+		bars.draw_line(Vector2(w * k * 5.0 / hp_max, 2), Vector2(w * k * 5.0 / hp_max, 13), Color(0, 0.1, 0.02, 0.8), 1.0)
+	bars.draw_rect(Rect2(0, 2, w, 11), INK_DIM, false, 1.0)
+	bars.draw_string(f, Vector2(w + 8, 13), "HP %d/%d" % [int(ceil(hp)), int(hp_max)], HORIZONTAL_ALIGNMENT_LEFT, -1, 13, INK)
+	# xp bar
+	bars.draw_rect(Rect2(0, 19, w, 5), Color(0.05, 0.15, 0.07))
+	bars.draw_rect(Rect2(0, 19, w * xp_frac, 5), Color(0.95, 0.85, 0.4))
+	bars.draw_string(f, Vector2(w + 8, 27), "LVL %d" % level, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(0.95, 0.85, 0.4))
+
+## Fallout-style compass: centred on the way you're facing; places you haven't found yet are hollow,
+## found places filled, camps square, the current job an amber arrow, enemies hunting you red ticks.
+func _draw_compass() -> void:
+	var W := compass.size.x
+	var f: Font = ThemeDB.fallback_font
+	compass.draw_rect(Rect2(0, 0, W, 30), Color(0.02, 0.09, 0.04, 0.75))
+	compass.draw_rect(Rect2(0, 0, W, 30), INK_DIM, false, 1.0)
+	var span := deg_to_rad(110.0)
+	var px := func(a: float) -> float:
+		return W * 0.5 + wrapf(a - facing, -PI, PI) / span * W * 0.5
+	for k in 24:
+		var a := k * TAU / 24.0 - PI * 0.5
+		var x: float = px.call(a)
+		if x < 4 or x > W - 4: continue
+		var card: String = ["N", "", "", "", "", "", "E", "", "", "", "", "", "S", "", "", "", "", "", "W", "", "", "", "", ""][k]
+		if card != "":
+			compass.draw_string(f, Vector2(x - 5, 21), card, HORIZONTAL_ALIGNMENT_LEFT, -1, 15, INK)
+		else:
+			compass.draw_line(Vector2(x, 4), Vector2(x, 8 if k % 3 else 11), INK_DIM, 1.0)
+	for m in marks:
+		var x: float = px.call(m[0])
+		if x < 6 or x > W - 6: continue
+		match m[1]:
+			"loc_new": compass.draw_polyline(PackedVector2Array([Vector2(x, 18), Vector2(x + 5, 23), Vector2(x, 28), Vector2(x - 5, 23), Vector2(x, 18)]), INK, 1.5)
+			"loc": compass.draw_colored_polygon(PackedVector2Array([Vector2(x, 19), Vector2(x + 4, 23), Vector2(x, 27), Vector2(x - 4, 23)]), INK_DIM)
+			"camp": compass.draw_rect(Rect2(x - 3, 20, 7, 7), Color(1, 0.85, 0.4), false, 1.5)
+			"job": compass.draw_colored_polygon(PackedVector2Array([Vector2(x - 6, 17), Vector2(x + 6, 17), Vector2(x, 28)]), Color(1.0, 0.75, 0.25))
+			"enemy": compass.draw_rect(Rect2(x - 1, 2, 3, 10), Color(1.0, 0.35, 0.3))
+	compass.draw_line(Vector2(W * 0.5, 0), Vector2(W * 0.5, 4), INK, 2.0)
+
 func set_prompt(t: String) -> void:
 	prompt_l.text = t
 
@@ -138,7 +269,17 @@ func _process(delta: float) -> void:
 		toast_t -= delta
 		if toast_t <= 0.0:
 			toast_box.visible = false
-	crt_btn.position = Vector2(12, stats.get_parent().position.y + stats.get_parent().size.y + 6)
+	var sp := stats.get_parent().get_parent() as Control
+	crt_btn.position = Vector2(12, sp.position.y + sp.size.y + 6)
+	radio_btn.position = Vector2(crt_btn.position.x + crt_btn.size.x + 8, crt_btn.position.y)
+	if card_t > 0.0:
+		card_t -= delta
+		card_l.modulate.a = clampf(card_t, 0.0, 1.0) * clampf((3.2 - card_t) * 3.0, 0.0, 1.0)
+	if radio_t > 0.0:
+		radio_t -= delta
+		radio_box.visible = radio_t > 0.0
+	bars.queue_redraw()
+	compass.queue_redraw()
 
 ## buttons: Array of [label, Callable, disabled(bool)]
 func show_menu(title: String, lines: Array, buttons: Array) -> void:

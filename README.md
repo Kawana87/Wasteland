@@ -65,8 +65,22 @@ The first open takes a moment while Godot imports the sprites.
   shows what each town sells cheap and pays well for.
 - **Origins:** start as a Patchwork drifter, a Clearwater water-runner, an Iron Gate ex-con, a Redwall scavenger or a
   Greenmarsh farmhand — each starts somewhere different with its own upside and catch.
-- **World map:** green Pip-Boy style screen with your position, camps and every place you've discovered (get within
+- **World map:** green CRT screen with your position, camps and every place you've discovered (get within
   sight of a place to put it on the map). Zoom in on yourself, and fast travel to anywhere you've found.
+- **Sound:** every effect, ambient bed and radio tune is synthesised by `tools/audio/make_audio.py` — gunshots per weapon,
+  footsteps on dirt and pavement, ghoul groans, raider shouts, doors, crates, coins, wind, night insects, town chatter,
+  campfire crackle, rain and thunder.
+- **Sable Radio:** toggle RADIO for four original lounge tunes and a DJ whose news reacts to what you've done.
+- **Weather:** dust, rain and radstorms. In a radstorm the sky turns green, the Geiger counter crackles and you take
+  radiation damage outside — get under a roof.
+- **Compass:** top of the screen, centred on where you're facing: undiscovered places (hollow), found places, camps,
+  your job target (amber) and enemies hunting you (red).
+- **Jobs:** traders post work — deliveries, clearing out dungeons, bounties on named raider bosses, supply runs.
+- **XP, levels and perks:** XP for discoveries, kills, jobs, cleared sites, notes and profitable trades; pick a perk
+  each level (Toughness, Gunslinger, Silver Tongue, Strong Back, Rad Skin, ...).
+- **Things to find:** notes and holotapes in containers (read them again from the inventory), scenes in the wilds that
+  tell a story when you look closer, people who talk as you pass. Discovering a place or clearing a dungeon gets a
+  title card and a mark on the map.
 - **Saving:** the game autosaves (and saves when you leave the app); **Continue** on the title screen picks up where
   you left off — your gear, camps, stash, bases, discoveries, and what you've looted and killed.
 - **Wasteland feel:** rubble, toxic spills, dead bushes, bones, crows that scatter when you get close, drifting dust, a washed-out colour grade and a day/night cycle (8 minutes per day).

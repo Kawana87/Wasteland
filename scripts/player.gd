@@ -45,6 +45,8 @@ func _ready() -> void:
 func world_aim() -> Vector2:
 	return Iso.screen_dir_to_world(aim)
 
+var walk_dir := Vector2(1, 0)
+
 func step(delta: float, move_in: Vector2, aim_in: Vector2) -> void:
 	cd -= delta; mcd -= delta; swing -= delta; inv -= delta; flash -= delta
 	update_jump(delta)
@@ -60,7 +62,8 @@ func step(delta: float, move_in: Vector2, aim_in: Vector2) -> void:
 		moving = move_in.length() > 0.15
 		if moving:
 			var d := Iso.screen_dir_to_world(move_in)
-			var sp := (1.6 if crouch else 3.4) * minf(1.0, move_in.length())
+			walk_dir = d.normalized()
+			var sp := (1.6 if crouch else 3.4) * minf(1.0, move_in.length()) * (1.0 + 0.08 * Game.I.perk("pathfinder"))
 			move(d * sp * delta)
 		if aim_in.length() > 0.2:
 			aim = aim_in.normalized()

@@ -104,6 +104,7 @@ class Decor:
 	var half := Vector2(0.2, 0.2)
 	var flat := false
 	var bid := 0
+	var info := ""            # "Title|text" — something to look at (vignettes)
 
 class Settlement:
 	var name: String
@@ -421,7 +422,7 @@ static func _catmull(p0: Vector2, p1: Vector2, p2: Vector2, p3: Vector2, t: floa
 	var t3 := t2 * t
 	return 0.5 * ((2.0 * p1) + (-p0 + p2) * t + (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3) * t2 + (-p0 + 3.0 * p1 - 3.0 * p2 + p3) * t3)
 
-func add_decor(name: String, p: Vector2, solid: bool = false, half: Vector2 = Vector2(0.2, 0.2), flat: bool = false) -> void:
+func add_decor(name: String, p: Vector2, solid: bool = false, half: Vector2 = Vector2(0.2, 0.2), flat: bool = false) -> Decor:
 	var d := Decor.new()
 	d.name = name; d.pos = p; d.solid = solid; d.half = half; d.flat = flat
 	d.bid = building_at(p.x, p.y)
@@ -430,6 +431,7 @@ func add_decor(name: String, p: Vector2, solid: bool = false, half: Vector2 = Ve
 		var k := int(floor(p.y)) * N + int(floor(p.x))
 		if not decor_grid.has(k): decor_grid[k] = []
 		decor_grid[k].append(d)
+	return d
 
 ## No building within r tiles of p (tall props must not stand against or inside walls).
 func _clear_of_buildings(p: Vector2, r: float) -> bool:
@@ -1189,6 +1191,7 @@ var door_grid := {}              # tile index -> true (outside tile of a door, a
 var discovered := {}             # location id -> true
 var opened := {}                 # crate position key -> true (survives a reload)
 var killed := {}                 # spawn key -> true
+var cleared := {}                # location id -> true
 var _mark := {}
 
 static func pkey(p: Vector2) -> String:
@@ -1659,6 +1662,7 @@ func _gen_location(l: Dictionary) -> void:
 		for cx in range(c0.x - 1, c1.x + 2):
 			ensure_base(cx, cy)
 	rng.seed = hash(str(l.id)) + seed_value
+	if cleared.has(l.id): l.cleared = true
 	_begin()
 	match l.type:
 		"town", "hub", "settlement", "camp":
@@ -1667,7 +1671,9 @@ func _gen_location(l: Dictionary) -> void:
 			else:
 				_town(l)
 		"dungeon":
+			var s0 := spawns.size()
 			_dungeon(l)
+			for i in range(s0, spawns.size()): spawns[i]["loc"] = l.id
 		"landmark":
 			_landmark(l)
 		_:
@@ -1902,6 +1908,9 @@ func _chunk_poi(cx: int, cy: int, r: Rect2i) -> void:
 	var flat: bool = hs.max() - hs.min() < 26.0
 	var near_road_pt := _road_near(c, 9.0)
 	var roll := rng.randf()
+	if rng.randf() < 0.3 and flat:
+		_poi_vignette(c)
+		return
 	if near_road_pt != Vector2.ZERO and roll < 0.3:
 		_poi_raider_gas(c, r)
 	elif roll < 0.45 and flat:
@@ -1926,6 +1935,27 @@ func _road_near(c: Vector2, rad: float) -> Vector2:
 		if in_bounds(int(q.x), int(q.y)) and T[idx(int(q.x), int(q.y))] == ROAD:
 			return q
 	return Vector2.ZERO
+
+## A scene left where it happened, with something to read when you look closer.
+func _poi_vignette(c: Vector2) -> void:
+	var v: Array = Lore.VIGNETTES[ri(0, Lore.VIGNETTES.size() - 1)]
+	var first := true
+	for nm in v[2]:
+		var p := c + (Vector2.ZERO if first else Vector2(rf(-1.6, 1.6), rf(-1.2, 1.2)))
+		if nm == "car":
+			var cc := Car.new()
+			cc.k = ri(0, 7); cc.ang = cc.k * PI / 4.0; cc.pos = c + Vector2(2.2, 0.6); cc.spr = "burned" if rng.randf() < 0.5 else "teal"
+			if _car_fits(cc): _add_car(cc)
+			continue
+		var d := add_decor(nm, p, nm in ["barrel_rust", "barrel", "jersey_x", "campfire_decor", "post"], Vector2(0.17, 0.17))
+		if first and d != null:
+			d.info = v[0] + "|" + v[1]
+		first = false
+	if rng.randf() < 0.6:
+		var cr := Crate.new()
+		cr.pos = c + Vector2(rf(-1.5, 1.5), rf(0.8, 1.6))
+		cr.kind = "crate"
+		crates.append(cr)
 
 func _poi_raider_gas(c: Vector2, r: Rect2i) -> void:
 	var x := clampi(int(c.x) - 4, r.position.x + 2, r.end.x - 11)
