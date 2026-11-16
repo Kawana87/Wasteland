@@ -31,6 +31,7 @@ var camps: Array = []
 var survivors: Array = []
 var views: Array = []
 var base: BaseBuild
+var terrain: TerrainMesh
 var crate_nodes := {}            # Crate -> Sprite2D
 var tree_nodes := {}             # tile index -> Sprite2D
 var chop_hits := {}
@@ -182,7 +183,7 @@ func start_new_world() -> void:
 	world.generate(randi() % 1000000)
 	root = Node2D.new()
 	vp.add_child(root)
-	var terrain := TerrainMesh.new()
+	terrain = TerrainMesh.new()
 	terrain.build(world)
 	root.add_child(terrain)
 	for b in world.buildings:
@@ -1744,13 +1745,14 @@ func _debug_build() -> void:
 		var k: Vector3i = p[0] + Vector3i(int(o.x), int(o.y), 0)
 		var why := base.edge_problem(k)
 		if why == "":
-			base.place(k, p[1], p[2]); ok += 1
+			base._level(BaseBuild.edge_verts(k)); base.place(k, p[1], p[2]); ok += 1
 		else:
 			bad.append("%s %s: %s" % [str(k), p[2], why])
 	for y in 3:
 		for x in 3:
 			var t := Vector2i(int(o.x) + x, int(o.y) + y)
-			if base.floor_problem(t) == "": base.place_floor(t, "wood" if x == 0 else "concrete")
+			if base.floor_problem(t) == "": base._level(BaseBuild.tile_verts(t)); base.place_floor(t, "wood" if x == 0 else "concrete")
+	base._relevel_done()
 	print("BUILD placed %d, refused %d %s" % [ok, bad.size(), str(bad)])
 	# collision: can't stand on a wall, can inside the room
 	print("BUILD stand-on-wall=%s stand-inside=%s" % [str(world.can_stand(o + Vector2(0.5, 0.0), 0.25, 0)), str(world.can_stand(o + Vector2(1.5, 1.5), 0.25, 0))])

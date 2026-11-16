@@ -32,6 +32,11 @@ var hover := Vector2(-1, -1)
 var ghosts: Array = []
 var _door_idle := {}           # Seg -> seconds open with nobody in the doorway
 var bar: BuildBar
+var vgroup := {}               # Vector2i ground corner -> structure id (corners levelled together)
+var gverts := {}               # structure id -> Array of its corners
+var glevel := {}               # structure id -> its ground height
+var orig := {}                 # Vector2i -> ground height before any levelling
+var next_group := 1
 
 func setup(game: Game, world: World) -> void:
 	g = game
@@ -182,7 +187,7 @@ func edge_problem(k: Vector3i) -> String:
 	if a.x < 1 or a.y < 1 or b.x > World.N - 1 or b.y > World.N - 1: return "edge of the map"
 	if pieces.has(k) or w.edge_taken(k.x, k.y, k.z): return "already a wall here"
 	if not in_base((a + b) * 0.5): return "too far from camp"
-	if absf(w.hz(a.x, a.y) - w.hz(b.x, b.y)) > 10.0: return "too steep"
+	if not _level_ok(edge_verts(k), 10.0): return "too steep"
 	var sides := [Vector2i(k.x, k.y - 1), Vector2i(k.x, k.y)] if k.z == 0 else [Vector2i(k.x - 1, k.y), Vector2i(k.x, k.y)]
 	for t in sides:
 		if w.building_at(t.x + 0.5, t.y + 0.5) != 0: return "inside a building"
@@ -199,9 +204,78 @@ func floor_problem(t: Vector2i) -> String:
 	if not in_base(Vector2(t.x + 0.5, t.y + 0.5)): return "too far from camp"
 	if w.building_at(t.x + 0.5, t.y + 0.5) != 0: return "inside a building"
 	if w.T[w.idx(t.x, t.y)] == World.TREE: return "a tree is in the way"
-	var hs := [w.vh(t.x, t.y), w.vh(t.x + 1, t.y), w.vh(t.x, t.y + 1), w.vh(t.x + 1, t.y + 1)]
-	if hs.max() - hs.min() > 8.0: return "too steep"
+	if not _level_ok(tile_verts(t), 8.0): return "too steep"
 	return ""
+
+# ------------------------------------------------------------------ levelling
+# Everything you build stands on level ground, like the game's buildings: the ground corners under a
+# piece are dug or filled to one height, shared with whatever it joins onto, so a run of walls has one
+# straight top line instead of stepping down the slope piece by piece.
+static func edge_verts(k: Vector3i) -> Array:
+	return [Vector2i(k.x, k.y), Vector2i(k.x + 1, k.y) if k.z == 0 else Vector2i(k.x, k.y + 1)]
+
+static func tile_verts(t: Vector2i) -> Array:
+	return [t, t + Vector2i(1, 0), t + Vector2i(0, 1), t + Vector2i(1, 1)]
+
+## Ground corners already levelled belong to a structure (a group with one height). A piece that joins
+## two structures merges them onto the bigger one's height, if every corner stays within the slope limit.
+func _groups_of(verts: Array) -> Array:
+	var gs := []
+	for v in verts:
+		if vgroup.has(v) and not vgroup[v] in gs: gs.append(vgroup[v])
+	gs.sort_custom(func(p, q): return gverts[p].size() > gverts[q].size())
+	return gs
+
+func _level_for(verts: Array) -> float:
+	var gs := _groups_of(verts)
+	if not gs.is_empty(): return glevel[gs[0]]
+	var s := 0.0
+	for v in verts: s += w.vh(v.x, v.y)
+	return s / verts.size()
+
+func _ground(v: Vector2i) -> float:
+	return orig.get(v, w.vh(v.x, v.y))
+
+func _level_ok(verts: Array, lim: float) -> bool:
+	var lv := _level_for(verts)
+	for v in verts:
+		if absf(_ground(v) - lv) > lim: return false
+	var gs := _groups_of(verts)
+	for i in range(1, gs.size()):
+		for u in gverts[gs[i]]:
+			if absf(_ground(u) - lv) > lim: return false
+	return true
+
+## Returns true if the ground changed.
+func _level(verts: Array) -> bool:
+	var lv := _level_for(verts)
+	var gs := _groups_of(verts)
+	var gid: int
+	if gs.is_empty():
+		gid = next_group; next_group += 1
+		glevel[gid] = lv; gverts[gid] = []
+	else:
+		gid = gs[0]
+	var changed := false
+	for i in range(1, gs.size()):                 # merge the other structures in
+		for u in gverts[gs[i]]:
+			vgroup[u] = gid; gverts[gid].append(u)
+			if absf(w.vh(u.x, u.y) - lv) > 0.01: w.set_vh(u.x, u.y, lv); changed = true
+		gverts.erase(gs[i]); glevel.erase(gs[i])
+	for v in verts:
+		if not orig.has(v): orig[v] = w.vh(v.x, v.y)
+		if not vgroup.has(v):
+			vgroup[v] = gid; gverts[gid].append(v)
+		if absf(w.vh(v.x, v.y) - lv) > 0.01:
+			w.set_vh(v.x, v.y, lv); changed = true
+	return changed
+
+func _relevel_done() -> void:
+	g.terrain.build(w)
+	for k in pieces: _dress(k)
+	for t in floors:
+		var spr: Sprite2D = floors[t].spr
+		spr.position = Iso.to_screen(t.x, t.y, w.vh(t.x, t.y)).round()
 
 # ------------------------------------------------------------------ placing
 func _commit() -> void:
@@ -211,6 +285,7 @@ func _commit() -> void:
 		for k in ts: remove(k)
 		return
 	var placed := 0
+	var dug := false
 	var why := ""
 	var c := cost_of(tier, piece)
 	for k in ts:
@@ -222,9 +297,14 @@ func _commit() -> void:
 			why = "not enough materials"
 			break
 		for r in c: g.stash[r] -= c[r]
-		if piece == "floor": place_floor(k, tier)
-		else: place(k, tier, piece)
+		if piece == "floor":
+			dug = _level(tile_verts(k)) or dug
+			place_floor(k, tier)
+		else:
+			dug = _level(edge_verts(k)) or dug
+			place(k, tier, piece)
 		placed += 1
+	if dug: _relevel_done()
 	if placed == 0 and why != "":
 		g.hud.toast("Can't build: %s." % why)
 	elif why != "":
@@ -262,8 +342,7 @@ func place_floor(t: Vector2i, tr: String) -> void:
 	spr.centered = false
 	spr.texture = Assets.tex("bf_" + tr)
 	spr.offset = Assets.off("bf_" + tr)
-	var z := (w.vh(t.x, t.y) + w.vh(t.x + 1, t.y) + w.vh(t.x, t.y + 1) + w.vh(t.x + 1, t.y + 1)) * 0.25
-	spr.position = Iso.to_screen(t.x, t.y, z).round()
+	spr.position = Iso.to_screen(t.x, t.y, w.vh(t.x, t.y)).round()
 	spr.z_as_relative = false
 	spr.z_index = Iso.z_for(t.x + t.y + 0.02, 3)
 	add_child(spr)
@@ -298,7 +377,7 @@ func _dress(k: Vector3i) -> void:
 	var tx := tex_for(s)
 	spr.texture = Assets.tex(tx)
 	spr.offset = Assets.off(tx)
-	spr.position = Iso.to_screen(s.a.x, s.a.y, minf(w.hz(s.a.x, s.a.y), w.hz(s.b.x, s.b.y))).round()
+	spr.position = Iso.to_screen(s.a.x, s.a.y, w.vh(int(s.a.x), int(s.a.y))).round()
 	spr.z_as_relative = false
 	spr.z_index = Iso.z_for((s.a.x + s.b.x) * 0.5 + (s.a.y + s.b.y) * 0.5, 2)
 
@@ -360,13 +439,13 @@ func _show_ghosts(ts: Array, ok: Array) -> void:
 		var pos := Vector2.ZERO
 		if k is Vector2i:
 			tx = "bf_" + (floors[k].tier if piece == "remove" else tier)
-			pos = Iso.to_screen(k.x, k.y, w.vh(k.x, k.y))
+			pos = Iso.to_screen(k.x, k.y, _level_for(tile_verts(k)))
 		else:
 			var s: World.Seg = pieces[k].seg if piece == "remove" else null
 			var tr: String = s.tier if s else tier
 			var pc: String = s.piece if s else piece
 			tx = "bw_%s_%s_%s" % [tr, pc, "x" if k.z == 0 else "y"]
-			pos = Iso.to_screen(k.x, k.y, minf(w.hz(k.x, k.y), w.hz(k.x + (1 if k.z == 0 else 0), k.y + (1 if k.z == 1 else 0))))
+			pos = Iso.to_screen(k.x, k.y, _level_for(edge_verts(k)))
 		gs.texture = Assets.tex(tx)
 		gs.offset = Assets.off(tx)
 		gs.position = pos.round()
