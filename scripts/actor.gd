@@ -21,7 +21,18 @@ func ground_z() -> float:
 	return world().stand_z(wpos.x, wpos.y, fl)
 
 ## Try to move by d (tiles). Slides along walls. Returns true if it moved at all.
+## Long moves (a slow frame, a knockback) are split into steps under 0.2 tiles so nothing can
+## skip through a wall in one jump.
 func move(d: Vector2) -> bool:
+	var n := int(ceil(d.length() / 0.2))
+	if n > 1:
+		var any := false
+		for i in mini(n, 20):
+			if _move1(d / n): any = true
+		return any
+	return _move1(d)
+
+func _move1(d: Vector2) -> bool:
 	var w := world()
 	var moved := false
 	var nx := wpos + Vector2(d.x, 0)

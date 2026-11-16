@@ -159,6 +159,7 @@ var gen_ms := 0                 # time spent building all locations at load (per
 ## (the chunk minus a 2-tile border). Neighbouring chunks then never see each other's content, so a
 ## chunk comes out the same whichever neighbour streamed in first (Review 2). Empty = no limit.
 var gen_rect := Rect2()
+var skip_reach := false         # perf comparison only
 var reserve_r := 0.0            # nothing solid is generated this close to the home camp (set once start is known)
 var plat := {}                   # Vector2i -> top height of a player-built foundation on that tile
 const STEP := 10.0               # you can walk up a ledge this high (px) onto or off a foundation
@@ -412,39 +413,47 @@ const CONTAINER_CHANCE := {"fridge": 0.9, "dresser": 0.9, "desk": 0.9, "filing":
 	"shopcounter": 1.0, "workbench": 0.9, "bookshelf": 0.4, "counter": 0.35, "barrel": 0.3, "mattress": 0.2,
 	"locker": 0.8, "terminal": 0.5, "vending": 0.7, "jukebox": 0.3, "booth": 0.15}
 
+const ACTOR_R := {"brute": 0.35, "shellback": 0.38, "rat": 0.18}
+
+## Where an actor of radius r placed at p should really stand: p itself if free, else the nearest
+## free spot within maxr tiles in the same building (or outside, if it started outside). INF = nowhere.
+func settle_pos(p: Vector2, r: float, fl: int = 0, outdoor_only: bool = false, maxr: float = 2.0) -> Vector2:
+	var bid := building_at(p.x, p.y)
+	var ok := func(q: Vector2) -> bool:
+		if not can_stand(q, r, fl): return false
+		if building_at(q.x, q.y) != bid: return false
+		return not outdoor_only or _clear_of_buildings(q, r + 0.3)
+	if ok.call(p): return p
+	var ring := 0.25
+	while ring <= maxr:
+		var n := maxi(8, int(ring * 16))
+		for k in n:
+			var q := p + Vector2.from_angle(k * TAU / n) * ring
+			if ok.call(q): return q
+		ring += 0.25
+	return Vector2.INF
+
 ## Livestock and crows start (and keep their home) outdoors on open ground; settlers on standable ground.
 func _fix_critters(from: int = 0) -> void:
-	for cr in critters.slice(from):
+	for i in range(critters.size() - 1, from - 1, -1):
+		var cr: Dictionary = critters[i]
 		var outdoor: bool = cr.type in ["cattle", "crow"]
-		for key in ["pos", "home"]:
-			if not cr.has(key): continue
-			var p: Vector2 = cr[key]
-			var ok := func(q: Vector2) -> bool:
-				return in_bounds(int(q.x), int(q.y)) and can_stand(q, 0.3, 0) and (not outdoor or _clear_of_buildings(q, 0.6))
-			if ok.call(p): continue
-			for ring in range(1, 24):
-				var found := false
-				for k in 12:
-					var q: Vector2 = p + Vector2.from_angle(k * TAU / 12.0) * ring * 0.35
-					if ok.call(q):
-						cr[key] = q; found = true; break
-				if found: break
+		var rr := 0.3 if cr.type == "cattle" else 0.25
+		var sq := settle_pos(cr.pos, rr, 0, outdoor, 5.0)
+		if sq == Vector2.INF and cr.has("home"): sq = settle_pos(cr.home, rr, 0, outdoor, 5.0)   # e.g. a guard post out on the water
+		if sq == Vector2.INF:
+			if cr.type != "trader": critters.remove_at(i)
+			continue
+		cr.pos = sq
+		if cr.has("home") and not can_stand(cr.home, rr, 0): cr.home = sq
 
 ## Move any spawn that landed inside a wall, furniture, tree or wreck to the nearest spot it can stand on.
 func _fix_spawns(from: int = 0) -> void:
-	for sp in spawns.slice(from):
-		var fl: int = sp.get("fl", 0)
-		var p: Vector2 = sp.pos
-		if can_stand(p, 0.22, fl):
-			continue
-		var found := false
-		for ring in range(1, 14):
-			var r := ring * 0.25
-			for k in 12:
-				var q := p + Vector2.from_angle(k * TAU / 12.0) * r
-				if in_bounds(int(q.x), int(q.y)) and can_stand(q, 0.22, fl) and building_at(q.x, q.y) == building_at(p.x, p.y):
-					sp.pos = q; found = true; break
-			if found: break
+	for i in range(spawns.size() - 1, from - 1, -1):
+		var sp: Dictionary = spawns[i]
+		var q := settle_pos(sp.pos, ACTOR_R.get(sp.type, 0.25), sp.get("fl", 0))
+		if q == Vector2.INF: spawns.remove_at(i)
+		else: sp.pos = q
 
 # ------------------------------------------------------------------ roads
 static func _catmull(p0: Vector2, p1: Vector2, p2: Vector2, p3: Vector2, t: float) -> Vector2:
@@ -728,6 +737,17 @@ func place_shape(parts: Array, kind: String, door_side: int = -1, allow_clear: b
 				cells[Vector2i(x, y)] = 1
 	if not _can_place(parts, raider, allow_clear):
 		return null
+	if kind != "canopy":
+		# needs at least one wall with dry ground outside for the door
+		var dry := false
+		for c in cells:
+			for o in DIRS:
+				var nb: Vector2i = c + o
+				if cells.has(nb) or not in_bounds(nb.x, nb.y): continue
+				var t := T[idx(nb.x, nb.y)]
+				if t != WATER and t != ROCK and t != FLOOR and biome(nb.x, nb.y) != B_WATER: dry = true; break
+			if dry: break
+		if not dry: return null
 	var mn := 1e9
 	var mx := -1e9
 	var sum := 0.0
@@ -789,6 +809,7 @@ func place_shape(parts: Array, kind: String, door_side: int = -1, allow_clear: b
 			if cells.has(nb) or not in_bounds(nb.x, nb.y): continue
 			var t := T[idx(nb.x, nb.y)]
 			if t == FLOOR or t == TREE or BID[idx(nb.x, nb.y)] != 0: continue
+			if t == WATER or t == ROCK or biome(nb.x, nb.y) == B_WATER: continue   # never a door onto water
 			var score := rng.randf()
 			if door_side >= 0: score += 5.0 if d == door_side else 0.0
 			else:
@@ -868,6 +889,7 @@ func place_shape(parts: Array, kind: String, door_side: int = -1, allow_clear: b
 		_extras(b)
 		return b
 	_furnish(b, gaps)
+	if not skip_reach: _fix_reach(b)
 	_extras(b)
 	if raider:
 		for k in ri(1, 2):
@@ -1122,6 +1144,126 @@ func _add_furn(b: Bld, name: String, p: Vector2, orient: String, fl: int) -> Fur
 		f.crate = c
 	b.furn.append(f)
 	return f
+
+## Walkable sample points (half-tile grid) reachable on floor fl from the door (ground) or the
+## stairs (upper floors), for something the player's size.
+const PR := 0.28
+func reach_map(b: Bld, fl: int) -> Dictionary:
+	var start := Vector2(b.door_in) + Vector2(0.5, 0.5) if fl == 0 else Vector2(b.stairs) + Vector2(0.5, 0.5)
+	if fl > 0 and b.stairs.x < 0: return {}
+	var key := func(q: Vector2) -> Vector2i: return Vector2i(int(round(q.x * 2.0)), int(round(q.y * 2.0)))
+	var ok := func(q: Vector2) -> bool:
+		var c := Vector2i(int(floor(q.x)), int(floor(q.y)))
+		if not b.cells.has(c) or b.cells[c] <= fl or (fl > 0 and b.holes.has(c)): return false
+		return not wall_hit(q, PR, fl) and not furn_hit(q, PR, fl)
+	var seen := {}
+	var q0: Vector2 = start
+	if not ok.call(q0):
+		var found := false
+		for o in [Vector2(0.5, 0), Vector2(-0.5, 0), Vector2(0, 0.5), Vector2(0, -0.5), Vector2(0.25, 0.25), Vector2(-0.25, -0.25)]:
+			if ok.call(start + o): q0 = start + o; found = true; break
+		if not found: return {}
+	var todo := [q0]
+	seen[key.call(q0)] = q0
+	while todo.size():
+		var q: Vector2 = todo.pop_back()
+		for o in [Vector2(0.5, 0), Vector2(-0.5, 0), Vector2(0, 0.5), Vector2(0, -0.5)]:
+			var n: Vector2 = q + o
+			var k: Vector2i = key.call(n)
+			if seen.has(k): continue
+			if ok.call(n) and ok.call(q + o * 0.5):
+				seen[k] = n
+				todo.append(n)
+	return seen
+
+## What can't be reached in a building: floor tiles with room to stand that you can't get to,
+## loot furniture you can't get within reach of, and the stairs. [{what, fl, at, furn?}]
+func reach_problems(b: Bld) -> Array:
+	var out := []
+	if b.sealed or b.kind == "canopy": return out
+	for fl in b.floors:
+		var seen := reach_map(b, fl)
+		if seen.is_empty():
+			if fl == 0 or b.stairs.x >= 0: out.append({"what": "entrance", "fl": fl, "at": Vector2(b.door_in if fl == 0 else b.stairs)})
+			continue
+		var got := {}
+		for k in seen: got[Vector2i(int(floor(seen[k].x)), int(floor(seen[k].y)))] = true
+		for c in b.cells:
+			if b.cells[c] <= fl or (fl > 0 and b.holes.has(c)) or got.has(c): continue
+			# only count tiles where you could stand at all
+			var room := false
+			for o in [Vector2(0.5, 0.5), Vector2(0.3, 0.3), Vector2(0.7, 0.7), Vector2(0.3, 0.7), Vector2(0.7, 0.3)]:
+				var q: Vector2 = Vector2(c) + o
+				if not wall_hit(q, PR, fl) and not furn_hit(q, PR, fl): room = true; break
+			if room: out.append({"what": "tile", "fl": fl, "at": Vector2(c) + Vector2(0.5, 0.5)})
+		if fl == 0 and b.stairs.x >= 0 and b.floors > 1:
+			var sc := Vector2(b.stairs) + Vector2(0.5, 0.5)
+			var near := false
+			for k in seen:
+				if seen[k].distance_to(sc) < 0.8: near = true; break
+			if not near: out.append({"what": "stairs", "fl": 0, "at": sc})
+		for f in b.furn:
+			if f.fl != fl or f.crate == null: continue
+			var near := false
+			for k in seen:
+				if seen[k].distance_to(f.pos) < 1.1: near = true; break
+			if not near: out.append({"what": "loot", "fl": fl, "at": f.pos, "furn": f})
+	return out
+
+## Furniture must never wall off part of a building: remove the piece blocking the way, nearest
+## first, until everything (floor, stairs, loot) can be reached from the door. Cheap: a few
+## small flood fills per building, at generation time.
+func _fix_reach(b: Bld) -> void:
+	for it in 40:
+		var probs := reach_problems(b)
+		if probs.is_empty(): return
+		var pr: Dictionary = probs[0]
+		var seen := reach_map(b, pr.fl)
+		if pr.fl > 0 and _patch_hole(b, pr, seen): continue
+		# the piece between the reachable area and the problem: closest to the problem among those
+		# touching the reachable area (or anything at all if nothing is reachable yet)
+		var best: Furn = null
+		var bd := 1e9
+		for f in b.furn:
+			if f.fl != pr.fl or f == pr.get("furn"): continue
+			var touches := seen.is_empty()
+			if not touches:
+				for k in seen:
+					if seen[k].distance_to(f.pos) < maxf(f.half.x, f.half.y) + PR + 0.55: touches = true; break
+			if not touches: continue
+			var d: float = f.pos.distance_to(pr.at)
+			if d < bd: bd = d; best = f
+		if best == null:
+			if pr.has("furn"): _drop_furn(b, pr.furn)   # loot nobody can reach: take it away
+			elif pr.what == "tile" and pr.fl > 0:
+				b.holes[Vector2i(int(floor(pr.at.x)), int(floor(pr.at.y)))] = true   # a cut-off scrap of floor: let it fall in
+			else: return
+		else:
+			_drop_furn(b, best)
+
+## Upper floors cut into islands by ruin holes: floor over the hole cell that joins the reachable
+## part to the stranded part (nearest the problem).
+func _patch_hole(b: Bld, pr: Dictionary, seen: Dictionary) -> bool:
+	if seen.is_empty(): return false
+	var got := {}
+	for k in seen: got[Vector2i(int(floor(seen[k].x)), int(floor(seen[k].y)))] = true
+	var best := Vector2i(-1, -1)
+	var bd := 1e9
+	for h in b.holes:
+		if b.cells.get(h, 0) <= pr.fl: continue
+		var touches := false
+		for o in DIRS:
+			if got.has(h + o): touches = true; break
+		if not touches: continue
+		var d: float = (Vector2(h) + Vector2(0.5, 0.5)).distance_to(pr.at)
+		if d < bd: bd = d; best = h
+	if best.x < 0 or bd > 6.0: return false
+	b.holes.erase(best)
+	return true
+
+func _drop_furn(b: Bld, f: Furn) -> void:
+	b.furn.erase(f)
+	if f.crate != null: crates.erase(f.crate)
 
 ## Rooms = parts, with long parts split where an interior wall was built.
 func _furnish(b: Bld, gaps: Dictionary) -> void:

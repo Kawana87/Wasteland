@@ -72,12 +72,19 @@ func _ready() -> void:
 	_load_settings()
 	var args := OS.get_cmdline_user_args()
 	if "--autostart" in args:
-		dbg = load("res://scripts/debug_runs.gd").new(self)
+		var dscript = load("res://scripts/debug_runs.gd")
+		if dscript == null or not dscript.can_instantiate():
+			print("FAIL debug_runs.gd doesn't compile"); get_tree().quit(1); return
+		dbg = dscript.new(self)
 		var oid := "drifter"
 		for a in args:
 			if a.begins_with("--origin="): oid = a.substr(9)
 		if "--continue" in args: load_game.call_deferred()
 		else: start_new_world.call_deferred({}, oid)
+		if "--wallcheck" in args:
+			dbg._debug_wall_check.call_deferred()
+		if "--collide" in args:
+			dbg._debug_collide.call_deferred()
 		if "--determinism" in args:
 			dbg._debug_determinism.call_deferred()
 		if "--startclear" in args:
@@ -366,6 +373,7 @@ func _read_move() -> Vector2:
 
 # ------------------------------------------------------------------ loop
 func _process(delta: float) -> void:
+	delta = minf(delta, 0.1)    # a long hitch (chunk load, app resume) must not teleport anything
 	var t_us := Time.get_ticks_usec()
 	_process_inner(delta)
 	proc_ms = (Time.get_ticks_usec() - t_us) / 1000.0

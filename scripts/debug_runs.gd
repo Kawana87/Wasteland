@@ -1214,3 +1214,86 @@ func _debug_reload_state() -> void:
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(g.SAVE_PATH))
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(g.BAK_PATH))
 	finish()
+
+## Collision sweep over every named place and 250 random chunks (Review 2 P2).
+func _debug_collide() -> void:
+	await g.get_tree().create_timer(0.5).timeout
+	var w := World.new()
+	w.load_data(185393, "patchwork")
+	var r := RandomNumberGenerator.new(); r.seed = 99
+	var chunks := {}
+	for l in w.locs:
+		var ck := World.chunk_of(l.pos)
+		chunks[ck] = true
+	for i in 250:
+		chunks[Vector2i(r.randi_range(2, World.NC - 3), r.randi_range(2, World.NC - 3))] = true
+	var t0 := Time.get_ticks_msec()
+	for ck in chunks: w.ensure_ready(ck.x, ck.y)
+	print("COLLIDE generated %d areas in %d ms" % [chunks.size(), Time.get_ticks_msec() - t0])
+	var cnt := {"tile": 0, "loot": 0, "stairs": 0, "entrance": 0, "tile_up": 0}
+	var bad_b := 0
+	var water_doors := 0
+	var ex := {}
+	for b in w.buildings:
+		var probs := w.reach_problems(b)
+		if probs.size(): bad_b += 1
+		for p in probs:
+			var k: String = p.what if not (p.what == "tile" and p.fl > 0) else "tile_up"
+			cnt[k] += 1
+			if not ex.has(k): ex[k] = "%s at %s fl %d" % [b.kind, str(p.at), p.fl]
+		if not b.sealed and b.kind != "canopy" and w.in_bounds(b.out.x, b.out.y):
+			var t := w.T[w.idx(b.out.x, b.out.y)]
+			if t == World.WATER or t == World.ROCK: water_doors += 1; ex["door"] = "%s at %s" % [b.kind, str(b.out)]
+	var sp_raw := 0
+	var sp_bad := 0
+	for s in w.spawns:
+		var rr: float = World.ACTOR_R.get(s.type, 0.25)
+		if not w.can_stand(s.pos, rr, s.get("fl", 0)): sp_raw += 1
+		var q := w.settle_pos(s.pos, rr, s.get("fl", 0))
+		if q == Vector2.INF: sp_bad += 1; ex["spawn"] = "%s at %s" % [s.type, str(s.pos)]
+	var cr_bad := 0
+	for c in w.critters:
+		var q := w.settle_pos(c.pos, 0.3 if c.type == "cattle" else 0.25, 0, c.type in ["cattle", "crow"], 5.0)
+		if q == Vector2.INF: cr_bad += 1; ex["npc"] = "%s at %s" % [c.type, str(c.pos)]
+	print("COLLIDE %d buildings, %d spawns, %d npcs/critters; examples %s" % [w.buildings.size(), w.spawns.size(), w.critters.size(), str(ex)])
+	check("buildings fully reachable", cnt.tile == 0 and cnt.entrance == 0, "%d of %d buildings have a problem: %d ground tiles, %d blocked entrances" % [bad_b, w.buildings.size(), cnt.tile, cnt.entrance])
+	check("upper floors reachable", cnt.tile_up == 0, "%d upper-floor tiles" % cnt.tile_up)
+	check("loot reachable", cnt.loot == 0, "%d loot furniture out of reach" % cnt.loot)
+	check("stairs reachable", cnt.stairs == 0, "%d" % cnt.stairs)
+	check("no doors onto water", water_doors == 0, "%d" % water_doors)
+	check("spawns stand free", sp_bad == 0, "%d of %d have nowhere to stand (%d needed nudging when spawned)" % [sp_bad, w.spawns.size(), sp_raw])
+	check("traders, settlers, cattle stand free", cr_bad == 0, "%d of %d" % [cr_bad, w.critters.size()])
+	finish()
+
+## Walls hold even with a 0.3 s frame (Review 2: 179 of 291 walk-throughs before).
+func _debug_wall_check() -> void:
+	await g.get_tree().create_timer(1.0).timeout
+	for e in g.enemies: e.queue_free()
+	g.enemies.clear()
+	var tests := 0
+	var through := 0
+	var r := RandomNumberGenerator.new(); r.seed = 5
+	for b in g.world.buildings:
+		if tests >= 291: break
+		if b.sealed or b.kind == "canopy" or b.open or b.ruined: continue
+		var c := Vector2(b.x0 + b.w * 0.5, b.y0 + b.h * 0.5)
+		if c.distance_to(g.player.wpos) > 400: continue
+		for k in 24:
+			if tests >= 291: break
+			var ang := r.randf() * TAU
+			# start just outside, run straight at the middle of the building for 1.8 s in 0.3 s frames
+			var start := c + Vector2.from_angle(ang) * (maxf(b.w, b.h) * 0.75 + 1.5)
+			if g.world.building_at(start.x, start.y) != 0 or not g.world.can_stand(start, 0.28, 0): continue
+			g.player.wpos = start; g.player.fl = 0; g.player.climb = {}
+			var dir := (c - start).normalized()
+			var sdir := Actor.world_to_screen_dir(dir).normalized()
+			for f in 6:
+				g.player.step(0.3, sdir, sdir)
+			tests += 1
+			var inside: bool = g.world.building_at(g.player.wpos.x, g.player.wpos.y) == b.id
+			var via_door: bool = b.door_seg != null and not b.door_seg.solid   # an open doorway is a way in
+			if inside and not via_door:
+				through += 1
+				print("WALL through: %s at %s from %s, door %s (%s), now %s" % [b.kind, str(c), str(start), str(b.door_in), b.door_seg.mode if b.door_seg else "none", str(g.player.wpos)])
+	check("walls hold with 0.3 s frames", through == 0 and tests > 100, "%d of %d runs went through a wall" % [through, tests])
+	finish()

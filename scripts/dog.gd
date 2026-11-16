@@ -6,6 +6,7 @@ var walk_t := 0.0
 var walk_f := 0
 var face_dir := Vector2(1, 0)
 var moving_now := false
+var ghost := false     # passing through a wall to catch up: drawn faded
 
 func _ready() -> void:
 	if not use_rendered("dog", 2): make_body("dog", 2, 14, 10)
@@ -18,10 +19,12 @@ func step(delta: float, p: Player) -> void:
 	var d := wpos.distance_to(goal)
 	if d > 8.0 or (fl > 0 and building() != p.building()):
 		wpos = p.wpos
+		modulate.a = 0.0     # fade back in at your side instead of popping
 	elif d > 0.6:
 		var dir := (goal - wpos) / d
 		if not move(dir * 3.8 * delta) and d > 3.0:
-			wpos += dir * 3.8 * delta
+			wpos += dir * 3.8 * delta     # stuck: squeeze through, but fade out while clipping
+		ghost = not world().can_stand(wpos, radius, fl)
 		body.flip_h = (dir.x - dir.y) < 0
 		face_dir = world_to_screen_dir(dir)
 		moving_now = true
@@ -34,4 +37,5 @@ func step(delta: float, p: Player) -> void:
 	else:
 		body.frame = walk_f
 	moving_now = false
+	modulate.a = move_toward(modulate.a, 0.0 if ghost else 1.0, delta * 6.0)
 	sync()

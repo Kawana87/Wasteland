@@ -387,15 +387,34 @@ func trip_cost(to: Vector2) -> Dictionary:
 func _food_count() -> int:
 	return inv_count("food") + inv_count("water") + inv_count("produce")
 
-func _eat_for_trip(n: int) -> void:
+## What the road will eat: food first, then produce and water (which may be cargo you're hauling).
+func _trip_meals(n: int) -> Dictionary:
+	var left := {"food": inv_count("food"), "produce": inv_count("produce"), "water": inv_count("water")}
+	var use := {}
 	for k in n:
 		for id in ["food", "produce", "water"]:
-			if inv_take(id): break
+			if left[id] > 0:
+				left[id] -= 1
+				use[id] = use.get(id, 0) + 1
+				break
+	return use
 
-func _begin_trip(to: Dictionary) -> void:
+func _eat_for_trip(n: int) -> void:
+	var use := _trip_meals(n)
+	for id in use: inv_take(id, use[id])
+
+func _begin_trip(to: Dictionary, confirmed: bool = false) -> void:
 	var tc := trip_cost(to.wpos)
 	if _food_count() < tc.meals:
 		hud.toast("That trip needs %d food or water for the road (you have %d). Walk, or stock up." % [tc.meals, _food_count()])
+		return
+	var use := _trip_meals(tc.meals)
+	var cargo := []
+	for id in ["produce", "water"]:
+		if use.has(id): cargo.append("%d %s" % [use[id], Items.iname(id)])
+	if cargo.size() and not confirmed:
+		hud.show_menu("Short on food", ["This trip will use %s from your cargo for meals on the road." % " and ".join(cargo)],
+			[["Go anyway", func(): hud.hide_menu(); _begin_trip(to, true), false], ["Cancel", hud.hide_menu, false]])
 		return
 	save_game()
 	var ambush: bool = randf() < tc.ambush
@@ -413,7 +432,7 @@ func _arrive_trip() -> void:
 		var key := World.ckey(World.chunk_of(p).x, World.chunk_of(p).y)
 		for k in randi_range(3, 4):
 			var at := p + Vector2.from_angle(randf() * TAU) * randf_range(5.0, 7.0)
-			if not world.can_stand(at, 0.3, 0): continue
+			if not world.can_stand(at, 0.3, 0) or world.building_at(at.x, at.y) != 0: continue
 			var sp := {"type": "raider", "pos": at, "home": p, "home_r": 7.0, "roam": true, "chunk": key}
 			world.spawns.append(sp); world._bucket(key).spawns.append(sp)
 			var e := _spawn_enemy(sp)

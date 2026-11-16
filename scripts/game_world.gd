@@ -270,6 +270,12 @@ func _shift_z(n: Node, dz: int, under: bool) -> void:
 
 
 func _spawn_npc(d: Dictionary) -> Npc:
+	# last check before anyone appears: never inside a stall, tree, car or wall
+	if world != null and d.has("pos"):
+		var q := world.settle_pos(d.pos, 0.3 if d.type == "cattle" else 0.25, 0, d.type in ["cattle", "crow"], 5.0)
+		if q != Vector2.INF:
+			if d.get("home", d.pos) == d.pos: d.home = q
+			d.pos = q
 	var n := Npc.new()
 	root.add_child(n)
 	n.setup(d)
@@ -278,6 +284,9 @@ func _spawn_npc(d: Dictionary) -> Npc:
 
 
 func _spawn_enemy(s: Dictionary) -> Enemy:
+	if world != null and s.has("pos") and not s.has("boss"):
+		var q := world.settle_pos(s.pos, World.ACTOR_R.get(s.type, 0.25), s.get("fl", 0))
+		if q != Vector2.INF: s.pos = q
 	var e := Enemy.new()
 	root.add_child(e)
 	e.setup(s)
