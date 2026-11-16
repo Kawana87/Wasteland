@@ -5,7 +5,7 @@ for the y axis, origin at the segment start, one tile long. Rotating a piece = s
 48x24 diamonds anchored at [24,0] like floor_* tiles.
 
 Names:  bw_<mat>_<piece>_<axis>   mat in scrap|wood|stone|concrete|fence
-        piece in wall|window|doorway|door|half|gate (fence: wall|gate)
+        piece in wall|window|doorway|door|half|gate|gateopen (fence: wall|gate|gateopen)
         bf_<mat>                  floors: scrap|wood|stone|concrete
 python3 port_build.py [mat ...]"""
 import sys, os, math, random, zlib
@@ -21,7 +21,7 @@ H = gz(28)                      # one storey, same as building walls
 HALF = gz(11)
 T = 0.04                        # half thickness of a solid wall
 TIERS = ("scrap", "wood", "stone", "concrete")
-PIECES = ("wall", "window", "doorway", "door", "half", "gate")
+PIECES = ("wall", "window", "doorway", "door", "half", "gate", "gateopen")
 
 
 class Wall:
@@ -56,7 +56,7 @@ def opening_for(piece):
         return (0.3, 0.7, gz(13), gz(20))                 # a firing slit / small window
     if piece in ("doorway", "door"):
         return (0.28, 0.72, 0.0, gz(20))
-    if piece == "gate":
+    if piece in ("gate", "gateopen"):
         return (0.06, 0.94, 0.0, gz(21))
     return None
 
@@ -194,6 +194,9 @@ def fence(W, piece, rng, top):
     for uu in (0.02, 0.98) + ((0.5,) if piece == "wall" else ()):
         W.box(uu - 0.015, uu + 0.015, -0.015, 0.015, 0, th + gz(1), pipe)
     W.box(0.0, 1.0, -0.01, 0.01, th - gz(0.6), th, pipe)
+    if piece == "gateopen":                              # leaves swung back against the posts
+        for s_ in (0.06, 0.94):
+            W.box(s_ - 0.012, s_ + 0.012, -0.42 if s_ < 0.5 else -0.42, -0.0, gz(1), th - gz(1), pipe)
     if piece == "gate":
         for uu in (0.06, 0.5, 0.94):
             W.box(uu - 0.012, uu + 0.012, 0.012, 0.03, gz(1), th - gz(1), pipe)
@@ -227,6 +230,9 @@ def leaf(W, piece, op, m, rng, planks=False, iron=False):
             if planks or iron:
                 W.box(a, b, 0.012, 0.018, gz(6), gz(7.5), mat("iron", "#2e2c28", 0.5, 0.6))
                 W.box(a, b, 0.012, 0.018, gz(15), gz(16.5), mat("iron", "#2e2c28", 0.5, 0.6))
+    elif piece == "gateopen":
+        for (hx, sgn) in ((o0, 1), (o1, -1)):
+            W.box(hx, hx + 0.03 * sgn if sgn > 0 else hx, -0.4, -0.02, z0 + gz(0.5), z1 - gz(0.4), m) if sgn > 0 else W.box(hx - 0.03, hx, -0.4, -0.02, z0 + gz(0.5), z1 - gz(0.4), m)
     elif piece == "window":
         W.box(o0, o1, -T * 0.6, -T * 0.5, z0, z1, mat("dark", "#16120e", 1.0))
     elif piece == "doorway":
@@ -281,7 +287,7 @@ def main(tiers):
     reset()
     lights()
     for tier in tiers:
-        pieces = ("wall", "gate") if tier == "fence" else PIECES
+        pieces = ("wall", "gate", "gateopen") if tier == "fence" else PIECES
         for piece in pieces:
             for axis in "xy":
                 rng = random.Random(zlib.crc32((tier + piece).encode()))       # same look on both axes

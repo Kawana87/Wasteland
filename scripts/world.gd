@@ -30,6 +30,10 @@ class Seg:
 	var is_door := false
 	var door := ""          # closed, locked, barred, open, broken, sealed
 	var door_hp := 0.0
+	var see := false        # windows, fences, half walls: block movement but not shots
+	var tier := ""          # player-built pieces (bid -1): scrap, wood, stone, concrete, fence
+	var piece := ""         # wall, window, doorway, door, half, gate
+	var hp := 0.0
 
 class Bld:
 	var id: int
@@ -200,7 +204,7 @@ func in_city(x: float, y: float) -> bool:
 static func seg_dist(p: Vector2, s: Seg) -> float:
 	return p.distance_to(Geometry2D.get_closest_point_to_segment(p, s.a, s.b))
 
-func wall_hit(p: Vector2, r: float, fl: int) -> bool:
+func wall_hit(p: Vector2, r: float, fl: int, shots: bool = false) -> bool:
 	var tx := int(floor(p.x))
 	var ty := int(floor(p.y))
 	for yy in range(ty - 1, ty + 2):
@@ -209,7 +213,7 @@ func wall_hit(p: Vector2, r: float, fl: int) -> bool:
 			if lst == null:
 				continue
 			for s in lst:
-				if s.solid and s.fl == fl and seg_dist(p, s) < r + 0.06:
+				if s.solid and s.fl == fl and not (shots and s.see) and seg_dist(p, s) < r + 0.06:
 					return true
 	return false
 
@@ -283,7 +287,7 @@ func slope_ok(a: Vector2, b: Vector2, fl: int, lift: float = 0.0) -> bool:
 	return dh / maxf(a.distance_to(b), 0.0001) < 26.0
 
 func blocks_shot(p: Vector2, z: float, fl: int) -> bool:
-	if wall_hit(p, 0.0, fl):
+	if wall_hit(p, 0.0, fl, true):
 		return true
 	if furn_hit(p, 0.0, fl, true):
 		return true
@@ -1050,6 +1054,35 @@ func _add_seg(b: Bld, a: Vector2, bb: Vector2, axis: int, side: String, fl: int,
 		if not seg_grid.has(k): seg_grid[k] = []
 		seg_grid[k].append(s)
 	return s
+
+## Player-built wall pieces live in seg_grid like building walls (bid -1), so collision, shots and doors work.
+func add_free_seg(s: Seg) -> void:
+	for t in _seg_tiles(s):
+		var k: int = t.y * N + t.x
+		if not seg_grid.has(k): seg_grid[k] = []
+		seg_grid[k].append(s)
+
+func remove_free_seg(s: Seg) -> void:
+	for t in _seg_tiles(s):
+		var lst = seg_grid.get(t.y * N + t.x)
+		if lst != null: lst.erase(s)
+
+func _seg_tiles(s: Seg) -> Array:
+	var out := []
+	var ts := [Vector2i(int(s.a.x), int(s.a.y) - 1), Vector2i(int(s.a.x), int(s.a.y))] if s.axis == 0 else [Vector2i(int(s.a.x) - 1, int(s.a.y)), Vector2i(int(s.a.x), int(s.a.y))]
+	for t in ts:
+		if in_bounds(t.x, t.y): out.append(t)
+	return out
+
+## Is there already a wall (building or built) on this tile edge?
+func edge_taken(x: int, y: int, axis: int) -> bool:
+	var a := Vector2(x, y)
+	for t in [Vector2i(x, y), Vector2i(x - 1, y), Vector2i(x, y - 1)]:
+		if not in_bounds(t.x, t.y): continue
+		for s in seg_grid.get(t.y * N + t.x, []):
+			if s.fl == 0 and s.axis == axis and s.a.distance_to(a) < 0.01:
+				return true
+	return false
 
 # ------------------------------------------------------------------ building shapes
 ## A building footprint is a list of non-overlapping rectangles ("parts").

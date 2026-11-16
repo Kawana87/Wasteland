@@ -101,7 +101,9 @@ are screen directions, columns are idle / walk / crouch frames); if a `_r` sheet
 back to the old pixel sheet. After re-rendering, open the project in the editor (or run
 `godot --headless --import`) so Godot picks up the new images.
 
-Debug runs (desktop): `godot --path . -- --autostart --shots | --tour | --soak | --fade | --char | --bestiary`
+Base building: open the camp menu (B / CAMP) near a camp and pick **Build**. Choose a material and a piece, then tap or click to place one, or drag to lay a run of walls or a patch of floor (R rotates single pieces, 1-5 pick the material, Esc leaves). Pieces sit on tile edges like building walls, block movement, and doors swing shut on their own. Sprites: `tools/render3d/port_build.py`, preview sheet `tools/render3d/build_preview.py`.
+
+Debug runs (desktop): `godot --path . -- --autostart --shots | --tour | --soak | --fade | --char | --bestiary | --build`
 write screenshots to `user://shots`.
 
 ## Next up (Milestone 2+)

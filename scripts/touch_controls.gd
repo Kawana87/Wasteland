@@ -7,6 +7,8 @@ signal action(name: String)
 
 const STICK_R := 70.0
 var enabled := false
+var build_mode := false               # right-side touches drive the build cursor instead of aiming
+var build_touch := -1
 var sticks := {"L": {}, "R": {}}      # side -> {id, origin, vec}
 var held := {}                        # touch index -> button name
 var buttons := [
@@ -44,10 +46,20 @@ func _input(ev: InputEvent) -> void:
 		if not enabled:
 			enabled = true
 		var p: Vector2 = get_global_transform_with_canvas().affine_inverse() * ev.position
+		if build_mode and Game.I and Game.I.base:
+			var bar: Control = Game.I.base.bar
+			if ev.pressed and p.x >= size.x * 0.5 and build_touch < 0 and not (bar and bar.visible and bar.get_global_rect().has_point(ev.position)):
+				build_touch = ev.index
+				Game.I.base.press(ev.position)
+				return
+			if not ev.pressed and ev.index == build_touch:
+				build_touch = -1
+				Game.I.base.release(ev.position)
+				return
 		if ev.pressed:
 			if Game.I and Game.I.hud.menu_open():
 				return
-			var bn := _btn_at(p)
+			var bn := "" if build_mode else _btn_at(p)
 			if bn != "":
 				held[ev.index] = bn
 				action.emit(bn)
@@ -62,6 +74,9 @@ func _input(ev: InputEvent) -> void:
 					sticks[side] = {}
 		queue_redraw()
 	elif ev is InputEventScreenDrag:
+		if build_mode and ev.index == build_touch and Game.I and Game.I.base:
+			Game.I.base.move(ev.position)
+			return
 		var p: Vector2 = get_global_transform_with_canvas().affine_inverse() * ev.position
 		for side in sticks:
 			var st: Dictionary = sticks[side]
@@ -77,7 +92,7 @@ func _draw() -> void:
 	if not enabled:
 		return
 	var font := get_theme_default_font()
-	for b in buttons:
+	for b in ([] if build_mode else buttons):
 		var c := _btn_center(b)
 		draw_circle(c, BTN_R, Color(0.95, 0.76, 0.42, 0.18))
 		draw_arc(c, BTN_R, 0, TAU, 32, Color(0.95, 0.76, 0.42, 0.8), 2.0)

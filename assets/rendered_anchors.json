@@ -111,6 +111,14 @@
 26,
 45
 ],
+"bw_concrete_gateopen_x": [
+2,
+45
+],
+"bw_concrete_gateopen_y": [
+26,
+45
+],
 "bw_concrete_half_x": [
 2,
 45
@@ -143,6 +151,14 @@
 26,
 45
 ],
+"bw_fence_gateopen_x": [
+2,
+45
+],
+"bw_fence_gateopen_y": [
+26,
+45
+],
 "bw_fence_wall_x": [
 2,
 45
@@ -172,6 +188,14 @@
 45
 ],
 "bw_scrap_gate_y": [
+26,
+45
+],
+"bw_scrap_gateopen_x": [
+2,
+45
+],
+"bw_scrap_gateopen_y": [
 26,
 45
 ],
@@ -223,6 +247,14 @@
 26,
 45
 ],
+"bw_stone_gateopen_x": [
+2,
+45
+],
+"bw_stone_gateopen_y": [
+26,
+45
+],
 "bw_stone_half_x": [
 2,
 45
@@ -268,6 +300,14 @@
 45
 ],
 "bw_wood_gate_y": [
+26,
+45
+],
+"bw_wood_gateopen_x": [
+2,
+45
+],
+"bw_wood_gateopen_y": [
 26,
 45
 ],

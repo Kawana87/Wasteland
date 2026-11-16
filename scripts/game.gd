@@ -30,6 +30,7 @@ var enemies: Array = []
 var camps: Array = []
 var survivors: Array = []
 var views: Array = []
+var base: BaseBuild
 var crate_nodes := {}            # Crate -> Sprite2D
 var tree_nodes := {}             # tile index -> Sprite2D
 var chop_hits := {}
@@ -138,6 +139,8 @@ func _ready() -> void:
 			_debug_desks.call_deferred()
 		if "--ruins" in args:
 			_debug_ruins.call_deferred()
+		if "--build" in args:
+			_debug_build.call_deferred()
 		return
 	hud.show_title("A new world is generated every time: rolling hills and cliffs out west, a ruined city to the east.\nRaiders hold plateau camps; feral ghouls haunt the ruins; brutes and shellbacks roam the wilds.\nFriendly settlements trade gear for scrap. Set up camps anywhere and fast travel between them.\n\nPC: WASD move · mouse aim · left click shoot · F / right click melee · Space jump · C sneak\nE use / talk / chop / climb / stairs · I inventory · H heal · B camp menu · T fast travel · V CRT filter\nGamepad: left stick move · right stick aim · RT shoot · A jump · X use · B melee · Y sneak\nTouch: left thumb move · right thumb aim and shoot · buttons on the right", start_new_world)
 
@@ -195,6 +198,9 @@ func start_new_world() -> void:
 	c.setup(world.start, "Home Camp", true)
 	_light_for("campfire_decor", world.start, world.hz(world.start.x, world.start.y))
 	camps.append(c)
+	base = BaseBuild.new()
+	root.add_child(base)
+	base.setup(self, world)
 	player = Player.new()
 	root.add_child(player)
 	player.wpos = world.start + Vector2(0, 1.5)
@@ -596,6 +602,9 @@ func _unhandled_input(ev: InputEvent) -> void:
 		return
 	if state != "play" or hud.menu_open():
 		return
+	if base and base.active and _build_input(ev):
+		get_viewport().set_input_as_handled()
+		return
 	if ev.is_action_pressed("use"): interact()
 	elif ev.is_action_pressed("melee"): melee()
 	elif ev.is_action_pressed("jump"): player.start_jump()
@@ -606,6 +615,25 @@ func _unhandled_input(ev: InputEvent) -> void:
 	elif ev.is_action_pressed("heal"): quick_heal()
 	elif ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_RIGHT and ev.device != InputEvent.DEVICE_ID_EMULATION:
 		melee()
+
+## Build mode: the mouse places pieces, R rotates, 1-5 pick the tier, Esc leaves.
+func _build_input(ev: InputEvent) -> bool:
+	if ev is InputEventMouseButton and ev.button_index == MOUSE_BUTTON_LEFT and ev.device != InputEvent.DEVICE_ID_EMULATION:
+		if ev.pressed: base.press(ev.position)
+		else: base.release(ev.position)
+		return true
+	if ev is InputEventMouseMotion and ev.device != InputEvent.DEVICE_ID_EMULATION:
+		base.move(ev.position)
+		return false
+	if ev is InputEventKey and ev.pressed and not ev.echo:
+		match ev.keycode:
+			KEY_R: base.turn(); return true
+			KEY_ESCAPE: base.leave(); return true
+			KEY_1, KEY_2, KEY_3, KEY_4, KEY_5:
+				base.select(BaseBuild.TIERS[ev.keycode - KEY_1], ""); return true
+	if ev.is_action_pressed("camp"):
+		base.leave(); return true
+	return false
 
 func _on_touch_action(n: String) -> void:
 	using_touch = true
@@ -639,6 +667,7 @@ func _read_aim() -> Vector2:
 	return Vector2.ZERO
 
 func _wants_fire() -> bool:
+	if base and base.active: return false
 	if hud.touch.firing(): return true
 	if Input.get_joy_axis(0, JOY_AXIS_TRIGGER_RIGHT) > 0.5: return true
 	return not using_touch and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)
@@ -843,6 +872,9 @@ func _view_of(bid: int) -> BuildingView:
 
 func set_door(sg: World.Seg, st: String) -> void:
 	world.set_door(sg, st)
+	if sg.bid == -1:
+		base.refresh(sg)
+		return
 	var v := _view_of(sg.bid)
 	if v: v.refresh_seg(sg)
 
@@ -1078,6 +1110,8 @@ func open_camp_menu() -> void:
 	var c = camp_near(player.wpos, 3.2)
 	var line := "Shared stash: %d scrap · %d cloth · %d wood" % [stash.scrap, stash.cloth, stash.wood]
 	var btns := []
+	if base.can_build_here() == "":
+		btns.append(["Build: walls, doors, floors…", base.enter, false])
 	if c != null:
 		for u in UPG:
 			if c.up[u.k]:
@@ -1686,6 +1720,83 @@ func _debug_char() -> void:
 			_update_camera()
 			await get_tree().process_frame
 			await _snap(out + "/char_%s_%d.png" % [mode, k])
+	get_tree().quit()
+
+func _debug_build() -> void:
+	# Base building check: lays out a compound by hand and through the pointer code path, tests
+	# collision, shots through windows, a door, removal, the ghost, and takes screenshots.
+	var out := "user://shots"
+	DirAccess.make_dir_recursive_absolute(out)
+	await get_tree().create_timer(1.0).timeout
+	for e in enemies: e.visible = false; e.aw = 0.0; e.wpos = Vector2(2, 2)
+	stash = {"scrap": 400, "cloth": 50, "wood": 400}
+	var o := Vector2(floor(world.start.x) + 2.0, floor(world.start.y) - 3.0)
+	var ok := 0; var bad := []
+	var plan := [
+		[Vector3i(0, 0, 0), "concrete", "wall"], [Vector3i(1, 0, 0), "concrete", "window"], [Vector3i(2, 0, 0), "concrete", "wall"],
+		[Vector3i(0, 3, 0), "concrete", "wall"], [Vector3i(1, 3, 0), "concrete", "door"], [Vector3i(2, 3, 0), "concrete", "wall"],
+		[Vector3i(0, 0, 1), "concrete", "wall"], [Vector3i(0, 1, 1), "concrete", "window"], [Vector3i(0, 2, 1), "concrete", "wall"],
+		[Vector3i(3, 0, 1), "wood", "wall"], [Vector3i(3, 1, 1), "wood", "door"], [Vector3i(3, 2, 1), "wood", "wall"],
+		[Vector3i(-2, 5, 0), "fence", "wall"], [Vector3i(-1, 5, 0), "fence", "wall"], [Vector3i(0, 5, 0), "fence", "gate"],
+		[Vector3i(1, 5, 0), "fence", "wall"], [Vector3i(2, 5, 0), "stone", "half"], [Vector3i(3, 5, 0), "stone", "half"],
+	]
+	for p in plan:
+		var k: Vector3i = p[0] + Vector3i(int(o.x), int(o.y), 0)
+		var why := base.edge_problem(k)
+		if why == "":
+			base.place(k, p[1], p[2]); ok += 1
+		else:
+			bad.append("%s %s: %s" % [str(k), p[2], why])
+	for y in 3:
+		for x in 3:
+			var t := Vector2i(int(o.x) + x, int(o.y) + y)
+			if base.floor_problem(t) == "": base.place_floor(t, "wood" if x == 0 else "concrete")
+	print("BUILD placed %d, refused %d %s" % [ok, bad.size(), str(bad)])
+	# collision: can't stand on a wall, can inside the room
+	print("BUILD stand-on-wall=%s stand-inside=%s" % [str(world.can_stand(o + Vector2(0.5, 0.0), 0.25, 0)), str(world.can_stand(o + Vector2(1.5, 1.5), 0.25, 0))])
+	# shots: window lets shots through, wall stops them
+	print("BUILD shot-through-window=%s shot-through-wall=%s" % [str(not world.blocks_shot(o + Vector2(1.5, 0.0), 10.0, 0)), str(not world.blocks_shot(o + Vector2(0.5, 0.0), 10.0, 0))])
+	# pointer path: drag a run of scrap walls along x via screen coordinates
+	base.enter()
+	base.select("scrap", "wall")
+	var a := o + Vector2(5.2, 0.0); var b := o + Vector2(8.6, 0.1)
+	base.press(to_hud(Iso.to_screen(a.x, a.y, world.hz(a.x, a.y))))
+	base.move(to_hud(Iso.to_screen(b.x, b.y, world.hz(b.x, b.y))))
+	print("BUILD drag targets: %s" % str(base.targets(base.drag_a, base.drag_b)))
+	base.release(to_hud(Iso.to_screen(b.x, b.y, world.hz(b.x, b.y))))
+	print("BUILD pieces now %d, floors %d, stash %s" % [base.pieces.size(), base.floors.size(), str(stash)])
+	# door
+	var dk := Vector3i(int(o.x) + 1, int(o.y) + 3, 0)
+	var dseg: World.Seg = base.pieces[dk].seg
+	open_door(dseg)
+	print("BUILD door opened=%s solid=%s" % [dseg.door, str(dseg.solid)])
+	player.wpos = o + Vector2(1.5, 4.5)
+	await get_tree().create_timer(0.5).timeout
+	await _snap(out + "/build_front.png")
+	player.wpos = o + Vector2(4.5, 4.5)
+	await get_tree().create_timer(3.0).timeout
+	print("BUILD door after waiting=%s" % dseg.door)
+	# ghost: hover a run and screenshot
+	base.select("wood", "wall")
+	var ga := o + Vector2(-2.0, 7.0); var gb := o + Vector2(-2.0, 10.4)
+	base.press(to_hud(Iso.to_screen(ga.x, ga.y, world.hz(ga.x, ga.y))))
+	base.move(to_hud(Iso.to_screen(gb.x, gb.y, world.hz(gb.x, gb.y))))
+	player.wpos = o + Vector2(2.5, 7.5)
+	await get_tree().create_timer(0.4).timeout
+	await _snap(out + "/build_ghost.png")
+	base.release(to_hud(Iso.to_screen(gb.x, gb.y, world.hz(gb.x, gb.y))))
+	# behind the compound: walls in front should fade
+	player.wpos = o + Vector2(1.5, -0.7)
+	await get_tree().create_timer(0.4).timeout
+	await _snap(out + "/build_behind.png")
+	player.wpos = o + Vector2(1.5, 1.5)
+	await get_tree().create_timer(0.4).timeout
+	await _snap(out + "/build_inside.png")
+	# remove
+	base.select("", "remove")
+	var rk := Vector3i(int(o.x) + 2, int(o.y), 0)
+	base.remove(rk)
+	print("BUILD removed=%s stash %s" % [str(not base.pieces.has(rk)), str(stash)])
 	get_tree().quit()
 
 func _snap(path: String) -> void:
