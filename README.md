@@ -1,9 +1,8 @@
 # Wasteland (working title)
 
-A cozy isometric 16-bit post-apocalyptic survival game made in **Godot 4.7**: explore a procedurally generated
-region, loot ruined buildings, dodge (or fight) raiders and mutants, chop wood, and grow a network of camps.
-
-This is **Milestone 1**: the core loop running in Godot with placeholder art.
+An isometric post-apocalyptic survival game made in **Godot 4.7**: explore one big continuous wasteland,
+the Sable Wastes, loot ruined buildings, dodge (or fight) raiders and mutants, trade goods between towns,
+and build bases out in the wilds.
 
 ## Opening the project
 
@@ -28,12 +27,13 @@ The first open takes a moment while Godot imports the sprites.
 | Aim | Mouse | Right stick | Right thumb on the right half |
 | Shoot | Left click | RT | Push the right thumb far |
 | Melee | F / right click | B | HIT |
-| Jump | Space | A | JUMP |
+| Jump | Space | A | — |
 | Sneak (toggle) | C | Y | SNEAK |
 | Use / chop / climb / stairs | E | X | USE |
 | Camp menu | B | Back | CAMP |
 | Inventory / gear | I or Tab | Start | INV |
-| Quick heal (med kit, then food) | H | LB | HEAL |
+| Quick heal (med kit, then food) | H | LB | (use items in INV) |
+| World map | M | | MAP |
 | Fast travel | T | | (from the camp menu) |
 | CRT filter | V | | CRT button |
 
@@ -49,7 +49,26 @@ The first open takes a moment while Godot imports the sprites.
 - **Varied layouts:** buildings are made of several parts (L, T and U shapes) and can mix storeys,
   e.g. a two-storey house with a one-storey wing.
 
-- **New world every start:** sloped hills and cliffs in the west, a ruined city in the east. Highways, streets and dirt tracks wind and curve, with wrecked cars at every angle, power lines, jersey barriers and roadside junk.
+- **The Sable Wastes — one continuous world:** 2048×2048 tiles, about ten minutes to walk edge to edge, streamed in
+  32×32-tile chunks as you go (nothing is generated until you get near it, and things stay as you left them). It is
+  built from the world map itself: the same hills, woods, farms, fens, salt flats, red canyons, glass crater, Lake
+  Winona, the Sable River and the ruins of Port Sterling, with the same roads (interstates, highways, roads and dirt
+  tracks, on causeways over the water).
+- **All 50 map locations are in the world:** towns and hubs with traders, settlers and their own speciality
+  (purifiers by the lake, fields in the fens, salt pans, glass furnaces...), dungeons held by raiders or ghouls with
+  good loot, and roadside landmarks. Port Sterling is built block by block on a street grid from the city density.
+- **You never quite know what's out there:** small sites scattered through the wilds — raider-held gas stations,
+  survivors round a campfire (sometimes with a trader), wrecked caravans, mutant nests, toxic spills, scavenger
+  shacks — plus roaming encounters: raider gangs, mutant packs, travelling merchants, stashes glinting in the dirt.
+- **Trade goods:** water, produce, salt, crater glass, copper wire, fuel and old-world tech. Every town makes something
+  cheaply and pays well for what it lacks (dry country pays most for water). Buy low, haul it, sell high. The map card
+  shows what each town sells cheap and pays well for.
+- **Origins:** start as a Patchwork drifter, a Clearwater water-runner, an Iron Gate ex-con, a Redwall scavenger or a
+  Greenmarsh farmhand — each starts somewhere different with its own upside and catch.
+- **World map:** green Pip-Boy style screen with your position, camps and every place you've discovered (get within
+  sight of a place to put it on the map). Zoom in on yourself, and fast travel to anywhere you've found.
+- **Saving:** the game autosaves (and saves when you leave the app); **Continue** on the title screen picks up where
+  you left off — your gear, camps, stash, bases, discoveries, and what you've looted and killed.
 - **Wasteland feel:** rubble, toxic spills, dead bushes, bones, crows that scatter when you get close, drifting dust, a washed-out colour grade and a day/night cycle (8 minutes per day).
 - **Buildings:** houses, shops, offices, garages and shacks with furnished interiors (kitchens, beds, shelves, desks, counters). Some are ruined with collapsed corners. Pitched or flat roofs. Second floors show from outside. Buildings and trees go see-through when you walk behind them.
 - **Settlements:** friendly tin-shack villages with a campfire, gardens, a water pump, settlers, cattle and a trader. Pay the trader in scrap for guns, armour, ammo and med kits, or sell spare gear.
