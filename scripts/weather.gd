@@ -51,7 +51,7 @@ func step(delta: float, g) -> void:
 			var every: float = 5.0 * (2.0 if g.perk("rad_skin") > 0 else 1.0)
 			if rad_t > every:
 				rad_t = 0.0
-				p.hp -= 1.0
+				p.hp = maxf(0.0, p.hp - 1.0)
 				g.add_text(p.wpos, "-1 rads", Color("9fe870"), 1.4)
 				if p.hp <= 0.0:
 					g.hurt_player(p.wpos, 1.0)

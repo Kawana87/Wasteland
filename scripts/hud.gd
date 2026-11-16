@@ -27,6 +27,7 @@ var radio_l: Label
 var radio_t := 0.0
 var radio_btn: Button
 var aim_btn: Button
+var perk_btn: Button
 signal radio_toggled
 # filled by Game each frame
 var hp := 20.0
@@ -86,7 +87,7 @@ func _ready() -> void:
 	card_l.add_theme_color_override("font_outline_color", Color(0, 0.05, 0.01))
 	card_l.add_theme_constant_override("outline_size", 8)
 	card_l.set_anchors_preset(Control.PRESET_CENTER)
-	card_l.position = Vector2(-400, -150)
+	card_l.position = Vector2(-400, 60)        # just below the player: clear of toasts, speech above heads and the prompt
 	card_l.size = Vector2(800, 90)
 	card_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	card_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -126,6 +127,15 @@ func _ready() -> void:
 	aim_btn.add_theme_font_size_override("font_size", 14)
 	aim_btn.pressed.connect(func(): Game.I.set_aim_assist(not Game.I.aim_assist))
 	root.add_child(aim_btn)
+	perk_btn = Button.new()
+	perk_btn.text = "PERK"
+	perk_btn.focus_mode = Control.FOCUS_NONE
+	term_button(perk_btn)
+	perk_btn.add_theme_font_size_override("font_size", 14)
+	perk_btn.add_theme_color_override("font_color", Color(0.95, 0.85, 0.4))
+	perk_btn.pressed.connect(func(): Game.I._offer_perk())
+	perk_btn.visible = false
+	root.add_child(perk_btn)
 	prompt_l = _label(18)
 	prompt_l.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
 	prompt_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -134,7 +144,7 @@ func _ready() -> void:
 	root.add_child(prompt_l)
 	toast_box = PanelContainer.new()
 	toast_box.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	toast_box.position = Vector2(-330, 70)
+	toast_box.position = Vector2(-330, 172)    # below the CRT / RADIO / AIM row, clear of the compass
 	toast_box.custom_minimum_size = Vector2(660, 0)
 	toast_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	toast_box.add_theme_stylebox_override("panel", _box(Color(0.1, 0.08, 0.14, 0.85)))
@@ -240,6 +250,12 @@ func _next_toast() -> void:
 	if toast_q.size() > 2:
 		toast_t = 2.0
 
+func clear_toasts() -> void:
+	toast_q.clear()
+	toast_t = 0.0
+	toast_cur = ""
+	toast_box.visible = false
+
 func show_card(t: String) -> void:
 	card_l.text = t
 	card_t = 3.2
@@ -312,6 +328,9 @@ func _process(delta: float) -> void:
 	crt_btn.position = Vector2(12, sp.position.y + sp.size.y + 6)
 	radio_btn.position = Vector2(crt_btn.position.x + crt_btn.size.x + 8, crt_btn.position.y)
 	aim_btn.position = Vector2(radio_btn.position.x + radio_btn.size.x + 8, crt_btn.position.y)
+	perk_btn.position = Vector2(aim_btn.position.x + aim_btn.size.x + 8, crt_btn.position.y)
+	perk_btn.visible = Game.I.perk_points > 0 and Game.I.state == "play"
+	perk_btn.text = "PERK (%d)" % Game.I.perk_points if Game.I.perk_points > 1 else "PERK"
 	if card_t > 0.0:
 		card_t -= delta
 		card_l.modulate.a = clampf(card_t, 0.0, 1.0) * clampf((3.2 - card_t) * 3.0, 0.0, 1.0)

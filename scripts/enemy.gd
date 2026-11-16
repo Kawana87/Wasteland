@@ -4,7 +4,7 @@ extends Actor
 ## 0-35 unaware (wander/patrol), 35-75 suspicious "?" (go check the last noise), 75+ alert "!".
 
 ## Each attacker's time between hits on the player (seconds, after the windup).
-const ATK_CD := {"rat": 0.9, "ghoul": 1.0, "shellback": 1.4, "brute": 1.7, "raider": 1.0}
+const ATK_CD := {"rat": 0.9, "ghoul": 1.15, "shellback": 1.4, "brute": 1.7, "raider": 1.0}
 const STATS := {
 	#           hp  chase  dmg  windup sense  fears fire
 	"rat":       [2,  1.3,  1,   0.55,  0.7,   true],
@@ -237,10 +237,13 @@ func think(delta: float, p: Player, p_safe: bool) -> void:
 			pause = randf_range(0.4, 1.2)
 		if pause > 0.0 and st < 2:
 			sp = 0.0
+	# melee attackers stop once they're in reach instead of running through you and circling back
+	var close := st == 2 and type != "raider" and fl == p.fl and d < 2.0
+	if close and d < 0.7 and charge_t <= 0.0: sp = 0.0
 	var dir := (tgt - wpos)
 	dir = dir.normalized() if dir.length() > 0.001 else head
-	dir = dir.rotated(sin(g.time * 2.3 + seed_off) * wob)
-	head = head.lerp(dir, minf(1.0, delta * (6.0 if type == "raider" else 2.5))).normalized()
+	dir = dir.rotated(sin(g.time * 2.3 + seed_off) * (wob * 0.2 if close else wob))
+	head = head.lerp(dir, minf(1.0, delta * (6.0 if type == "raider" or close else 2.5))).normalized()
 	if sp > 0.0:
 		if not move(head * sp * delta) and patrol.size() > 0:
 			pi = (pi + 1) % patrol.size()

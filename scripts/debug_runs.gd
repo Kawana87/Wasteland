@@ -282,6 +282,7 @@ func _debug_play() -> void:
 	for e in g.enemies: e.queue_free()
 	g.enemies.clear()
 	g.inv_add("ammo_pistol", 40); g.inv_add("medkit", 3)
+	var mk0 := g.inv_count("medkit")
 	for k in 6:
 		var sp := {"type": "ghoul" if k < 4 else "raider", "pos": at + Vector2.from_angle(k * 1.05) * 9.0, "home": at, "home_r": 12.0}
 		var e := g._spawn_enemy(sp)
@@ -302,16 +303,16 @@ func _debug_play() -> void:
 			locks += 1
 			if first_lock < 0: first_lock = g.time - t0
 			g.shoot()
-		if g.player.hp < g.player.max_hp * 0.4 and g.inv_count("medkit") > 0: g.use_item("medkit")
+		if g.player.hp < g.player.max_hp * 0.4 and g.inv_count("medkit") > 0 and g.busy.is_empty(): g.use_item("medkit")
 		if g.state != "play": plog.append("went down at t=%.0f" % (g.time - t0)); break
 		if i == 200: await _snap("user://shots/play_fight.png")
 		if g.enemies.filter(func(e): return not e.dead).is_empty():
 			plog.append("all dead at t=%.1f s" % (g.time - t0)); break
-	plog.append("fight: kills %d/6, ammo used %d, hp %d -> %d, first lock %.1f s, frames locked %d, medkits used %d" % [g.player.kills - k0, a0 - g.inv_count("ammo_pistol"), hp0, g.player.hp, first_lock, locks, 3 + 0 - g.inv_count("medkit") + (2 if g.origin_id == "drifter" else 0)])
+	plog.append("fight: kills %d/6, ammo used %d, hp %d -> %d, first lock %.1f s, frames locked %d, medkits used %d" % [g.player.kills - k0, a0 - g.inv_count("ammo_pistol"), hp0, g.player.hp, first_lock, locks, mk0 - g.inv_count("medkit")])
 	for l in plog: print("PLAY ", l)
 	check("bot reaches town", plog[0].contains("reached=true") or plog.any(func(x): return x.contains("reached=true")), "walk to start town")
-	check("fight costs health", taken >= 12, "took %d damage, %d -> %d HP (target 12+ taken)" % [taken, hp0, g.player.hp])
-	check("fight is winnable", g.state == "play", "state %s" % g.state)
+	print("PLAY fight damage taken: %d (%d -> %d HP)" % [taken, hp0, g.player.hp])
+	check("fight is winnable", g.state == "play" and g.player.kills - k0 == 6 and mk0 - g.inv_count("medkit") <= 1, "state %s, kills %d/6, med kits used %d (target: win using at most 1)" % [g.state, g.player.kills - k0, mk0 - g.inv_count("medkit")])
 	finish()
 
 func _wants_fire_bot() -> bool:
@@ -774,6 +775,7 @@ func _debug_soak() -> void:
 			for a in ["left", "right", "up", "down"]: Input.action_release(a)
 			g.player.inv = 0.0
 			g.hud.hide_menu()
+			if g.invs.visible: g.invs.close_screen()   # equipping above reopens the STATUS screen
 			var lp0 := g.inv_count("lockpick")
 			g.open_door(sg)
 			for i in 900:
@@ -781,7 +783,7 @@ func _debug_soak() -> void:
 				if g.busy.is_empty(): break
 			# a snapped pick is a working lock too (40% fail chance per try)
 			picked = 1 if sg.door == "open" or g.inv_count("lockpick") < lp0 else -1
-			if picked < 0: print("DOOR pick failed: door %s, busy %s, toast '%s', inv %.2f" % [sg.door, str(g.busy), g.hud.toast_l.text, g.player.inv])
+			if picked < 0: print("DOOR pick failed: door %s, busy %s, toast '%s', inv %.2f, state %s, menu %s, map %s, invs %s" % [sg.door, str(g.busy), g.hud.toast_l.text, g.player.inv, g.state, str(g.hud.menu_open()), str(g.wmap.visible), str(g.invs.visible)])
 		if sg.door == "barred" and bashed == 0:
 			g.player.wpos = Vector2(b.out) + Vector2(0.5, 0.5)
 			for i in 30:
@@ -791,7 +793,7 @@ func _debug_soak() -> void:
 	print("DOORS picked=%d bashed=%d sealed=%d lockpicks=%d" % [picked, bashed, sealed_n, g.inv_count("lockpick")])
 	print("SOAK DONE state=%s hp=%d kills=%d camps=%d enemies=%d" % [g.state, g.player.hp, g.player.kills, g.camps.size(), g.enemies.size()])
 	check("soak survives", g.state in ["play", "travel"] and g.camps.size() > 0, "state %s, camps %d" % [g.state, g.camps.size()])
-	check("doors work", picked >= 0 and bashed >= 0, "picked %d bashed %d" % [picked, bashed])
+	check("doors work", (picked > 0 or bashed > 0) and picked >= 0 and bashed >= 0, "picked %d bashed %d (needs at least one real success)" % [picked, bashed])
 	finish()
 
 # ------------------------------------------------------------------ balance checks (Review 1 retest)
@@ -913,12 +915,12 @@ func _debug_econ_check() -> void:
 	check("home trader found", home != null, "trader at %s" % g.world.settlements[hsi].name)
 	if home:
 		var cap := Economy.purse(g.econ, g.world, hsi, g.now())
-		g.econ.purse[g.world.settlements[hsi].id] = [10, g.now()]
+		g.econ.purse[g.world.settlements[hsi].id] = [30, g.now()]
 		var sc: int = g.player.carry.scrap
 		var had := g.inv_count(g2)
 		g._sell_good(home, g2, 30, m2[g2].sell)
 		var paid: int = g.player.carry.scrap - sc
-		check("trader purse limits", paid <= 10 and had - g.inv_count(g2) < 30 and cap > 10, "a 10-scrap purse paid %d for %d units (full purse %d)" % [paid, had - g.inv_count(g2), cap])
+		check("trader purse limits", paid > 0 and paid <= 30 and had - g.inv_count(g2) < 30 and cap > 30, "a 30-scrap purse paid %d for %d of 30 units (full purse %d)" % [paid, had - g.inv_count(g2), cap])
 	g.hud.hide_menu()
 	check("stash stays at camp", g._scrap_total() == g.player.carry.scrap, "traders see %d (carry %d, stash %d)" % [g._scrap_total(), g.player.carry.scrap, g.stash.scrap])
 	finish()
@@ -931,10 +933,14 @@ func _open_spot() -> Vector2:
 		at += Vector2(6, 3)
 	return at
 
-func _idle_vs(n: int) -> float:
-	var at := _open_spot()
+func _idle_vs(n: int, at: Vector2 = Vector2.INF) -> float:
+	# damage per second from n ghouls on a player who just stands there. Measured over 12 s from the
+	# first hit with a huge health pool, so regen and dying don't muddy the numbers.
+	if at == Vector2.INF: at = _open_spot()
 	g.player.wpos = at
-	g.player.hp = g.player.max_hp
+	var mh := g.player.max_hp
+	g.player.max_hp = 1000.0
+	g.player.hp = 1000.0
 	g.player.inv = 0.0
 	g.player.sync(); g.rebase(); g._stream(true)
 	for e in g.enemies: e.queue_free()
@@ -943,22 +949,43 @@ func _idle_vs(n: int) -> float:
 		var e: Enemy = g._spawn_enemy({"type": "ghoul", "pos": at + Vector2.from_angle(k * TAU / n) * 2.0, "home": at, "home_r": 10.0})
 		e.aw = 100.0; e.last = at
 	var t0: float = g.time
-	while g.state == "play" and g.time - t0 < 60.0:
+	var hit_t := -1.0
+	var taken := 0.0
+	var hc0: int = g.hurt_calls
+	var hb0: int = g.hurt_blocked
+	var prev: float = g.player.hp
+	while g.time - t0 < 30.0:
 		await g.get_tree().process_frame
-	var t: float = g.time - t0
-	if g.state == "down":
-		while g.state != "play": await g.get_tree().process_frame
-	return t
+		g.player.wpos = at   # knockback would walk you out of reach
+		if g.player.hp < prev:
+			if hit_t < 0: hit_t = g.time
+			taken += prev - g.player.hp
+		prev = g.player.hp
+		if hit_t >= 0 and g.time - hit_t >= 12.0: break
+	var dists := []
+	for e in g.enemies: dists.append("%.1f" % e.wpos.distance_to(at))
+	print("COMBAT %d ghouls: %d hits, %d swallowed by the grace window, distances %s" % [n, g.hurt_calls - hc0, g.hurt_blocked - hb0, str(dists)])
+	for e in g.enemies: e.queue_free()
+	g.enemies.clear()
+	g.player.max_hp = mh
+	g.player.hp = mh
+	return taken / 12.0
 
 func _debug_combat_check() -> void:
 	await g.get_tree().create_timer(1.0).timeout
 	g.equip.body = ""; g.equip.head = ""
-	var t1 := await _idle_vs(1)
-	var t3 := await _idle_vs(3)
-	var t5 := await _idle_vs(5)
-	print("COMBAT idle down: 1 ghoul %.1fs, 3 ghouls %.1fs, 5 ghouls %.1fs" % [t1, t3, t5])
-	check("damage stacks (3)", t1 / maxf(t3, 0.1) >= 2.2, "3 ghouls %.1fx faster than 1 (target 2.5-3x)" % (t1 / maxf(t3, 0.1)))
-	check("damage stacks (5)", t1 / maxf(t5, 0.1) >= 3.0, "5 ghouls %.1fx faster than 1 (target 3x+)" % (t1 / maxf(t5, 0.1)))
+	# one fixed open spot, three runs each, averaged: a single run is too noisy
+	var spot := _open_spot()
+	var tt := {1: 0.0, 3: 0.0, 5: 0.0}
+	for run in 3:
+		for n in [1, 3, 5]:
+			var dps: float = await _idle_vs(n, spot)
+			tt[n] += dps / 3.0
+			print("COMBAT run %d: %d ghouls deal %.2f HP/s" % [run + 1, n, dps])
+	var d1: float = maxf(tt[1], 0.01)
+	print("COMBAT damage per second (avg of 3): 1 ghoul %.2f, 3 ghouls %.2f, 5 ghouls %.2f; 20 HP lasts %.0f / %.0f / %.0f s" % [tt[1], tt[3], tt[5], 20.0 / d1, 20.0 / maxf(tt[3], 0.01), 20.0 / maxf(tt[5], 0.01)])
+	check("damage stacks (3)", tt[3] / d1 >= 2.5, "3 ghouls hurt %.1fx as fast as 1 (target 2.5-3x)" % (tt[3] / d1))
+	check("damage stacks (5)", tt[5] / d1 >= 3.0, "5 ghouls hurt %.1fx as fast as 1 (target 3x+)" % (tt[5] / d1))
 	# hold-fire bot
 	var at := _open_spot()
 	g.player.wpos = at
@@ -967,22 +994,30 @@ func _debug_combat_check() -> void:
 	for e in g.enemies: e.queue_free()
 	g.enemies.clear()
 	g.inv_add("ammo_pistol", 60)
+	g.inv_add("medkit", 2)
+	var mk0 := g.inv_count("medkit")
+	var foes := []
 	for k in 6:
 		var e: Enemy = g._spawn_enemy({"type": "ghoul" if k < 4 else "raider", "pos": at + Vector2.from_angle(k * 1.05) * 9.0, "home": at, "home_r": 12.0})
 		e.aw = 100.0; e.last = at
+		foes.append(e)
 	var hp0: float = g.player.hp
 	var lowest := hp0
 	var t0: float = g.time
 	var won := false
 	while g.time - t0 < 30.0 and g.state == "play":
 		await g.get_tree().process_frame
+		for e in g.enemies:   # only the six we set up: nothing streamed in from nearby camps
+			if not foes.has(e) and not e.dead: e.queue_free(); g.enemies.erase(e); break
 		if g.locked != null: g.shoot()
+		if g.player.hp < g.player.max_hp * 0.4 and g.inv_count("medkit") > 0 and g.busy.is_empty(): g.use_item("medkit")
 		lowest = minf(lowest, g.player.hp)
-		if g.enemies.filter(func(e): return not e.dead).is_empty(): won = true; break
+		if foes.all(func(e): return not is_instance_valid(e) or e.dead): won = true; break
 	var lost := hp0 - lowest
 	var alive: Array = g.enemies.filter(func(e): return not e.dead)
 	print("COMBAT bot: won=%s, lowest hp %.0f (lost %.0f of %.0f), %.1fs, state %s, alive %s" % [won, lowest, lost, hp0, g.time - t0, g.state, str(alive.map(func(e): return "%s d%.1f aw%.0f hp%.0f" % [e.type, e.wpos.distance_to(g.player.wpos), e.aw, e.hp]))])
-	check("hold-fire bot is pushed", lost >= 12.0 or g.state != "play", "lost %.0f HP (target 12+ or needs a med kit)" % lost)
+	var used := mk0 - g.inv_count("medkit")
+	check("early fight: win using at most 1 med kit", won and used <= 1, "won %s, med kits used %d, lowest HP %.0f of %.0f" % [str(won), used, lowest, hp0])
 	# death drops a recovery bag with cargo
 	g.state = "play"
 	g.player.hp = g.player.max_hp
@@ -1067,6 +1102,37 @@ func _debug_ui_check() -> void:
 		for b in range(a + 1, rs.size()):
 			if rs[a].intersects(rs[b]): overlap = true
 	check("speech doesn't overlap", not overlap and rs.size() >= 4, "%d labels, overlap %s" % [rs.size(), str(overlap)])
+	# toast clear of the HUD buttons, and old messages don't follow you to a new place
+	g.hud.toast("A fairly long message to check that the box stays clear of the buttons on the left side.")
+	await g.get_tree().process_frame
+	await g.get_tree().process_frame
+	var tr := g.hud.toast_box.get_global_rect()
+	var hit := false
+	for b in [g.hud.crt_btn, g.hud.radio_btn, g.hud.aim_btn]:
+		if tr.intersects(b.get_global_rect()): hit = true
+	check("toast clear of HUD buttons", not hit, "toast %s" % str(tr))
+	g.hud.toast("Arrived at Somewhere Old")
+	g.hud.toast("Another old message")
+	g.hud.clear_toasts()   # what _begin_trip, enter_under, exit_under and respawn call
+	check("old messages cleared on travel", g.hud.toast_q.is_empty() and not g.hud.toast_box.visible, "%d queued" % g.hud.toast_q.size())
+	g.perk_points = 1
+	g.gain_xp(0)
+	await g.get_tree().process_frame
+	check("level-up isn't a pop-up", not g.hud.menu_open() and g.hud.perk_btn.visible, "menu %s, PERK button %s" % [str(g.hud.menu_open()), str(g.hud.perk_btn.visible)])
+	g.player.hp = 1
+	g.player.inv = 0.0
+	g.hurt_player(g.player.wpos + Vector2(1, 0), 6.0)
+	check("HP never negative", g.player.hp >= 0.0, "hp %.1f" % g.player.hp)
+	await g.get_tree().create_timer(0.2).timeout
+	if g.state == "down":
+		while g.state != "play": await g.get_tree().process_frame
+	g.hud.show_card("TEST PLACE\nDISCOVERED")
+	g.hud.toast("A message at the same time")
+	await g.get_tree().create_timer(0.6).timeout
+	var cr2: Rect2 = g.hud.card_l.get_global_rect()
+	cr2 = Rect2(cr2.position.x, cr2.position.y + 10, cr2.size.x, 70)   # the two text lines, not the label's padding
+	check("card clear of message and prompt", not cr2.intersects(g.hud.toast_box.get_global_rect()) and not cr2.intersects(g.hud.prompt_l.get_global_rect()), "card %s toast %s" % [str(g.hud.card_l.get_global_rect()), str(g.hud.toast_box.get_global_rect())])
+	await _snap("user://shots/ui_card.png")
 	g.using_touch = true
 	g.hud.touch.enabled = true
 	g.hud.touch.visible = true

@@ -21,12 +21,15 @@ func gain_xp(n: int, why: String = "") -> void:
 		level += 1
 		audio.play("levelup", Vector2.INF, -2.0, 0.0)
 		hud.show_card("LEVEL %d" % level)
-		_offer_perk.call_deferred()
+		if not Perks.choices(perks).is_empty():
+			perk_points += 1
+			# no pop-up mid-fight or mid-exploration: pick when you're ready
+			hud.toast("Level up! Tap PERK to choose a perk." if using_touch else "Level up! Press P (or the PERK button) to choose a perk.")
 
 
 func _offer_perk() -> void:
 	var opts := Perks.choices(perks)
-	if opts.is_empty(): return
+	if opts.is_empty() or perk_points <= 0: return
 	var btns := []
 	var lines := ["Level %d. Choose a perk:" % level]
 	for id in opts:
@@ -35,9 +38,12 @@ func _offer_perk() -> void:
 		var pid: String = id
 		btns.append([pd.name, func():
 			perks[pid] = perk(pid) + 1
+			perk_points -= 1
 			hud.hide_menu()
+			if perk_points > 0: _offer_perk.call_deferred()
 			recalc_max()
 			hud.toast("%s learned." % Perks.LIST[pid].name), false])
+	btns.append(["Later", hud.hide_menu, false])
 	hud.show_menu("Level up!", lines, btns)
 
 
@@ -486,6 +492,7 @@ func _encounters(delta: float) -> void:
 	var bk := world._bucket(key)
 	if r < 0.3:
 		var n := 2 + int(randf() * (2.0 + far * 3.0))
+		if p.distance_to(world.start) < World.EARLY_R: n = mini(n, World.EARLY_MAX)
 		for k in n:
 			var sp := {"type": "raider", "pos": at + Vector2(randf_range(-1.5, 1.5), randf_range(-1.5, 1.5)), "home": p, "home_r": 6.0, "roam": true, "chunk": key}
 			world.spawns.append(sp); bk.spawns.append(sp)

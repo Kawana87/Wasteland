@@ -2622,6 +2622,27 @@ func _tidy_new() -> void:
 				if in_bounds(xx, yy) and T[idx(xx, yy)] == TREE: T[idx(xx, yy)] = GRASS
 	_fix_spawns(_mark.spawns)
 	_fix_critters(_mark.critters)
+	_cap_groups(_mark.spawns)
+
+## New players shouldn't meet packs of 5-6 in their first few minutes: near the home camp, any
+## group (spawns sharing a home) is trimmed to 3.
+const EARLY_R := 300.0
+const EARLY_MAX := 3
+func _cap_groups(from: int) -> void:
+	if reserve_r <= 0.0: return
+	var groups := {}
+	for i in range(from, spawns.size()):
+		var sp: Dictionary = spawns[i]
+		if sp.has("boss") or sp.pos.distance_to(start) > EARLY_R: continue
+		var k := pkey(sp.get("home", sp.pos))
+		if not groups.has(k): groups[k] = []
+		groups[k].append(i)
+	var drop := []
+	for k in groups:
+		var lst: Array = groups[k]
+		for j in range(EARLY_MAX, lst.size()): drop.append(lst[j])
+	drop.sort()
+	for j in range(drop.size() - 1, -1, -1): spawns.remove_at(drop[j])
 
 func _grid(d: Decor) -> void:
 	if not d.solid: return

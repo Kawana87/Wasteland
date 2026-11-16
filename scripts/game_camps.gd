@@ -60,6 +60,7 @@ func enter_under(portal: String, at: Vector2) -> void:
 		hud.toast("Not with enemies on your tail.")
 		return
 	var inf := Underground.info(portal)
+	hud.clear_toasts()
 	travel = {"to": {"cname": inf.name, "wpos": at}, "t": 0.0, "done": false, "text": "Going down into %s…" % inf.name,
 		"swap": func(): _swap_under(portal, at)}
 	state = "travel"
@@ -67,6 +68,7 @@ func enter_under(portal: String, at: Vector2) -> void:
 
 func exit_under() -> void:
 	if under == "": return
+	hud.clear_toasts()
 	travel = {"to": {"cname": "The Sable Wastes", "wpos": ow.pos}, "t": 0.0, "done": false, "text": "Climbing back out…", "swap": _swap_out}
 	state = "travel"
 
@@ -417,6 +419,7 @@ func _begin_trip(to: Dictionary, confirmed: bool = false) -> void:
 			[["Go anyway", func(): hud.hide_menu(); _begin_trip(to, true), false], ["Cancel", hud.hide_menu, false]])
 		return
 	save_game()
+	hud.clear_toasts()
 	var ambush: bool = randf() < tc.ambush
 	travel = {"to": to, "t": 0.0, "done": false, "cost": tc, "ambush": ambush, "from": player.wpos}
 	state = "travel"
@@ -430,7 +433,7 @@ func _arrive_trip() -> void:
 		advance_time(tc.hours * 0.5)
 		var p := player.wpos
 		var key := World.ckey(World.chunk_of(p).x, World.chunk_of(p).y)
-		for k in randi_range(3, 4):
+		for k in (mini(randi_range(3, 4), World.EARLY_MAX) if p.distance_to(world.start) < World.EARLY_R else randi_range(3, 4)):
 			var at := p + Vector2.from_angle(randf() * TAU) * randf_range(5.0, 7.0)
 			if not world.can_stand(at, 0.3, 0) or world.building_at(at.x, at.y) != 0: continue
 			var sp := {"type": "raider", "pos": at, "home": p, "home_r": 7.0, "roam": true, "chunk": key}

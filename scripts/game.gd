@@ -257,7 +257,7 @@ func start_new_world(save: Dictionary = {}, oid: String = "drifter") -> void:
 	if save.is_empty():
 		econ = {"sat": {}, "purse": {}, "stock": {}}; days = 0; trade_xp_day = {}; recovery = {}; bruised_t = 0.0
 	if save.is_empty():
-		xp = 0; level = 1; perks = {}; jobs = []; notes_read = []; examined = {}; under_state = {}
+		xp = 0; level = 1; perk_points = 0; perks = {}; jobs = []; notes_read = []; examined = {}; under_state = {}
 	greeted = {}
 	weather = Weather.new()
 	root.add_child(weather)
@@ -309,6 +309,8 @@ func _unhandled_input(ev: InputEvent) -> void:
 		return
 	if ev is InputEventKey and ev.pressed and not ev.echo and ev.keycode == KEY_M and state == "play" and not hud.menu_open():
 		wmap.open(); return
+	if ev is InputEventKey and ev.pressed and not ev.echo and ev.keycode == KEY_P and state == "play" and not hud.menu_open() and perk_points > 0:
+		_offer_perk(); return
 	if state != "play" or hud.menu_open():
 		return
 	if base and base.active and _build_input(ev):
@@ -442,6 +444,7 @@ func _process_inner(delta: float) -> void:
 		save_game()
 	var mv := _read_move()
 	update_lock()
+	_apply_pending_hits()
 	_update_busy(delta, mv.length() > 0.2)
 	if not busy.is_empty(): mv = Vector2.ZERO
 	p.step(delta, mv, _read_aim())

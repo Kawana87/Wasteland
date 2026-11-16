@@ -362,9 +362,10 @@ func _update_busy(delta: float, moving: bool) -> void:
 	if busy.is_empty():
 		return
 	if busy.get("kind", "") == "heal":
-		if moving or player.hp < busy.hp0:
+		# moving stops it; so does a beating (a third of your health) — a scratch doesn't
+		if moving or player.hp < busy.hp0 - player.max_hp * 0.33:
 			busy = {}
-			hud.toast("Interrupted — healing takes a moment of quiet.")
+			hud.toast("Interrupted — stand still to heal." if moving else "Interrupted — that hit knocked the kit out of your hands.")
 			return
 		busy.t += delta
 		if busy.t >= busy.total:
@@ -444,12 +445,24 @@ func throw_rock(e: Enemy, at: Vector2) -> void:
 
 ## Each attacker has its own attack cooldown (Enemy.atk_cd), so several enemies hurt you that much
 ## faster; the short global window only stops two hits landing on the same frame.
+func _apply_pending_hits() -> void:
+	if pending_hits.is_empty() or player.inv > 0.0 or state != "play": return
+	var h: Array = pending_hits.pop_front()
+	if time - float(h[2]) < 0.6: hurt_player(h[0], h[1])
+
 func hurt_player(from: Vector2, dmg: float = 3.0) -> void:
 	var p := player
-	if p.inv > 0.0 or state != "play":
+	hurt_calls += 1
+	if state != "play": return
+	if p.inv > 0.0:
+		# two hits inside the 0.15 s grace window: the second lands right after it, not never
+		# (spawn protection and the wake-up grace still block outright)
+		hurt_blocked += 1
+		if p.inv <= 0.15 and pending_hits.size() < 4:
+			pending_hits.append([from, dmg, time])
 		return
 	var taken := maxf(1.0, round(dmg * (1.0 - _reduction())))
-	p.hp -= taken
+	p.hp = maxf(0.0, p.hp - taken)
 	p.inv = 0.15
 	p.flash = 0.3
 	audio.play("hurt", Vector2.INF, -4.0)
@@ -528,6 +541,8 @@ func kill_enemy(e: Enemy, silent: bool) -> void:
 
 func respawn() -> void:
 	var p := player
+	hud.clear_toasts()
+	pending_hits.clear()
 	_drop_recovery_bag()
 	if under != "": _swap_out()
 	var c: Camp = camps[0]

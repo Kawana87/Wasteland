@@ -6,6 +6,9 @@ extends Node
 
 static var I: Game
 var dbg = null                   # DebugRuns, only with --autostart
+var hurt_calls := 0              # hits that reached hurt_player / were swallowed by the grace window (checks)
+var hurt_blocked := 0
+var pending_hits: Array = []     # [from, dmg, time]: hits that arrived during the 0.15 s grace
 var proc_ms := 0.0               # time spent in Game._process last frame (perf check)
 const SAVE_VERSION := 3
 const BAK_PATH := "user://save.bak.json"
@@ -202,6 +205,7 @@ var weather: Weather
 var xp := 0
 
 var level := 1
+var perk_points := 0             # levels gained but not yet spent on a perk
 
 var perks := {}
 

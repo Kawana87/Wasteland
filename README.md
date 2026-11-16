@@ -153,7 +153,13 @@ write screenshots to `user://shots`.
 
 Checks (print PASS/FAIL per item and exit non-zero on any failure, so they can run in CI):
 `--econcheck` (trade balance), `--combatcheck` (damage stacking, death), `--savecheck` (backups, corrupt saves),
-`--uicheck` (toasts, speech, touch), `--play` (bot walks to town and fights), `--soak` (long self-play).
+`--uicheck` (toasts, speech, touch, HUD layout), `--play` (bot walks to town and fights), `--soak` (long self-play),
+`--determinism` (same seed, different load orders, same world), `--reloadstate` (markets and jobs survive a reload),
+`--startclear` (20 new worlds, camp in the open), `--collide` (reachable buildings, free spawns, dry doors),
+`--wallcheck` (walls hold with 0.3 s frames). Any script error during a check run fails it.
+
+World generation rule: a chunk's content (buildings, props, loot, spawns) stays 2 tiles inside the chunk and
+each generation step has its own seed, so chunks come out identical whatever order they stream in.
 
 ## Next up (Milestone 2+)
 

@@ -73,7 +73,7 @@ func save_game() -> void:
 		"kills": player.kills, "carry": player.carry, "inventory": inventory, "equip": equip, "stash": stash, "day_t": day_t,
 		"camps": cps, "pieces": pcs, "floors": fls, "founds": fds, "vh": vhs, "claimed": claimed, "recruited": rec,
 		"discovered": world.discovered, "opened": world.opened, "killed": world.killed, "origin": origin_id,
-		"recovery": {"pos": [recovery.pos.x, recovery.pos.y], "under": recovery.under, "items": recovery.items, "mats": recovery.mats} if not recovery.is_empty() else {}, "bruised": bruised_t, "econ": econ, "days": days, "trade_xp_day": trade_xp_day, "rested": rested_t, "xp": xp, "level": level, "perks": perks, "jobs": jobs, "notes": notes_read, "examined": examined, "cleared": world.cleared}
+		"recovery": {"pos": [recovery.pos.x, recovery.pos.y], "under": recovery.under, "items": recovery.items, "mats": recovery.mats} if not recovery.is_empty() else {}, "bruised": bruised_t, "econ": econ, "days": days, "trade_xp_day": trade_xp_day, "rested": rested_t, "xp": xp, "level": level, "perk_points": perk_points, "perks": perks, "jobs": jobs, "notes": notes_read, "examined": examined, "cleared": world.cleared}
 	d["under"] = under_state
 	world = w_saved
 	player.wpos = pos_saved
@@ -209,7 +209,7 @@ func _apply_save(d: Dictionary) -> void:
 	days = int(d.get("days", 0))
 	trade_xp_day = {}
 	for k in d.get("trade_xp_day", {}): trade_xp_day[str(k)] = int(d.trade_xp_day[k])
-	xp = int(d.get("xp", 0)); level = int(d.get("level", 1)); perks = d.get("perks", {})
+	xp = int(d.get("xp", 0)); level = int(d.get("level", 1)); perk_points = int(d.get("perk_points", 0)); perks = d.get("perks", {})
 	notes_read = []
 	for n in d.get("notes", []): notes_read.append(int(n))
 	examined = d.get("examined", {})
