@@ -10,6 +10,9 @@ var econ := {"sat": {}, "purse": {}, "stock": {}}   # the player's effect on mar
 var days := 0                    # whole days passed
 var trade_xp_day := {}           # settlement index -> day trade XP was last given there
 var last_trade_si := -1
+var recovery := {}               # the bag you dropped when you last went down: {pos, under, crate, items, mats}
+var bruised_t := 0.0             # after going down: slower camp healing for an in-game hour
+var aim_assist := false          # full auto-aim (no movement penalty), a setting
 
 
 const SHRINK := 2                 # game pixels -> screen: the world renders at 1/2 of the UI size

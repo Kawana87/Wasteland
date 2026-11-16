@@ -20,6 +20,7 @@ var buttons := [
 	{"name": "camp", "label": "CAMP", "pos": Vector2(-190, -335)},
 	{"name": "inv", "label": "INV", "pos": Vector2(-75, -415)},
 	{"name": "map", "label": "MAP", "pos": Vector2(-305, -365)},
+	{"name": "heal", "label": "HEAL", "pos": Vector2(-188, -238), "r": 36.0},
 ]
 const BTN_R := 44.0
 

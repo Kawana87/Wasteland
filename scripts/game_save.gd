@@ -7,15 +7,29 @@ func _load_settings() -> void:
 	var cf := ConfigFile.new()
 	if cf.load("user://settings.cfg") == OK:
 		set_crt(cf.get_value("video", "crt", false))
+		set_aim_assist(cf.get_value("play", "aim_assist", false))
+
+
+func _save_settings() -> void:
+	var cf := ConfigFile.new()
+	cf.set_value("video", "crt", crt_on)
+	cf.set_value("play", "aim_assist", aim_assist)
+	cf.save("user://settings.cfg")
 
 
 func set_crt(v: bool) -> void:
 	crt_on = v
 	crt.visible = v
 	hud.set_crt_label(v)
-	var cf := ConfigFile.new()
-	cf.set_value("video", "crt", v)
-	cf.save("user://settings.cfg")
+	_save_settings()
+
+
+## Aim assist: full auto-aim (always the nearest target, no penalty for shooting on the move).
+## Standard aim prefers what you're facing and spreads wider while moving.
+func set_aim_assist(v: bool) -> void:
+	aim_assist = v
+	hud.aim_btn.text = "AIM: assist" if v else "AIM: standard"
+	_save_settings()
 
 
 func toggle_crt() -> void:
@@ -57,7 +71,7 @@ func save_game() -> void:
 		"kills": player.kills, "carry": player.carry, "inventory": inventory, "equip": equip, "stash": stash, "day_t": day_t,
 		"camps": cps, "pieces": pcs, "floors": fls, "founds": fds, "vh": vhs, "claimed": claimed, "recruited": rec,
 		"discovered": world.discovered, "opened": world.opened, "killed": world.killed, "origin": origin_id,
-		"econ": econ, "days": days, "trade_xp_day": trade_xp_day, "rested": rested_t, "xp": xp, "level": level, "perks": perks, "jobs": jobs, "notes": notes_read, "examined": examined, "cleared": world.cleared}
+		"recovery": {"pos": [recovery.pos.x, recovery.pos.y], "under": recovery.under, "items": recovery.items, "mats": recovery.mats} if not recovery.is_empty() else {}, "bruised": bruised_t, "econ": econ, "days": days, "trade_xp_day": trade_xp_day, "rested": rested_t, "xp": xp, "level": level, "perks": perks, "jobs": jobs, "notes": notes_read, "examined": examined, "cleared": world.cleared}
 	d["under"] = under_state
 	world = w_saved
 	player.wpos = pos_saved
@@ -112,6 +126,22 @@ func _apply_save(d: Dictionary) -> void:
 	_recruited_names = d.get("recruited", [])
 	rested_t = float(d.get("rested", 0.0))
 	econ = d.get("econ", {"sat": {}, "purse": {}, "stock": {}})
+	bruised_t = float(d.get("bruised", 0.0))
+	recovery = {}
+	var rc: Dictionary = d.get("recovery", {})
+	if not rc.is_empty():
+		recovery = {"pos": Vector2(rc.pos[0], rc.pos[1]), "under": rc.under, "items": rc.items, "mats": rc.mats, "crate": null}
+		if rc.under == "":
+			var cr := World.Crate.new()
+			cr.pos = recovery.pos
+			cr.kind = "bag"
+			cr.set_meta("loot", rc.items)
+			cr.set_meta("mats", rc.mats)
+			cr.set_meta("recovery", true)
+			var ck := World.chunk_of(cr.pos)
+			world.ensure_ready(ck.x, ck.y)
+			_place_crate(cr)
+			recovery.crate = cr
 	days = int(d.get("days", 0))
 	trade_xp_day = {}
 	for k in d.get("trade_xp_day", {}): trade_xp_day[int(k)] = int(d.trade_xp_day[k])

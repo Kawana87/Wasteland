@@ -78,6 +78,8 @@ func _ready() -> void:
 			if a.begins_with("--origin="): oid = a.substr(9)
 		if "--continue" in args: load_game.call_deferred()
 		else: start_new_world.call_deferred({}, oid)
+		if "--combatcheck" in args:
+			dbg._debug_combat_check.call_deferred()
 		if "--econcheck" in args:
 			dbg._debug_econ_check.call_deferred()
 		if "--sleep" in args:
@@ -219,7 +221,7 @@ func start_new_world(save: Dictionary = {}, oid: String = "drifter") -> void:
 	dog.wpos = player.wpos + Vector2(-1, 0)
 	under = ""; ow = {}
 	if save.is_empty():
-		econ = {"sat": {}, "purse": {}, "stock": {}}; days = 0; trade_xp_day = {}
+		econ = {"sat": {}, "purse": {}, "stock": {}}; days = 0; trade_xp_day = {}; recovery = {}; bruised_t = 0.0
 	if save.is_empty():
 		xp = 0; level = 1; perks = {}; jobs = []; notes_read = []; examined = {}; under_state = {}
 	greeted = {}
@@ -411,7 +413,7 @@ func _process(delta: float) -> void:
 			hud.toast("Stashed %d cloth, %d wood. Scrap stays in your pocket — deposit it from the camp menu (%s)." % [p.carry.cloth, p.carry.wood, "CAMP" if using_touch else "B"])
 			stash.cloth += p.carry.cloth; stash.wood += p.carry.wood
 			p.carry.cloth = 0; p.carry.wood = 0
-		p.regen += delta
+		p.regen += delta * (0.5 if bruised_t > 0.0 else 1.0)
 		if p.regen > (1.0 if here.up.garden else 3.5) and p.hp < p.max_hp:
 			p.regen = 0.0
 			p.hp = minf(p.max_hp, p.hp + 1.0)
@@ -580,6 +582,8 @@ func _update_hud() -> void:
 	for c in camps:
 		if under != "": break
 		if c.wpos.distance_to(p.wpos) > 6.0: mk.append([(c.wpos - p.wpos).angle(), "camp"])
+	if not recovery.is_empty() and recovery.get("under", "") == under and recovery.pos.distance_to(p.wpos) > 2.0:
+		mk.append([(recovery.pos - p.wpos).angle(), "bag"])
 	for j in jobs:
 		if under != "": break
 		var tgt: Vector2 = j.target
@@ -619,7 +623,7 @@ func _update_hud() -> void:
 					var cl: bool = under_state.get(t.o.portal, {}).get("cleared", false)
 					msg = "%s Enter %s%s" % [k, ui.name, "  (cleared)" if cl else ""]
 	if not busy.is_empty():
-		msg = "Picking lock… %d%%" % int(100.0 * busy.t / busy.total)
+		msg = ("Healing… %d%%" if busy.get("kind", "") == "heal" else "Picking lock… %d%%") % int(100.0 * busy.t / busy.total)
 	hud.set_prompt(msg)
 	hud.touch.queue_redraw()
 	if p.flash > 0.0:

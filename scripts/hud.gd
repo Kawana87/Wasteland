@@ -26,6 +26,7 @@ var radio_box: PanelContainer
 var radio_l: Label
 var radio_t := 0.0
 var radio_btn: Button
+var aim_btn: Button
 signal radio_toggled
 # filled by Game each frame
 var hp := 20.0
@@ -118,6 +119,13 @@ func _ready() -> void:
 	radio_btn.add_theme_font_size_override("font_size", 14)
 	radio_btn.pressed.connect(func(): radio_toggled.emit())
 	root.add_child(radio_btn)
+	aim_btn = Button.new()
+	aim_btn.text = "AIM: standard"
+	aim_btn.focus_mode = Control.FOCUS_NONE
+	term_button(aim_btn)
+	aim_btn.add_theme_font_size_override("font_size", 14)
+	aim_btn.pressed.connect(func(): Game.I.set_aim_assist(not Game.I.aim_assist))
+	root.add_child(aim_btn)
 	prompt_l = _label(18)
 	prompt_l.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
 	prompt_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -256,6 +264,7 @@ func _draw_compass() -> void:
 			"camp": compass.draw_rect(Rect2(x - 3, 20, 7, 7), Color(1, 0.85, 0.4), false, 1.5)
 			"job": compass.draw_colored_polygon(PackedVector2Array([Vector2(x - 6, 17), Vector2(x + 6, 17), Vector2(x, 28)]), Color(1.0, 0.75, 0.25))
 			"enemy": compass.draw_rect(Rect2(x - 1, 2, 3, 10), Color(1.0, 0.35, 0.3))
+			"bag": compass.draw_circle(Vector2(x, 23), 4.5, Color(1.0, 0.55, 0.3))
 	compass.draw_line(Vector2(W * 0.5, 0), Vector2(W * 0.5, 4), INK, 2.0)
 
 func set_prompt(t: String) -> void:
@@ -272,6 +281,7 @@ func _process(delta: float) -> void:
 	var sp := stats.get_parent().get_parent() as Control
 	crt_btn.position = Vector2(12, sp.position.y + sp.size.y + 6)
 	radio_btn.position = Vector2(crt_btn.position.x + crt_btn.size.x + 8, crt_btn.position.y)
+	aim_btn.position = Vector2(radio_btn.position.x + radio_btn.size.x + 8, crt_btn.position.y)
 	if card_t > 0.0:
 		card_t -= delta
 		card_l.modulate.a = clampf(card_t, 0.0, 1.0) * clampf((3.2 - card_t) * 3.0, 0.0, 1.0)

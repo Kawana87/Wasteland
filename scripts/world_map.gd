@@ -133,6 +133,13 @@ func _layout() -> void:
 		jm.draw.connect(func():
 			jm.draw_colored_polygon(PackedVector2Array([Vector2(2, 2), Vector2(16, 2), Vector2(9, 16)]), Color(1.0, 0.75, 0.25)))
 		map_rect.add_child(jm)
+	if not game.recovery.is_empty() and game.recovery.get("under", "") == "":
+		var bm := Control.new()
+		bm.size = Vector2(16, 16)
+		bm.position = game.recovery.pos / float(World.N) * big - bm.size * 0.5
+		bm.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		bm.draw.connect(func(): bm.draw_circle(Vector2(8, 8), 5.0, Color(1.0, 0.55, 0.3)))
+		map_rect.add_child(bm)
 	marker = Control.new()
 	marker.size = Vector2(20, 20)
 	marker.position = pp - marker.size * 0.5

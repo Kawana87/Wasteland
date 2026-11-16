@@ -3,16 +3,21 @@ extends Actor
 ## Raiders and mutants. All share the awareness system:
 ## 0-35 unaware (wander/patrol), 35-75 suspicious "?" (go check the last noise), 75+ alert "!".
 
+## Each attacker's time between hits on the player (seconds, after the windup).
+const ATK_CD := {"rat": 0.9, "ghoul": 1.0, "shellback": 1.4, "brute": 1.7, "raider": 1.0}
 const STATS := {
 	#           hp  chase  dmg  windup sense  fears fire
 	"rat":       [2,  1.3,  1,   0.55,  0.7,   true],
-	"ghoul":     [6,  2.0,  3,   0.40,  1.15,  true],
+	"ghoul":     [6,  2.0,  2,   0.40,  1.15,  true],
 	"shellback": [14, 0.8,  4,   0.50,  0.9,   true],
 	"brute":     [24, 1.05, 6,   0.80,  1.0,   false],
 	"raider":    [6,  1.3,  3,   0.0,   1.0,   false],
 }
 
 var type := "ghoul"
+var atk_cd := 0.0
+var stuck_t := 0.0
+var _last_pos := Vector2.ZERO
 var hp := 6.0
 var max_hp := 6.0
 var dmg := 3
@@ -175,14 +180,14 @@ func think(delta: float, p: Player, p_safe: bool) -> void:
 				if shoot_cd <= 0.0 and d < 9.5:
 					if fl == p.fl and w.los(wpos, p.wpos, fl):
 						g.enemy_shoot(self, p.wpos, weapon)
-					shoot_cd = randf_range(1.0, 1.7) * (1.3 if weapon == "shotgun" else 1.0)
+					shoot_cd = randf_range(1.2, 1.9) * (1.3 if weapon == "shotgun" else 1.0)
 			"brute":
 				tgt = p.wpos; sp = 1.05
 				shoot_cd -= delta
 				if shoot_cd <= 0.0 and d > 3.0 and d < 8.0 and fl == p.fl and w.los(wpos, p.wpos, fl):
 					g.throw_rock(self, p.wpos)
 					shoot_cd = randf_range(3.0, 4.5)
-				if d < 0.9 and wind <= 0.0 and p.inv <= 0.0: wind = STATS[type][3]
+				if d < 0.9 and wind <= 0.0 and atk_cd <= 0.0: wind = STATS[type][3]
 			"shellback":
 				tgt = p.wpos; sp = STATS[type][1]
 				shoot_cd -= delta
@@ -190,10 +195,10 @@ func think(delta: float, p: Player, p_safe: bool) -> void:
 					charge_t -= delta; sp = 2.9
 				elif shoot_cd <= 0.0 and d > 1.5 and d < 5.0:
 					charge_t = 0.9; shoot_cd = randf_range(3.0, 4.0)
-				if d < 0.85 and wind <= 0.0 and p.inv <= 0.0: wind = STATS[type][3]
+				if d < 0.85 and wind <= 0.0 and atk_cd <= 0.0: wind = STATS[type][3]
 			_:
 				tgt = p.wpos; sp = STATS[type][1]
-				if d < 0.75 and wind <= 0.0 and p.inv <= 0.0: wind = STATS[type][3]
+				if d < 0.95 and wind <= 0.0 and atk_cd <= 0.0: wind = STATS[type][3]
 	elif st == 1 and wpos.distance_to(last) > 0.5:
 		tgt = last
 		sp = 0.6 if type == "rat" else 0.9
@@ -210,11 +215,22 @@ func think(delta: float, p: Player, p_safe: bool) -> void:
 				wander_t = randf_range(3.0, 6.0)
 			tgt = target
 			sp = (0.3 if type == "rat" else 0.45) if wpos.distance_to(tgt) > 0.3 else 0.0
+	atk_cd -= delta
 	if wind > 0.0:
 		wind -= delta
 		sp = 0.0
-		if wind <= 0.0 and d < (1.2 if type == "brute" else 0.95):
-			g.hurt_player(wpos, dmg)
+		if wind <= 0.0:
+			atk_cd = ATK_CD.get(type, 1.0)
+			if d < (1.25 if type == "brute" else 1.15):
+				g.hurt_player(wpos, dmg)
+	# stuck while hunting (wedged on a wall or prop): sidestep for a moment
+	if st == 2 and sp > 0.0:
+		if wpos.distance_to(_last_pos) < 0.02: stuck_t += delta
+		else: stuck_t = 0.0
+		_last_pos = wpos
+		if stuck_t > 0.8:
+			head = head.rotated(PI * 0.5 * (1.0 if randf() < 0.5 else -1.0))
+			stuck_t = 0.0
 	if type != "raider" or st < 2:
 		pause -= delta
 		if pause <= 0.0 and randf() < delta * 0.35:

@@ -528,6 +528,7 @@ func _world_life(delta: float) -> void:
 		day_t -= 1.0
 		days += 1
 	rested_t = maxf(0.0, rested_t - delta)
+	bruised_t = maxf(0.0, bruised_t - delta)
 	var sun := sin(day_t * TAU)          # 0.25 = noon, 0.75 = midnight
 	var dayness := clampf(sun * 1.6 + 0.5, 0.0, 1.0)
 	var dusk := clampf(1.0 - absf(sun) * 3.0, 0.0, 1.0)

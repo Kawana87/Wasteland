@@ -834,3 +834,77 @@ func _debug_econ_check() -> void:
 	g.hud.hide_menu()
 	check("stash stays at camp", g._scrap_total() == g.player.carry.scrap, "traders see %d (carry %d, stash %d)" % [g._scrap_total(), g.player.carry.scrap, g.stash.scrap])
 	finish()
+
+## Review 1 combat checks: idle player vs 1 and 5 ghouls, then the hold-fire bot vs 4 ghouls + 2 raiders.
+func _open_spot() -> Vector2:
+	var at: Vector2 = g.player.wpos + Vector2(14, 6)
+	for t in 60:
+		if g.world.can_stand(at, 0.4, 0) and g.world.settlement_at(at, 14.0) < 0 and g.camp_near(at, 12.0) == null and g.world.building_at(at.x, at.y) == 0: break
+		at += Vector2(6, 3)
+	return at
+
+func _idle_vs(n: int) -> float:
+	var at := _open_spot()
+	g.player.wpos = at
+	g.player.hp = g.player.max_hp
+	g.player.inv = 0.0
+	g.player.sync(); g.rebase(); g._stream(true)
+	for e in g.enemies: e.queue_free()
+	g.enemies.clear()
+	for k in n:
+		var e: Enemy = g._spawn_enemy({"type": "ghoul", "pos": at + Vector2.from_angle(k * TAU / n) * 2.0, "home": at, "home_r": 10.0})
+		e.aw = 100.0; e.last = at
+	var t0: float = g.time
+	while g.state == "play" and g.time - t0 < 60.0:
+		await g.get_tree().process_frame
+	var t: float = g.time - t0
+	if g.state == "down":
+		while g.state != "play": await g.get_tree().process_frame
+	return t
+
+func _debug_combat_check() -> void:
+	await g.get_tree().create_timer(1.0).timeout
+	g.equip.body = ""; g.equip.head = ""
+	var t1 := await _idle_vs(1)
+	var t3 := await _idle_vs(3)
+	var t5 := await _idle_vs(5)
+	print("COMBAT idle down: 1 ghoul %.1fs, 3 ghouls %.1fs, 5 ghouls %.1fs" % [t1, t3, t5])
+	check("damage stacks (3)", t1 / maxf(t3, 0.1) >= 2.2, "3 ghouls %.1fx faster than 1 (target 2.5-3x)" % (t1 / maxf(t3, 0.1)))
+	check("damage stacks (5)", t1 / maxf(t5, 0.1) >= 3.0, "5 ghouls %.1fx faster than 1 (target 3x+)" % (t1 / maxf(t5, 0.1)))
+	# hold-fire bot
+	var at := _open_spot()
+	g.player.wpos = at
+	g.player.hp = g.player.max_hp
+	g.player.sync(); g.rebase(); g._stream(true)
+	for e in g.enemies: e.queue_free()
+	g.enemies.clear()
+	g.inv_add("ammo_pistol", 60)
+	for k in 6:
+		var e: Enemy = g._spawn_enemy({"type": "ghoul" if k < 4 else "raider", "pos": at + Vector2.from_angle(k * 1.05) * 9.0, "home": at, "home_r": 12.0})
+		e.aw = 100.0; e.last = at
+	var hp0: float = g.player.hp
+	var lowest := hp0
+	var t0: float = g.time
+	var won := false
+	while g.time - t0 < 30.0 and g.state == "play":
+		await g.get_tree().process_frame
+		if g.locked != null: g.shoot()
+		lowest = minf(lowest, g.player.hp)
+		if g.enemies.filter(func(e): return not e.dead).is_empty(): won = true; break
+	var lost := hp0 - lowest
+	var alive: Array = g.enemies.filter(func(e): return not e.dead)
+	print("COMBAT bot: won=%s, lowest hp %.0f (lost %.0f of %.0f), %.1fs, state %s, alive %s" % [won, lowest, lost, hp0, g.time - t0, g.state, str(alive.map(func(e): return "%s d%.1f aw%.0f hp%.0f" % [e.type, e.wpos.distance_to(g.player.wpos), e.aw, e.hp]))])
+	check("hold-fire bot is pushed", lost >= 12.0 or g.state != "play", "lost %.0f HP (target 12+ or needs a med kit)" % lost)
+	# death drops a recovery bag with cargo
+	g.state = "play"
+	g.player.hp = g.player.max_hp
+	g.inv_add("fuel", 10)
+	g.player.carry.scrap = 25
+	g.player.hp = 0.0
+	g.hurt_player(g.player.wpos, 1.0)
+	g.player.hp = 0.0
+	g.state = "down"
+	g.respawn()
+	check("death drops a recovery bag", not g.recovery.is_empty() and g.inv_count("fuel") == 0 and g.player.carry.scrap == 0, "bag %s, fuel carried %d, scrap %d" % [str(not g.recovery.is_empty()), g.inv_count("fuel"), g.player.carry.scrap])
+	check("waking costs something", g.player.hp < g.player.max_hp and g.bruised_t > 0.0, "hp %.0f/%.0f, bruised %.0f" % [g.player.hp, g.player.max_hp, g.bruised_t])
+	finish()

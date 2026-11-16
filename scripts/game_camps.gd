@@ -101,6 +101,16 @@ func _swap_under(portal: String, outside: Vector2) -> void:
 	if not under_state.has(portal): under_state[portal] = {"opened": {}, "killed": {}, "cleared": false}
 	world = Underground.build(portal, ow.world.seed_value, under_state[portal])
 	under = portal
+	if recovery.get("under", "") == portal:
+		var cr := World.Crate.new()
+		cr.pos = recovery.pos
+		cr.kind = "bag"
+		cr.set_meta("loot", recovery.items)
+		cr.set_meta("mats", recovery.mats)
+		cr.set_meta("recovery", true)
+		world.crates.append(cr)
+		var ck := World.chunk_of(cr.pos)
+		world._bucket(World.ckey(ck.x, ck.y)).crates.append(cr)
 	player.wpos = world.start
 	player.fl = 0
 	player.climb = {}

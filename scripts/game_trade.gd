@@ -47,20 +47,32 @@ func equip_item(id: String) -> void:
 	open_inventory()
 
 
+## Healing takes a moment: a med kit is a 1.2 s channel (food 0.8 s) that moving or getting hit
+## interrupts — the item is only used up when it finishes.
 func use_item(id: String) -> void:
 	var d := Items.info(id)
-	if d.get("heal", 0) > 0 and player.hp < player.max_hp and inv_take(id):
-		var hl: float = d.heal * ((1.0 + 0.5 * perk("medic")) if id == "medkit" else float(origin().get("food", 1.0)) * (1.0 + 0.5 * perk("lead_belly")))
-		audio.play("heal" if id == "medkit" else "eat", Vector2.INF, -4.0)
-		player.hp = minf(player.max_hp, player.hp + hl)
-		add_text(player.wpos, "+%d hp" % int(hl), Color("9fd08a"))
+	if d.get("heal", 0) > 0 and player.hp < player.max_hp and inv_count(id) > 0:
+		if invs.visible: invs.close_screen()
+		hud.hide_menu()
+		busy = {"kind": "heal", "id": id, "t": 0.0, "total": 1.2 if id == "medkit" else 0.8, "hp0": player.hp}
+		audio.play("heal" if id == "medkit" else "eat", Vector2.INF, -8.0)
+		return
 	if hud.menu_open() or invs.visible: open_inventory()
+
+func _apply_heal(id: String) -> void:
+	var d := Items.info(id)
+	if not inv_take(id): return
+	var hl: float = d.heal * ((1.0 + 0.5 * perk("medic")) if id == "medkit" else float(origin().get("food", 1.0)) * (1.0 + 0.5 * perk("lead_belly")))
+	player.hp = minf(player.max_hp, player.hp + hl)
+	add_text(player.wpos, "+%d hp" % int(hl), Color("9fd08a"))
 
 
 func quick_heal() -> void:
 	if player.hp >= player.max_hp: return
 	if inv_count("medkit") > 0 and player.max_hp - player.hp >= 8: use_item("medkit")
 	elif inv_count("food") > 0: use_item("food")
+	elif inv_count("produce") > 0: use_item("produce")
+	elif inv_count("water") > 0: use_item("water")
 	elif inv_count("medkit") > 0: use_item("medkit")
 	else: hud.toast("Nothing to heal with. Look for food and med kits.")
 

@@ -27,12 +27,17 @@ func update_lock() -> void:
 			or locked.wpos.distance_to(p.wpos) > rng_ * 1.15 or not world.los(p.wpos, locked.wpos, p.fl)):
 		locked = null
 	if locked != null: return
-	var bd := rng_
+	var bd := 1e9
+	var face := p.walk_dir
 	for e in enemies:
 		if e.dead or not e.visible or e.fl != p.fl or e.friendly(): continue
-		var d: float = e.wpos.distance_to(p.wpos)
-		if d < bd and world.los(p.wpos, e.wpos, p.fl):
-			bd = d; locked = e
+		var to: Vector2 = e.wpos - p.wpos
+		var d := to.length()
+		if d > rng_ or not world.los(p.wpos, e.wpos, p.fl): continue
+		# with standard aim, prefer what you're facing over what's merely closest
+		var score := d if aim_assist else d * (1.0 + (1.0 - face.dot(to / maxf(d, 0.01))) * 0.8)
+		if score < bd:
+			bd = score; locked = e
 
 
 func _read_aim() -> Vector2:
@@ -212,6 +217,12 @@ func _loot(c: World.Crate) -> void:
 	var items := Items.roll_loot(c.kind, rng)
 	if c.has_meta("loot"):                       # something you dropped: exactly that comes back
 		mats = [0, 0, 0]; items = c.get_meta("loot")
+	if c.has_meta("mats"):
+		var mm: Dictionary = c.get_meta("mats")
+		mats = [int(mm.scrap), int(mm.cloth), int(mm.wood)]
+	if c.has_meta("recovery"):
+		recovery = {}
+		hud.toast("Got your pack back.")
 	if c.has_meta("extra"): items.append([c.get_meta("extra"), 1])
 	if any_up("bench") and rng.randf() < 0.5:
 		items.append([gun_info().get("ammo", "ammo_pistol"), 2])
@@ -350,6 +361,17 @@ func bash_door(sg: World.Seg, dmg: float) -> void:
 func _update_busy(delta: float, moving: bool) -> void:
 	if busy.is_empty():
 		return
+	if busy.get("kind", "") == "heal":
+		if moving or player.hp < busy.hp0:
+			busy = {}
+			hud.toast("Interrupted — healing takes a moment of quiet.")
+			return
+		busy.t += delta
+		if busy.t >= busy.total:
+			var id: String = busy.id
+			busy = {}
+			_apply_heal(id)
+		return
 	var sg: World.Seg = busy.door
 	if moving or player.inv > 0.0 or sg.door != "locked":
 		busy = {}
@@ -387,6 +409,9 @@ func shoot() -> void:
 	p.cd = g.rate * (0.8 if any_up("bench") else 1.0)
 	var wa := p.world_aim()
 	var spread: float = g.spread * (1.0 - 0.3 * perk("steady"))
+	# positioning matters: shots spread wider on the move, tighter standing still or crouched
+	if not aim_assist:
+		spread *= 0.6 if p.crouch else (1.9 if p.moving else 1.0)
 	var dmg_m := 1.0 + 0.2 * perk("gunslinger")
 	for k in g.pellets:
 		var dir := wa.rotated(randf_range(-spread, spread))
@@ -402,7 +427,7 @@ func enemy_shoot(e: Enemy, at: Vector2, weapon: String = "pipe_pistol") -> void:
 	var g := Items.info(weapon)
 	var base := (at - e.wpos).angle()
 	for k in g.get("pellets", 1):
-		var dir := Vector2.from_angle(base + randf_range(-0.13, 0.13) + randf_range(-g.spread, g.spread) * 0.5)
+		var dir := Vector2.from_angle(base + randf_range(-0.1, 0.1) + randf_range(-g.spread, g.spread) * 0.5)
 		bullets.append({"pos": e.wpos + dir * 0.4, "vel": dir * 8.0, "z": e.ground_z() + 10.0, "fl": e.fl, "life": 1.4 if g.pellets == 1 else 0.6, "enemy": true, "src": e.wpos, "dmg": 3.0 if g.pellets == 1 else 2.0})
 	burst(e.wpos, 2, [Color("f2d06b")], 9.0, e.fl)
 	audio.play("enemy_gun", e.wpos, -4.0)
@@ -417,18 +442,20 @@ func throw_rock(e: Enemy, at: Vector2) -> void:
 	bullets.append({"pos": e.wpos + dir * 0.5, "vel": dir * 6.0, "z": e.ground_z() + 18.0, "fl": e.fl, "life": 1.6, "enemy": true, "src": e.wpos, "dmg": 4.0, "rock": true})
 
 
+## Each attacker has its own attack cooldown (Enemy.atk_cd), so several enemies hurt you that much
+## faster; the short global window only stops two hits landing on the same frame.
 func hurt_player(from: Vector2, dmg: float = 3.0) -> void:
 	var p := player
 	if p.inv > 0.0 or state != "play":
 		return
 	var taken := maxf(1.0, round(dmg * (1.0 - _reduction())))
 	p.hp -= taken
-	p.inv = 0.7
+	p.inv = 0.15
 	p.flash = 0.3
 	audio.play("hurt", Vector2.INF, -4.0)
 	var d := p.wpos - from
 	if d.length() > 0.01:
-		p.move(d.normalized() * (0.9 if dmg >= 6.0 else 0.4))
+		p.move(d.normalized() * (0.9 if dmg >= 6.0 else 0.12))
 	if p.hp <= 0.0:
 		state = "down"
 		down_t = 2.8
@@ -500,10 +527,9 @@ func kill_enemy(e: Enemy, silent: bool) -> void:
 
 
 func respawn() -> void:
-	if under != "": _swap_out()
 	var p := player
-	var lost: int = p.carry.scrap + p.carry.cloth + p.carry.wood
-	p.carry = {"scrap": 0, "cloth": 0, "wood": 0}
+	_drop_recovery_bag()
+	if under != "": _swap_out()
 	var c: Camp = camps[0]
 	var bd := 1e9
 	for o in camps:
@@ -511,18 +537,46 @@ func respawn() -> void:
 		if d < bd: bd = d; c = o
 	p.wpos = c.wpos + Vector2(0, 1.4)
 	p.fl = 0
-	p.hp = p.max_hp
+	p.hp = ceil(p.max_hp * 0.5)
 	p.inv = 2.0
+	bruised_t = DAY_LEN / 24.0
+	advance_time(3.0)
 	dog.wpos = p.wpos + Vector2(-1, 0)
 	p.sync()
 	rebase()
 	_stream(true)
 	for e in enemies:
-		if e.wpos.distance_to(c.wpos) < 12.0:
-			e.aw = 0.0
-			if e.camp < 0 and e.type != "brute": kill_enemy(e, true)
+		e.aw = 0.0
 	state = "play"
-	hud.toast(("You came to at %s. Dropped %d materials you were carrying." % [c.cname, lost]) if lost else "You came to at %s." % c.cname)
+	hud.toast("You came to at %s, bruised, three hours later.%s" % [c.cname, " Your pack is where you fell — it's on your compass." if not recovery.is_empty() else ""])
+
+## On going down: carried scrap and materials and all trade goods go into a bag where you fell.
+## Get back to it and it's yours again; go down again first and the old bag is gone.
+func _drop_recovery_bag() -> void:
+	var p := player
+	var items_ := []
+	for it in inventory:
+		if Items.info(it.id).get("trade", false): items_.append([it.id, it.n])
+	var mats: Dictionary = p.carry.duplicate()
+	if items_.is_empty() and mats.scrap + mats.cloth + mats.wood == 0:
+		recovery = {}
+		return
+	for it in items_: inv_take(it[0], it[1])
+	p.carry = {"scrap": 0, "cloth": 0, "wood": 0}
+	if not recovery.is_empty() and recovery.get("crate") != null:
+		var old = recovery.crate
+		if crate_nodes.has(old):
+			crate_nodes[old].queue_free(); crate_nodes.erase(old)
+		old.open = true
+	var cr := World.Crate.new()
+	cr.pos = p.wpos
+	cr.kind = "bag"
+	cr.fl = p.fl
+	cr.set_meta("loot", items_)
+	cr.set_meta("mats", mats)
+	cr.set_meta("recovery", true)
+	if under == "": _place_crate(cr)
+	recovery = {"pos": p.wpos, "under": under, "crate": cr if under == "" else null, "items": items_, "mats": mats}
 
 
 func _update_bullets(delta: float) -> void:
