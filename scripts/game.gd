@@ -129,7 +129,13 @@ func _ready() -> void:
 	_load_settings()
 	var args := OS.get_cmdline_user_args()
 	if "--autostart" in args:
-		start_new_world.call_deferred()
+		var oid := "drifter"
+		for a in args:
+			if a.begins_with("--origin="): oid = a.substr(9)
+		if "--continue" in args: load_game.call_deferred()
+		else: start_new_world.call_deferred({}, oid)
+		if "--econ" in args:
+			_debug_econ.call_deferred()
 		if "--shots" in args:
 			_debug_shots.call_deferred()
 		if "--soak" in args:
@@ -157,7 +163,7 @@ func _ready() -> void:
 		if "--build" in args:
 			_debug_build.call_deferred()
 		return
-	hud.show_title("A new world is generated every time: rolling hills and cliffs out west, a ruined city to the east.\nRaiders hold plateau camps; feral ghouls haunt the ruins; brutes and shellbacks roam the wilds.\nFriendly settlements trade gear for scrap. Set up camps anywhere and fast travel between them.\n\nPC: WASD move · mouse aim · left click shoot · F / right click melee · Space jump · C sneak\nE use / talk / chop / climb / stairs · I inventory · H heal · B camp menu · T fast travel · V CRT filter\nGamepad: left stick move · right stick aim · RT shoot · A jump · X use · B melee · Y sneak\nTouch: left thumb move · right thumb aim and shoot · buttons on the right", start_new_world)
+	hud.show_title("The Sable Wastes: one great wasteland, ten minutes edge to edge on foot — lakes, fens, salt flats, red canyons,\na glass crater and the ruins of Port Sterling. Fifty places on the map, and plenty more nobody wrote down.\nTowns trade gear, and each pays well for goods from far away: buy cheap, haul it across the wastes, sell high.\nSet up camps anywhere, build bases, claim raider dens, and fast travel to anywhere you've found.\n\nPC: WASD move · mouse aim · left click shoot · F / right click melee · Space jump · C sneak\nE use / talk / chop / climb / stairs · I inventory · H heal · B camp menu · T fast travel · V CRT filter\nGamepad: left stick move · right stick aim · RT shoot · A jump · X use · B melee · Y sneak\nTouch: left thumb move · right thumb aim and shoot · buttons on the right", choose_origin, load_game if FileAccess.file_exists(SAVE_PATH) else Callable())
 
 func _setup_input() -> void:
 	var keys := {
@@ -178,7 +184,47 @@ func _setup_input() -> void:
 			j.button_index = pads[a]
 			InputMap.action_add_event(a, j)
 
-func start_new_world() -> void:
+# ------------------------------------------------------------------ origins
+## Where you start and who you were. Each has an upside and a catch.
+const ORIGINS := [
+	{"id": "drifter", "name": "Road-worn Drifter", "loc": "patchwork",
+		"pro": "Starts at Patchwork, the friendliest town in the Wastes, with extra med kits and food.",
+		"con": "Nothing special about you. Yet.",
+		"kit": [["pipe_pistol", 1], ["ammo_pistol", 18], ["medkit", 2], ["food", 3], ["lockpick", 3]]},
+	{"id": "water_runner", "name": "Clearwater Water-runner", "loc": "clearwater",
+		"pro": "Starts by Lake Winona with 6 water and 20 scrap. Trade goods sell for 15% more.",
+		"con": "Grew up soft by the lake: 16 max health.",
+		"kit": [["pipe_pistol", 1], ["ammo_pistol", 14], ["medkit", 1], ["water", 6], ["lockpick", 2]], "scrap": 20, "sell": 1.15, "hp": 16},
+	{"id": "ex_con", "name": "Iron Gate Ex-con", "loc": "iron_gate_pen",
+		"pro": "Melee hits 50% harder. Starts with a machete and 6 lockpicks.",
+		"con": "Traders don't trust you: everything costs 20% more. Only 6 rounds.",
+		"kit": [["machete", 1], ["pipe_pistol", 1], ["ammo_pistol", 6], ["food", 2], ["lockpick", 6]], "melee": 1.5, "buy": 1.2, "equip": {"melee": "machete"}},
+	{"id": "scavenger", "name": "Redwall Scavenger", "loc": "redwall",
+		"pro": "Finds an extra scrap in every container and can haul 15 more trade goods.",
+		"con": "No gun to start with, just a lead pipe — out in the red canyons of the south-west.",
+		"kit": [["pipe", 1], ["medkit", 1], ["food", 2], ["copper", 3], ["lockpick", 4]], "scav": true, "cap": 15, "equip": {"melee": "pipe", "gun": ""}},
+	{"id": "farmhand", "name": "Greenmarsh Farmhand", "loc": "greenmarsh",
+		"pro": "Food, water and produce heal twice as much. Starts with 8 produce and a jacket.",
+		"con": "Far down in the southern fens, a long walk from anywhere. Only 8 rounds.",
+		"kit": [["pipe_pistol", 1], ["ammo_pistol", 8], ["produce", 8], ["jacket", 1]], "food": 2.0, "equip": {"body": "jacket"}},
+]
+var origin_id := "drifter"
+
+func origin() -> Dictionary:
+	for o in ORIGINS:
+		if o.id == origin_id: return o
+	return ORIGINS[0]
+
+func choose_origin() -> void:
+	var btns := []
+	var lines := ["Who were you before you walked into the Sable Wastes?"]
+	for o in ORIGINS:
+		lines.append("%s — + %s  − %s" % [o.name, o.pro, o.con])
+		var oid: String = o.id
+		btns.append([o.name, func(): hud.hide_menu(); start_new_world({}, oid), false])
+	hud.show_menu("Choose your start", lines, btns)
+
+func start_new_world(save: Dictionary = {}, oid: String = "drifter") -> void:
 	for c in vp.get_children():
 		if c is Node2D:
 			c.queue_free()
@@ -194,7 +240,12 @@ func start_new_world() -> void:
 	floaters.clear()
 	stash = {"scrap": 0, "cloth": 0, "wood": 0}
 	world = World.new()
-	world.load_data(randi() % 1000000)
+	if not save.is_empty():
+		world.opened = save.get("opened", {})
+		world.killed = save.get("killed", {})
+		world.discovered = save.get("discovered", {})
+	origin_id = save.get("origin", oid)
+	world.load_data(int(save.get("seed", randi() % 1000000)), origin().loc)
 	Iso.origin = world.start.x + world.start.y
 	root = Node2D.new()
 	vp.add_child(root)
@@ -209,6 +260,12 @@ func start_new_world() -> void:
 	var c := Camp.new()
 	root.add_child(c)
 	c.setup(world.start, "Home Camp", true)
+	if save.is_empty():
+		var o := origin()
+		inventory = []
+		for it in o.kit: inventory.append({"id": it[0], "n": it[1]})
+		for k in o.get("equip", {}): equip[k] = o.equip[k]
+		stash.scrap = int(o.get("scrap", 0))
 	_light_for("campfire_decor", world.start, world.hz(world.start.x, world.start.y))
 	camps.append(c)
 	base = BaseBuild.new()
@@ -217,6 +274,9 @@ func start_new_world() -> void:
 	player = Player.new()
 	root.add_child(player)
 	player.wpos = world.start + Vector2(0, 1.5)
+	if save.is_empty() and origin().has("hp"):
+		player.max_hp = origin().hp
+		player.hp = player.max_hp
 	dog = Dog.new()
 	root.add_child(dog)
 	dog.wpos = player.wpos + Vector2(-1, 0)
@@ -227,6 +287,8 @@ func start_new_world() -> void:
 	cam = Camera2D.new()
 	root.add_child(cam)
 	cam.make_current()
+	if not save.is_empty():
+		_apply_save(save)
 	_stream(true)
 	var wps := [world.road_point_near(player.wpos), world.road_point_near(player.wpos), world.road_point_near(player.wpos), world.road_point_near(player.wpos)]
 	_spawn_npc({"type": "wanderer", "pos": wps[0], "patrol": wps})
@@ -234,7 +296,11 @@ func start_new_world() -> void:
 	_last_pb = -99999
 	state = "play"
 	_discover()
-	hud.toast("The Sable Wastes. Patchwork is just east along the road — press M for the map, I for your inventory.")
+	if not save.is_empty():
+		hud.toast("Welcome back. Your camps and stash are as you left them.")
+		return
+	var sl := world.loc_by_id(origin().loc)
+	hud.toast("The Sable Wastes. %s is just over there — press M for the map, I for your inventory." % sl.get("name", "Town"))
 
 # ------------------------------------------------------------------ streaming
 ## Chunks within LOAD_R tiles of the player are shown; chunks beyond KEEP_R are dropped (their data
@@ -247,6 +313,9 @@ var terrain_root: Node2D
 var _parent: Node2D
 var _light_tag := -1
 var encounter_t := 0.0
+var save_t := 0.0
+var _recruited_names := []
+const SAVE_PATH := "user://save.json"
 
 func _chunk_dist(cx: int, cy: int, p: Vector2) -> float:
 	var r := Rect2(cx * World.CH, cy * World.CH, World.CH, World.CH)
@@ -380,7 +449,7 @@ func _load_chunk(cx: int, cy: int) -> void:
 			n.set_meta("sp", d)
 			d.active = true
 	for s in bk.survivors:
-		if s.get("active", false): continue
+		if s.get("active", false) or s.get("recruited", false) or s.name in _recruited_names: continue
 		s.active = true
 		var a := Actor.new()
 		root.add_child(a)
@@ -679,8 +748,9 @@ func equip_item(id: String) -> void:
 func use_item(id: String) -> void:
 	var d := Items.info(id)
 	if d.get("heal", 0) > 0 and player.hp < player.max_hp and inv_take(id):
-		player.hp = minf(player.max_hp, player.hp + d.heal)
-		add_text(player.wpos, "+%d hp" % d.heal, Color("9fd08a"))
+		var hl: float = d.heal * (float(origin().get("food", 1.0)) if id != "medkit" else 1.0)
+		player.hp = minf(player.max_hp, player.hp + hl)
+		add_text(player.wpos, "+%d hp" % int(hl), Color("9fd08a"))
 	if hud.menu_open() or invs.visible: open_inventory()
 
 func quick_heal() -> void:
@@ -763,11 +833,12 @@ func open_trade(npc: Npc) -> void:
 		var id: String = e[0]
 		var n: int = e[1]
 		var cost: int = e[2]
+		cost = maxi(1, int(round(cost * float(origin().get("buy", 1.0)))))
 		btns.append(["Buy %s ×%d — %d scrap" % [Items.iname(id), n, cost], func(): _buy(npc, id, n, cost), _scrap_total() < cost])
 	for i in stock.size():
 		var id: String = stock[i]
 		if id == "": continue
-		var cost: int = Items.info(id).value
+		var cost: int = maxi(1, int(round(Items.info(id).value * float(origin().get("buy", 1.0)))))
 		var ii := i
 		btns.append(["Buy %s — %d scrap" % [Items.iname(id), cost], func(): _buy_stock(npc, ii, cost), _scrap_total() < cost])
 	for it in inventory:
@@ -776,8 +847,56 @@ func open_trade(npc: Npc) -> void:
 			var id: String = it.id
 			var val: int = maxi(1, int(d.value / 2))
 			btns.append(["Sell %s — +%d scrap" % [d.name, val], func(): _sell(npc, id, val), false])
+	if npc.settlement >= 0 and npc.settlement < world.settlements.size():
+		btns.insert(0, ["Trade goods (water, salt, glass…) »", func(): open_goods(npc), false])
 	btns.append(["Leave", hud.hide_menu, false])
 	hud.show_menu("Trader" if npc.type == "trader" else "Travelling merchant", lines, btns)
+
+func goods_carried() -> int:
+	var n := 0
+	for it in inventory:
+		if Items.info(it.id).get("trade", false): n += it.n
+	return n
+
+func goods_cap() -> int:
+	return 30 + int(origin().get("cap", 0)) + (10 if any_up("tent") else 0)
+
+## Commodity trading: this town's prices, buy 1 / 5, sell 1 / all.
+func open_goods(npc: Npc) -> void:
+	var st: World.Settlement = world.settlements[npc.settlement]
+	var m := Economy.market(world, npc.settlement)
+	var lines := ["%s market. You have %d scrap. Hauling %d / %d trade goods." % [st.name, _scrap_total(), goods_carried(), goods_cap()]]
+	var pm: float = origin().get("buy", 1.0)
+	var sm: float = origin().get("sell", 1.0)
+	var btns := []
+	for gd in m:
+		var e: Dictionary = m[gd]
+		var have := inv_count(gd)
+		var buy := maxi(1, int(round(e.buy * pm)))
+		var sell := maxi(1, int(round(e.sell * sm)))
+		var tag := " (local, cheap)" if e.made else (" (in demand)" if e.wanted else "")
+		lines.append("%s%s — buy %d · sell %d · you have %d" % [Items.iname(gd), tag, buy, sell, have])
+		var id: String = gd
+		if e.stock:
+			var room := goods_cap() - goods_carried()
+			btns.append(["Buy %s — %d" % [Items.iname(gd), buy], func(): _buy_good(npc, id, 1, buy), _scrap_total() < buy or room < 1])
+			btns.append(["Buy 5 %s — %d" % [Items.iname(gd), buy * 5], func(): _buy_good(npc, id, 5, buy), _scrap_total() < buy * 5 or room < 5])
+		if have > 0:
+			btns.append(["Sell %s — +%d" % [Items.iname(gd), sell], func(): _sell_good(npc, id, 1, sell), false])
+			if have > 1: btns.append(["Sell all %d %s — +%d" % [have, Items.iname(gd), sell * have], func(): _sell_good(npc, id, have, sell), false])
+	btns.append(["« Back", func(): open_trade(npc), false])
+	btns.append(["Leave", hud.hide_menu, false])
+	hud.show_menu("Trade goods", lines, btns)
+
+func _buy_good(npc: Npc, id: String, n: int, each: int) -> void:
+	if goods_carried() + n <= goods_cap() and _pay(each * n): inv_add(id, n)
+	open_goods(npc)
+
+func _sell_good(npc: Npc, id: String, n: int, each: int) -> void:
+	if inv_take(id, n):
+		player.carry.scrap += each * n
+		add_text(player.wpos, "+%d scrap" % (each * n), Color("f2e27a"))
+	open_goods(npc)
 
 # ------------------------------------------------------------------ input
 func _unhandled_input(ev: InputEvent) -> void:
@@ -930,6 +1049,7 @@ func interact() -> void:
 		"survivor":
 			var s: Actor = t.o
 			s.set_meta("recruited", true)
+			if s.has_meta("sp"): s.get_meta("sp").recruited = true
 			hud.toast("%s joined your group and heads to your main camp." % s.get_meta("name"))
 		"camp":
 			open_camp_menu()
@@ -979,6 +1099,7 @@ func interact() -> void:
 func _loot(c: World.Crate) -> void:
 	var p := player
 	c.open = true
+	if not c.has_meta("loot") and c.kind != "bag" and c.kind != "brute": world.opened[World.pkey(c.pos)] = true
 	if crate_nodes.has(c):
 		var spr: Sprite2D = crate_nodes[c]
 		if c.kind == "crate" or c.kind == "cache":
@@ -994,6 +1115,7 @@ func _loot(c: World.Crate) -> void:
 	if c.has_meta("extra"): items.append([c.get_meta("extra"), 1])
 	if any_up("bench") and rng.randf() < 0.5:
 		items.append([gun_info().get("ammo", "ammo_pistol"), 2])
+	if origin().get("scav", false) and c.kind != "bag" and not c.has_meta("loot"): mats[0] += 1
 	p.carry.scrap += mats[0]; p.carry.cloth += mats[1]; p.carry.wood += mats[2]
 	var parts := []
 	if mats[0]: parts.append("+%d scrap" % mats[0])
@@ -1022,7 +1144,7 @@ func melee() -> void:
 	p.swing = 0.16
 	var wa := p.world_aim()
 	var loud := false
-	var dmg: float = Items.info(equip.melee).get("dmg", 1)
+	var dmg: float = Items.info(equip.melee).get("dmg", 1) * float(origin().get("melee", 1.0))
 	for e in enemies:
 		if e.dead or e.fl != p.fl:
 			continue
@@ -1216,7 +1338,9 @@ func kill_enemy(e: Enemy, silent: bool) -> void:
 		return
 	e.dead = true
 	var sp = e.get_meta("sp") if e.has_meta("sp") else null
-	if sp != null: sp.dead = true
+	if sp != null:
+		sp.dead = true
+		if sp.has("key"): world.killed[sp.key] = true
 	player.kills += 1
 	var cols := [Color("8a6a4a"), Color("5a3a24"), Color("3a2a2a")] if e.type == "shellback" else ([Color("6a8a4a"), Color("8a3a3a"), Color("3a2a2a")] if e.type in ["ghoul", "brute"] else [Color("a83a2a"), Color("5a3a2a"), Color("3a2a2a")])
 	burst(e.wpos, 12, cols, 9.0, e.fl)
@@ -1482,6 +1606,10 @@ func _process(delta: float) -> void:
 		rebase()
 	_stream(false)
 	_discover()
+	save_t += delta
+	if save_t > 45.0:
+		save_t = 0.0
+		save_game()
 	var mv := _read_move()
 	_update_busy(delta, mv.length() > 0.2)
 	if not busy.is_empty(): mv = Vector2.ZERO
@@ -1564,6 +1692,105 @@ func _process(delta: float) -> void:
 	_update_visibility()
 	_update_camera()
 	_update_hud()
+
+# ------------------------------------------------------------------ saving
+## One save slot. The world itself is rebuilt from its seed; the save keeps what you changed:
+## you, your gear, camps, stash, everything you built (and the ground you levelled for it),
+## what you've discovered, looted and killed.
+func save_game() -> void:
+	if world == null or player == null or state == "title": return
+	var cps := []
+	for c in camps:
+		cps.append({"x": c.wpos.x, "y": c.wpos.y, "name": c.cname, "main": c.main, "up": c.up})
+	var pcs := []
+	for k in base.pieces:
+		var s: World.Seg = base.pieces[k].seg
+		pcs.append([k.x, k.y, k.z, s.tier, s.piece])
+	var fls := []
+	for t in base.floors: fls.append([t.x, t.y, base.floors[t].tier])
+	var fds := []
+	for t in base.founds: fds.append([t.x, t.y, base.founds[t].tier, base.founds[t].top])
+	var vhs := []
+	for v in base.orig: vhs.append([v.x, v.y, world.vh(v.x, v.y)])
+	var claimed := []
+	for id in base.claimed:
+		var b := world.bld(id)
+		if b: claimed.append([b.x0, b.y0])
+	var rec := []
+	for s in survivors:
+		if s.get_meta("recruited"): rec.append(s.get_meta("name"))
+	var d := {"v": 1, "seed": world.seed_value, "px": player.wpos.x, "py": player.wpos.y, "hp": player.hp, "max_hp": player.max_hp,
+		"kills": player.kills, "carry": player.carry, "inventory": inventory, "equip": equip, "stash": stash, "day_t": day_t,
+		"camps": cps, "pieces": pcs, "floors": fls, "founds": fds, "vh": vhs, "claimed": claimed, "recruited": rec,
+		"discovered": world.discovered, "opened": world.opened, "killed": world.killed, "origin": origin_id}
+	var f := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
+	if f: f.store_string(JSON.stringify(d))
+
+func load_game() -> void:
+	var txt := FileAccess.get_file_as_string(SAVE_PATH)
+	var d = JSON.parse_string(txt)
+	if typeof(d) != TYPE_DICTIONARY:
+		hud.toast("The save file couldn't be read. Starting a new world.")
+		start_new_world()
+		return
+	start_new_world(d)
+
+func _apply_save(d: Dictionary) -> void:
+	for c in camps: c.queue_free()
+	camps.clear()
+	for cd in d.get("camps", []):
+		var p := Vector2(cd.x, cd.y)
+		var ck := World.chunk_of(p)
+		world.ensure_ready(ck.x, ck.y)
+		var c := Camp.new()
+		root.add_child(c)
+		for k in cd.up: c.up[k] = cd.up[k]
+		c.setup(p, cd.name, cd.main)
+		_light_for("campfire_decor", p, world.hz(p.x, p.y))
+		camps.append(c)
+	for v in d.get("vh", []):
+		var key := Vector2i(int(v[0]), int(v[1]))
+		base.orig[key] = world.vh(key.x, key.y)
+		world.set_vh(key.x, key.y, float(v[2]))
+	for cl in d.get("claimed", []):
+		var id := world.building_at(cl[0] + 0.5, cl[1] + 0.5)
+		if id > 0: base.claim_building(id)
+	for t in d.get("founds", []): base.place_found(Vector2i(int(t[0]), int(t[1])), t[2], float(t[3]))
+	for t in d.get("floors", []): base.place_floor(Vector2i(int(t[0]), int(t[1])), t[2])
+	for k in d.get("pieces", []): base.place(Vector3i(int(k[0]), int(k[1]), int(k[2])), k[3], k[4])
+	player.wpos = Vector2(d.px, d.py)
+	player.hp = d.hp
+	player.max_hp = d.max_hp
+	player.kills = int(d.kills)
+	for k in d.carry: player.carry[k] = int(d.carry[k])
+	inventory = []
+	for it in d.inventory: inventory.append({"id": it.id, "n": int(it.n)})
+	equip = d.equip
+	for k in d.stash: stash[k] = int(d.stash[k])
+	day_t = d.day_t
+	origin_id = d.get("origin", "")
+	_recruited_names = d.get("recruited", [])
+	var main: Camp = camps[0] if camps.size() > 0 else null
+	for c in camps:
+		if c.main: main = c
+	for nm in _recruited_names:
+		var a := Actor.new()
+		root.add_child(a)
+		if not a.use_rendered("survivor", 8): a.make_body("survivor", 6, 16, 24)
+		a.wpos = main.wpos if main else player.wpos
+		a.set_meta("name", nm)
+		a.set_meta("recruited", true)
+		a.set_meta("slot", survivors.size())
+		survivors.append(a)
+	dog.wpos = player.wpos + Vector2(-1, 0)
+	player.sync()
+	rebase()
+	_refresh_gun()
+	recalc_max()
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_CLOSE_REQUEST or what == NOTIFICATION_APPLICATION_PAUSED or what == NOTIFICATION_APPLICATION_FOCUS_OUT:
+		if state == "play": save_game()
 
 ## Roaming encounters out in the open: every so often something comes over the rise — a raider
 ## gang, a pack of hounds... er, mutants, a lone merchant with a pack animal. Never next to towns.
@@ -2025,6 +2252,38 @@ func _debug_tour() -> void:
 		await get_tree().create_timer(0.3).timeout
 		await _snap(out + "/w_%s.png" % st[0])
 		print("TOUR %s at %s: %d ms, loaded %d chunks, %d enemies, %d npcs, %d views, %d trees" % [st[0], str(p.round()), t1 - t0, loaded.size(), enemies.size(), npcs.size(), views.size(), tree_nodes.size()])
+	get_tree().quit()
+
+## Trade + save round trip: buy goods at the start town, save, reload, check they're still there.
+func _debug_econ() -> void:
+	await get_tree().create_timer(1.0).timeout
+	var tr: Npc = null
+	for n in npcs:
+		if n.type == "trader" and n.settlement >= 0: tr = n; break
+	stash.scrap = 200
+	if tr:
+		open_goods(tr)
+		await get_tree().create_timer(0.3).timeout
+		await _snap("user://shots/econ_goods.png")
+		var m := Economy.market(world, tr.settlement)
+		for gd in m:
+			if m[gd].stock: _buy_good(tr, gd, 5, m[gd].buy)
+		print("ECON market ", world.settlements[tr.settlement].name, " ", m)
+	hud.hide_menu()
+	print("ECON carried goods ", goods_carried(), " scrap ", _scrap_total(), " inv ", inventory)
+	wmap.open()
+	await get_tree().create_timer(0.3).timeout
+	await _snap("user://shots/econ_map.png")
+	wmap.zoom = 4.0
+	wmap._layout()
+	await get_tree().create_timer(0.3).timeout
+	await _snap("user://shots/econ_map_zoom.png")
+	wmap.close()
+	save_game()
+	var inv_before := str(inventory)
+	load_game()
+	await get_tree().create_timer(1.0).timeout
+	print("ECON reload same inv: ", str(inventory) == inv_before, " origin ", origin_id, " pos ", player.wpos)
 	get_tree().quit()
 
 ## Walk along the interstate for a while, measuring frame times while chunks stream in.

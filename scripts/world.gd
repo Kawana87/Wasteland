@@ -1187,7 +1187,12 @@ var items := {}                  # chunk key -> {buildings, decor, cars, crates,
 var car_grid := {}               # tile index -> Array[Car]
 var door_grid := {}              # tile index -> true (outside tile of a door, and its neighbours)
 var discovered := {}             # location id -> true
+var opened := {}                 # crate position key -> true (survives a reload)
+var killed := {}                 # spawn key -> true
 var _mark := {}
+
+static func pkey(p: Vector2) -> String:
+	return "%d,%d" % [int(p.x * 4.0), int(p.y * 4.0)]
 
 static func ckey(cx: int, cy: int) -> int:
 	return cy * NC + cx
@@ -1208,7 +1213,7 @@ func density(x: int, y: int) -> int:
 func biome_name(p: Vector2) -> String:
 	return BIOMES[biome(int(p.x), int(p.y))]
 
-func load_data(sd: int) -> void:
+func load_data(sd: int, start_id: String = "patchwork") -> void:
 	seed_value = sd
 	rng.seed = sd
 	data = load("res://assets/worldmap/data/world_data.res")
@@ -1230,9 +1235,23 @@ func load_data(sd: int) -> void:
 	content_done.resize(NC * NC); content_done.fill(0)
 	_prep_roads(m.roads)
 	_prep_locations()
-	for l in locs:
-		if l.id == "patchwork":
-			start = l.pos + Vector2(-26.5, 9.5)
+	var sl := loc_by_id(start_id)
+	if sl.is_empty(): sl = loc_by_id("patchwork")
+	# home camp: on open, standable ground just outside town, preferring the side nearest a road
+	var best := Vector2(sl.pos) + Vector2(-sl.r - 12.0, 9.5)
+	var bs := -1e9
+	for k in 24:
+		var q: Vector2 = sl.pos + Vector2.from_angle(k * TAU / 24.0) * (sl.r + 12.0)
+		var ck := chunk_of(q)
+		for oy in range(-1, 2):
+			for ox in range(-1, 2):
+				ensure_base(ck.x + ox, ck.y + oy)
+		var i := idx(int(q.x), int(q.y))
+		if T[i] != GRASS or biome(int(q.x), int(q.y)) in [B_WATER, B_GORGE, B_PEAK]: continue
+		var score := -absf(hz(q.x, q.y) - hz(q.x + 3, q.y + 3)) - absf(hz(q.x, q.y) - hz(q.x - 3, q.y + 2))
+		if _road_near(q, 8.0) != Vector2.ZERO: score += 20.0
+		if score > bs: bs = score; best = q
+	start = Vector2(floor(best.x) + 0.5, floor(best.y) + 0.5)
 	ensure_content(chunk_of(start).x, chunk_of(start).y)
 
 ## Road polylines become dense point lists with a height profile: smoothed along the road, and carried
@@ -1481,6 +1500,11 @@ func _finish() -> void:
 			var key := ckey(ck.x, ck.y)
 			_bucket(key)[nm].append(it)
 			if nm == "spawns" or nm == "critters": it["chunk"] = key
+			if nm == "spawns":
+				it["key"] = it.type + pkey(it.pos)
+				if killed.has(it.key): it["dead"] = true
+			elif nm == "crates" and opened.has(pkey(it.pos)):
+				it.open = true
 	for b in buildings.slice(_mark.buildings):
 		if b.door_seg != null:
 			for oy in range(-1, 2):

@@ -194,10 +194,11 @@ func _detail() -> void:
 		"melee": lines.append("Damage  %d" % d.dmg)
 		"head", "body": lines.append("Armour  %d  (−%d%% damage)" % [d.armor, d.armor * 7])
 		"use": lines.append("Heals  %d HP" % d.heal)
+	if d.get("trade", false): lines.append("Trade good — prices differ town to town")
 	lines.append("Value  %d scrap" % d.get("value", 0))
 	if d.has("tier"): lines.append("Quality  " + ["—", "Worn", "Standard", "Fine"][clampi(d.tier, 0, 3)])
 	var st := Hud.term_label(16); st.text = "\n".join(lines); detail.add_child(st)
-	var ds := Hud.term_label(14); ds.text = DESC.get(sel, ""); ds.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	var ds := Hud.term_label(14); ds.text = DESC.get(sel, d.get("desc", "")); ds.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	ds.custom_minimum_size = Vector2(290, 0); ds.add_theme_color_override("font_color", Hud.INK_DIM); detail.add_child(ds)
 	var slot: String = d.get("slot", "")
 	if slot == "use":

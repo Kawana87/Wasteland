@@ -12,6 +12,7 @@ var toast_l: Label
 var toast_t := 0.0
 var menu: PanelContainer
 var menu_box: VBoxContainer
+var menu_scroll: ScrollContainer
 var title_layer: Control
 var touch: TouchControls
 var crt_btn: Button
@@ -64,9 +65,12 @@ func _ready() -> void:
 	menu.set_anchors_preset(Control.PRESET_CENTER)
 	menu.custom_minimum_size = Vector2(440, 0)
 	menu.add_theme_stylebox_override("panel", _box(Color(0.17, 0.13, 0.25, 0.97)))
+	menu_scroll = ScrollContainer.new()
+	menu_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	menu.add_child(menu_scroll)
 	menu_box = VBoxContainer.new()
 	menu_box.add_theme_constant_override("separation", 8)
-	menu.add_child(menu_box)
+	menu_scroll.add_child(menu_box)
 	menu.visible = false
 	root.add_child(menu)
 	title_layer = Control.new()
@@ -161,9 +165,14 @@ func show_menu(title: String, lines: Array, buttons: Array) -> void:
 		btn.pressed.connect(b[1])
 		menu_box.add_child(btn)
 	menu.visible = true
+	menu_scroll.custom_minimum_size = Vector2.ZERO
 	await get_tree().process_frame
+	var vs := get_viewport().get_visible_rect().size
+	var want := menu_box.get_combined_minimum_size()
+	menu_scroll.custom_minimum_size = Vector2(want.x + 12, minf(want.y, vs.y - 60))
+	menu_scroll.scroll_vertical = 0
 	menu.reset_size()
-	menu.position = (get_viewport().get_visible_rect().size - menu.size) * 0.5
+	menu.position = (vs - menu.size) * 0.5
 
 func hide_menu() -> void:
 	menu.visible = false
@@ -171,7 +180,7 @@ func hide_menu() -> void:
 func menu_open() -> bool:
 	return menu.visible
 
-func show_title(text: String, on_start: Callable) -> void:
+func show_title(text: String, on_start: Callable, on_continue: Callable = Callable()) -> void:
 	for c in title_layer.get_children():
 		c.queue_free()
 	title_layer.visible = true
@@ -203,6 +212,18 @@ func show_title(text: String, on_start: Callable) -> void:
 	go.pressed.connect(func():
 		title_layer.visible = false
 		on_start.call())
+	if on_continue.is_valid():
+		var cont := Button.new()
+		cont.text = "  Continue  "
+		term_button(cont)
+		cont.add_theme_font_size_override("font_size", 22)
+		cont.focus_mode = Control.FOCUS_NONE
+		cont.pressed.connect(func():
+			title_layer.visible = false
+			on_continue.call())
+		box.add_child(cont)
+		go.text = "  Start over (new character)  "
+		go.add_theme_font_size_override("font_size", 16)
 	box.add_child(go)
 	await get_tree().process_frame
 	box.reset_size()

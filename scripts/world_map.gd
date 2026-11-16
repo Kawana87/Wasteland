@@ -149,6 +149,9 @@ func _show_card(l: Dictionary) -> void:
 		if known:
 			if l.get("trade", "") != "":
 				var tr := Hud.term_label(15); tr.text = "Trades in: " + l.trade; card_box.add_child(tr)
+			var ec := Economy.summary(w, l.id)
+			if ec != "":
+				var el := Hud.term_label(15); el.text = ec; el.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; el.custom_minimum_size = Vector2(320, 0); card_box.add_child(el)
 			var pt := Hud.term_label(15); pt.text = l.pitch
 			pt.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 			pt.custom_minimum_size = Vector2(320, 0)

@@ -200,7 +200,62 @@ def caps():
         cyl(x, y, k * 0.01, k * 0.01 + 0.05, 0.1, m(["#c02020", "#c8a040", "#2a6ab0"][k % 3], 0.4, 0.6), 16)
 
 
-ICONS = {"pipe_pistol": pipe_pistol, "pistol_10mm": pistol_10mm, "smg": smg, "shotgun": shotgun, "rifle": rifle,
+def water():
+    for k, (x, y) in enumerate(((-0.2, -0.1), (0.15, -0.12), (0.0, 0.18))):
+        cyl(x, y, 0, 0.42, 0.13, m("#7ab0c0", 0.15, 0.0, 0.05), 18)
+        cyl(x, y, 0.42, 0.5, 0.06, m("#4a8aa0", 0.3), 12)
+        cyl(x, y, 0.5, 0.56, 0.065, m("#2a5a8a", 0.5), 12)
+        cyl(x, y, 0.12, 0.28, 0.135, m("#e8e0c8", 0.6), 18)
+
+
+def salt():
+    sphere(0, 0, 0.2, 0.34, m("#d8d0bc", 0.95))
+    cyl(0, 0, 0.0, 0.3, 0.33, m("#c8bea4", 0.95), 16)
+    cyl(0, 0, 0.3, 0.44, 0.12, m("#a89a7a", 0.9), 12)
+    box(-0.1, -0.34, 0.08, 0.1, -0.33, 0.22, m("#8a3a2a", 0.8))
+
+
+def glass():
+    rng = random.Random(7)
+    for k in range(7):
+        x, y = rng.uniform(-0.3, 0.3), rng.uniform(-0.25, 0.25)
+        h = rng.uniform(0.15, 0.4)
+        o = box(x - 0.08, y - 0.06, 0, x + 0.08, y + 0.06, h, m(rng.choice(["#4ac0a0", "#3a9a8a", "#6ad0b0"]), 0.05, 0.0, 0.02))
+        rot_z(o, rng.uniform(0, 90), (x, y))
+
+
+def copper():
+    for k in range(5):
+        cyl(0, 0, k * 0.07, k * 0.07 + 0.06, 0.32 - (k % 2) * 0.02, m("#c87a40", 0.35, 0.9), 24)
+    cyl(0, 0, 0, 0.36, 0.14, m("#3a2a20", 0.8), 16)
+
+
+def fuel():
+    box(-0.32, -0.12, 0, 0.32, 0.12, 0.55, m("#b03a28", 0.5, 0.3))
+    box(-0.2, -0.04, 0.55, 0.05, 0.04, 0.66, m("#2e2c2a", 0.5, 0.5))
+    cyl(0.2, 0, 0.55, 0.68, 0.05, m("#c8a040", 0.4, 0.8), 10)
+    box(-0.33, -0.13, 0.22, 0.33, 0.13, 0.26, m("#7a2418", 0.6))
+
+
+def tech():
+    box(-0.4, -0.3, 0, 0.4, 0.3, 0.05, m("#2a6a3a", 0.6))
+    for k in range(6):
+        x, y = -0.25 + (k % 3) * 0.25, -0.12 + (k // 3) * 0.24
+        box(x - 0.06, y - 0.05, 0.05, x + 0.06, y + 0.05, 0.12, m("#2e2c2a", 0.5, 0.4))
+    for k in range(3):
+        cyl(-0.25 + k * 0.25, 0.0, 0.05, 0.3, 0.05, m("#d8c8a0", 0.1, 0.0, 0.02), 10)
+
+
+def produce():
+    cyl(0, 0, 0, 0.22, 0.36, m("#8a6a3a", 0.9), 18)
+    rng = random.Random(3)
+    for k in range(7):
+        x, y = rng.uniform(-0.22, 0.22), rng.uniform(-0.22, 0.22)
+        sphere(x, y, 0.28, 0.1, m(rng.choice(["#c03a2a", "#d89a30", "#6a9a3a"]), 0.6))
+
+
+ICONS = {"water": water, "salt": salt, "glass": glass, "copper": copper, "fuel": fuel, "tech": tech, "produce": produce,
+         "pipe_pistol": pipe_pistol, "pistol_10mm": pistol_10mm, "smg": smg, "shotgun": shotgun, "rifle": rifle,
          "pipe": pipe, "machete": machete, "spiked_bat": spiked_bat, "cap": cap, "road_helmet": road_helmet,
          "jacket": jacket, "raider_plates": raider_plates, "combat_vest": combat_vest, "ammo_pistol": ammo_pistol,
          "ammo_shell": ammo_shell, "ammo_rifle": ammo_rifle, "medkit": medkit, "food": food, "lockpick": lockpick,

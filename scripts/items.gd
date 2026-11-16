@@ -26,6 +26,14 @@ const DB := {
 	"medkit": {"name": "Med Kit", "slot": "use", "heal": 12, "value": 10},
 	"food": {"name": "Canned Food", "slot": "use", "heal": 4, "value": 3},
 	"lockpick": {"name": "Lockpick", "slot": "tool", "value": 2},
+	# trade goods: worth more in some towns than others (see Economy). Water and produce can be eaten.
+	"water": {"name": "Purified Water", "slot": "use", "heal": 3, "value": 6, "trade": true, "desc": "Clean water in old bottles. Worth a fortune in dry country."},
+	"produce": {"name": "Fresh Produce", "slot": "use", "heal": 2, "value": 4, "trade": true, "desc": "Mutfruit, tatos and corn from the farms."},
+	"salt": {"name": "Salt", "slot": "trade", "value": 5, "trade": true, "desc": "Sacks of salt from the flats. Keeps meat, cleans wounds."},
+	"glass": {"name": "Crater Glass", "slot": "trade", "value": 9, "trade": true, "desc": "Green glass fused by the bomb. Lens makers and jewellers want it."},
+	"copper": {"name": "Copper Wire", "slot": "trade", "value": 8, "trade": true, "desc": "Coils of salvaged wire from the canyon mines."},
+	"fuel": {"name": "Fuel Can", "slot": "trade", "value": 12, "trade": true, "desc": "Refined fuel. Runs generators, lamps and the odd truck."},
+	"tech": {"name": "Old-World Tech", "slot": "trade", "value": 15, "trade": true, "desc": "Circuit boards and vacuum tubes. Everybody needs spares."},
 }
 
 static func info(id: String) -> Dictionary:
@@ -49,6 +57,10 @@ static func roll_loot(kind: String, rng: RandomNumberGenerator) -> Array:
 	var ammo: String = ["ammo_pistol", "ammo_pistol", "ammo_shell", "ammo_rifle"][rng.randi_range(0, 3)]
 	if kind in ["desk", "filing", "dresser", "locker", "workbench", "terminal", "shopcounter"] and rng.randf() < 0.3:
 		out.append(["lockpick", rng.randi_range(1, 2)])
+	var trade := {"car": ["fuel", 0.25], "terminal": ["tech", 0.35], "workbench": ["copper", 0.25], "fridge": ["water", 0.3],
+		"cache": ["fuel", 0.2], "shopshelf": ["produce", 0.15], "locker": ["tech", 0.12], "filing": ["tech", 0.08]}
+	if trade.has(kind) and rng.randf() < trade[kind][1]:
+		out.append([trade[kind][0], rng.randi_range(1, 2)])
 	match kind:
 		"cache":
 			out.append([ammo, rng.randi_range(6, 14)])
