@@ -548,6 +548,7 @@ func respawn() -> void:
 	for e in enemies:
 		e.aw = 0.0
 	state = "play"
+	save_game()
 	hud.toast("You came to at %s, bruised, three hours later.%s" % [c.cname, " Your pack is where you fell — it's on your compass." if not recovery.is_empty() else ""])
 
 ## On going down: carried scrap and materials and all trade goods go into a bag where you fell.

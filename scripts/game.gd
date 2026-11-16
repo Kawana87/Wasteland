@@ -78,6 +78,8 @@ func _ready() -> void:
 			if a.begins_with("--origin="): oid = a.substr(9)
 		if "--continue" in args: load_game.call_deferred()
 		else: start_new_world.call_deferred({}, oid)
+		if "--savecheck" in args:
+			dbg._debug_save_check.call_deferred()
 		if "--combatcheck" in args:
 			dbg._debug_combat_check.call_deferred()
 		if "--econcheck" in args:
@@ -119,7 +121,14 @@ func _ready() -> void:
 		if "--build" in args:
 			dbg._debug_build.call_deferred()
 		return
-	hud.show_title("The Sable Wastes: one great wasteland, ten minutes edge to edge on foot — lakes, fens, salt flats, red canyons,\na glass crater and the ruins of Port Sterling. Fifty places on the map, and plenty more nobody wrote down.\nTowns trade gear, and each pays well for goods from far away: buy cheap, haul it across the wastes, sell high.\nSet up camps anywhere, build bases, claim raider dens, and fast travel to anywhere you've found.\n\nAiming is automatic: you lock on to the nearest enemy in range (orange brackets). Just fire.\nPC: WASD move · left click / Q fire · F melee · C sneak · E use · I inventory · M map · B camp · H heal · V CRT\nGamepad: left stick move · RT fire · B melee · X use · Y sneak\nTouch: left thumb moves · FIRE (hold) · HIT · USE · SNEAK · INV · MAP · CAMP", choose_origin, load_game if FileAccess.file_exists(SAVE_PATH) else Callable())
+	_show_title()
+
+
+func _show_title() -> void:
+	var touch := DisplayServer.is_touchscreen_available()
+	var ctl := ("Touch: left thumb moves (a stick appears where you touch) · hold FIRE to shoot — aim locks on by itself\nHIT melee · USE talk, loot, doors · SNEAK · HEAL · INV inventory · MAP world map · CAMP camp menu"
+		if touch else "Move WASD · fire left click or Q — aim locks on by itself · F melee · E use · C sneak\nH heal · I inventory · M map · B camp menu · V CRT filter\nGamepad: left stick move · RT fire · B melee · X use · Y sneak")
+	hud.show_title("One great wasteland to walk across, from Lake Winona to the ruins of Port Sterling.\nTrade, scavenge and build your way from nobody to somebody.", new_game_flow, load_game if FileAccess.file_exists(SAVE_PATH) else Callable(), ctl)
 
 
 func _setup_input() -> void:
@@ -143,14 +152,22 @@ func _setup_input() -> void:
 			InputMap.action_add_event(a, j)
 
 
+## New game: confirm first if it would replace a saved character, then pick an origin.
+func new_game_flow() -> void:
+	if FileAccess.file_exists(SAVE_PATH):
+		hud.show_menu("Start over?", ["This will replace your saved character. (The current save is kept as a backup until your next save.)"],
+			[["Yes, start a new character", func(): hud.hide_menu(); choose_origin(), false], ["Back", func(): hud.hide_menu(); _show_title(), false]])
+	else:
+		choose_origin()
+
+## One card per origin: name, upside, catch — tap the card to start.
 func choose_origin() -> void:
 	var btns := []
-	var lines := ["Who were you before you walked into the Sable Wastes?"]
 	for o in ORIGINS:
-		lines.append("%s — + %s  − %s" % [o.name, o.pro, o.con])
 		var oid: String = o.id
-		btns.append([o.name, func(): hud.hide_menu(); start_new_world({}, oid), false])
-	hud.show_menu("Choose your start", lines, btns)
+		btns.append(["%s\n  + %s\n  − %s" % [o.name.to_upper(), o.get("pro_s", o.pro), o.get("con_s", o.con)], func(): hud.hide_menu(); start_new_world({}, oid), false])
+	btns.append(["Back", func(): hud.hide_menu(); _show_title(), false])
+	hud.show_menu("Who were you before the Wastes?", [], btns)
 
 
 func start_new_world(save: Dictionary = {}, oid: String = "drifter") -> void:

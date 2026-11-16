@@ -6,6 +6,8 @@ extends Node
 
 static var I: Game
 var dbg = null                   # DebugRuns, only with --autostart
+const SAVE_VERSION := 2
+const BAK_PATH := "user://save.bak.json"
 var econ := {"sat": {}, "purse": {}, "stock": {}}   # the player's effect on markets (see Economy)
 var days := 0                    # whole days passed
 var trade_xp_day := {}           # settlement index -> day trade XP was last given there
@@ -138,26 +140,32 @@ var rng := RandomNumberGenerator.new()
 const ORIGINS := [
 	{"id": "drifter", "name": "Road-worn Drifter", "loc": "patchwork",
 		"pro": "Starts at Patchwork, the friendliest town in the Wastes, with extra med kits and food.",
+		"pro_s": "Friendly start town, extra meds and food", "con_s": "No special edge",
 		"con": "Nothing special about you. Yet.",
 		"kit": [["pipe_pistol", 1], ["ammo_pistol", 18], ["medkit", 2], ["food", 3], ["lockpick", 3]]},
 	{"id": "water_runner", "name": "Clearwater Water-runner", "loc": "clearwater",
 		"pro": "Starts by Lake Winona with 6 water and 20 scrap. Trade goods sell for 15% more.",
+		"pro_s": "Trade goods sell for 15% more, 20 scrap", "con_s": "16 max health",
 		"con": "Grew up soft by the lake: 16 max health.",
 		"kit": [["pipe_pistol", 1], ["ammo_pistol", 14], ["medkit", 1], ["water", 6], ["lockpick", 2]], "scrap": 20, "sell": 1.15, "hp": 16},
 	{"id": "ex_con", "name": "Iron Gate Ex-con", "loc": "iron_gate_pen",
 		"pro": "Melee hits 50% harder. Starts with a machete and 6 lockpicks.",
+		"pro_s": "Melee +50%, machete, 6 lockpicks", "con_s": "Everything costs 20% more, 6 rounds",
 		"con": "Traders don't trust you: everything costs 20% more. Only 6 rounds.",
 		"kit": [["machete", 1], ["pipe_pistol", 1], ["ammo_pistol", 6], ["food", 2], ["lockpick", 6]], "melee": 1.5, "buy": 1.2, "equip": {"melee": "machete"}},
 	{"id": "scavenger", "name": "Redwall Scavenger", "loc": "redwall",
 		"pro": "Finds an extra scrap in every container and can haul 15 more trade goods.",
+		"pro_s": "+1 scrap per container, +15 cargo", "con_s": "No gun, remote south-west start",
 		"con": "No gun to start with, just a lead pipe — out in the red canyons of the south-west.",
 		"kit": [["pipe", 1], ["medkit", 1], ["food", 2], ["copper", 3], ["lockpick", 4]], "scav": true, "cap": 15, "equip": {"melee": "pipe", "gun": ""}},
 	{"id": "farmhand", "name": "Greenmarsh Farmhand", "loc": "greenmarsh",
 		"pro": "Food, water and produce heal twice as much. Starts with 8 produce and a jacket.",
+		"pro_s": "Food heals double, 8 produce, jacket", "con_s": "Remote southern start, 8 rounds",
 		"con": "Far down in the southern fens, a long walk from anywhere. Only 8 rounds.",
 		"kit": [["pipe_pistol", 1], ["ammo_pistol", 8], ["produce", 8], ["jacket", 1]], "food": 2.0, "equip": {"body": "jacket"}},
 	{"id": "raider", "name": "Port Sterling Raider", "loc": "sterling_downtown",
 		"pro": "Best gear of any start (10mm pistol, raider plates, spiked bat). Raiders leave you alone unless you start trouble, and the fence at your hideout pays 25% more for gear and stocks better guns.",
+		"pro_s": "Best gear, raiders leave you alone", "con_s": "Towns charge 35% more, camps refuse you",
 		"con": "Town traders charge 35% more and pay 20% less; small camps and scavengers won't deal with you, and survivors won't join a raider. You start downtown among the ghouls, a long way from any friendly town.",
 		"kit": [["pistol_10mm", 1], ["ammo_pistol", 30], ["raider_plates", 1], ["spiked_bat", 1], ["medkit", 2], ["lockpick", 4]],
 		"scrap": 15, "raider": true, "buy": 1.35, "sell": 0.8, "equip": {"gun": "pistol_10mm", "melee": "spiked_bat", "body": "raider_plates"}},
@@ -287,4 +295,6 @@ func open_sleep(at_camp: bool) -> void:
 func start_new_world(save: Dictionary = {}, oid: String = "drifter") -> void:
 	pass
 func save_game() -> void:
+	pass
+func choose_origin() -> void:
 	pass

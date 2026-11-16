@@ -42,8 +42,10 @@ func toggle_crt() -> void:
 ## what you've discovered, looted and killed.
 func save_game() -> void:
 	if world == null or player == null or state == "title": return
+	if state == "travel" and not travel.has("from"): return      # underground swaps, sleeping: next save catches it
 	var w_saved := world
 	var pos_saved := player.wpos
+	if state == "travel": player.wpos = travel.from
 	if under != "":
 		world = ow.world
 		player.wpos = ow.pos
@@ -67,7 +69,7 @@ func save_game() -> void:
 	var rec := []
 	for s in survivors:
 		if s.get_meta("recruited"): rec.append(s.get_meta("name"))
-	var d := {"v": 1, "seed": world.seed_value, "px": player.wpos.x, "py": player.wpos.y, "hp": player.hp, "max_hp": player.max_hp,
+	var d := {"v": SAVE_VERSION, "seed": world.seed_value, "px": player.wpos.x, "py": player.wpos.y, "hp": player.hp, "max_hp": player.max_hp,
 		"kills": player.kills, "carry": player.carry, "inventory": inventory, "equip": equip, "stash": stash, "day_t": day_t,
 		"camps": cps, "pieces": pcs, "floors": fls, "founds": fds, "vh": vhs, "claimed": claimed, "recruited": rec,
 		"discovered": world.discovered, "opened": world.opened, "killed": world.killed, "origin": origin_id,
@@ -75,18 +77,73 @@ func save_game() -> void:
 	d["under"] = under_state
 	world = w_saved
 	player.wpos = pos_saved
-	var f := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
-	if f: f.store_string(JSON.stringify(d))
+	_write_save(JSON.stringify(d))
 
 
+## Saves are written to a temp file and renamed into place, so an app killed mid-save (Android does
+## this right after the app loses focus) never leaves a half-written save. The previous save is kept
+## as save.bak.json.
+func _write_save(txt: String) -> void:
+	var tmp := SAVE_PATH + ".tmp"
+	var f := FileAccess.open(tmp, FileAccess.WRITE)
+	if f == null: return
+	f.store_string(txt)
+	f.flush()
+	f.close()
+	if typeof(JSON.parse_string(FileAccess.get_file_as_string(tmp))) != TYPE_DICTIONARY: return
+	var real := ProjectSettings.globalize_path(SAVE_PATH)
+	if FileAccess.file_exists(SAVE_PATH):
+		DirAccess.copy_absolute(real, ProjectSettings.globalize_path(BAK_PATH))
+	DirAccess.rename_absolute(ProjectSettings.globalize_path(tmp), real)
+
+
+static func _read_save(path: String):
+	if not FileAccess.file_exists(path): return null
+	var d = JSON.parse_string(FileAccess.get_file_as_string(path))
+	return d if typeof(d) == TYPE_DICTIONARY else null
+
+
+## Bring an older save up to date (bump SAVE_VERSION whenever save fields change).
+static func migrate(d: Dictionary) -> Dictionary:
+	var v := int(d.get("v", 1))
+	if v < 2:
+		# v2: markets, day counter, recovery bag, bruised, underground state
+		for k in ["econ", "trade_xp_day", "recovery", "under"]:
+			if not d.has(k): d[k] = {}
+		if not d.has("days"): d.days = 0
+		if not d.has("bruised"): d.bruised = 0.0
+		# v1 kept scrap in the stash for trading; hand back what was carried
+	d.v = SAVE_VERSION
+	return d
+
+
+## Never silently replace a broken save: fall back to the backup, and if that fails too, ask.
 func load_game() -> void:
-	var txt := FileAccess.get_file_as_string(SAVE_PATH)
-	var d = JSON.parse_string(txt)
-	if typeof(d) != TYPE_DICTIONARY:
-		hud.toast("The save file couldn't be read. Starting a new world.")
-		start_new_world()
+	var d = _read_save(SAVE_PATH)
+	if d == null:
+		var b = _read_save(BAK_PATH)
+		if b != null:
+			hud.toast("Your last save couldn't be read — loaded the backup from just before it.")
+			start_new_world(migrate(b))
+			return
+		_broken_save_menu()
 		return
-	start_new_world(d)
+	start_new_world(migrate(d))
+
+func _broken_save_menu() -> void:
+	var btns := []
+	if FileAccess.file_exists(BAK_PATH):
+		btns.append(["Try the backup", func():
+			var b = _read_save(BAK_PATH)
+			hud.hide_menu()
+			if b != null: start_new_world(migrate(b))
+			else: _broken_save_menu(), false])
+	btns.append(["Start a new world (old save kept as save.broken.json)", func():
+		DirAccess.rename_absolute(ProjectSettings.globalize_path(SAVE_PATH), ProjectSettings.globalize_path("user://save.broken.json"))
+		hud.hide_menu()
+		choose_origin(), false])
+	btns.append(["Quit", func(): get_tree().quit(), false])
+	hud.show_menu("Save problem", ["Your save file couldn't be read, and there's no working backup.", "Nothing has been overwritten."], btns)
 
 
 func _apply_save(d: Dictionary) -> void:
@@ -177,4 +234,4 @@ func _apply_save(d: Dictionary) -> void:
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_CLOSE_REQUEST or what == NOTIFICATION_APPLICATION_PAUSED or what == NOTIFICATION_APPLICATION_FOCUS_OUT:
-		if state == "play": save_game()
+		if state == "play" or state == "travel": save_game()

@@ -908,3 +908,47 @@ func _debug_combat_check() -> void:
 	check("death drops a recovery bag", not g.recovery.is_empty() and g.inv_count("fuel") == 0 and g.player.carry.scrap == 0, "bag %s, fuel carried %d, scrap %d" % [str(not g.recovery.is_empty()), g.inv_count("fuel"), g.player.carry.scrap])
 	check("waking costs something", g.player.hp < g.player.max_hp and g.bruised_t > 0.0, "hp %.0f/%.0f, bruised %.0f" % [g.player.hp, g.player.max_hp, g.bruised_t])
 	finish()
+
+## Review 1 save safety: backups, corrupted saves, start-over confirmation.
+func _debug_save_check() -> void:
+	await g.get_tree().create_timer(1.0).timeout
+	g.save_game()
+	g.player.carry.scrap = 77
+	g.save_game()
+	check("backup written", FileAccess.file_exists(g.BAK_PATH), "save.bak.json exists")
+	# a half-written temp file must not hurt the real save
+	var f := FileAccess.open(g.SAVE_PATH + ".tmp", FileAccess.WRITE)
+	f.store_string("{\"v\": 2, \"seed\": 12, \"px\"")
+	f.close()
+	check("save survives a killed write", g._read_save(g.SAVE_PATH) != null, "save.json still parses with a broken .tmp beside it")
+	# corrupt the save: loading should fall back to the backup
+	f = FileAccess.open(g.SAVE_PATH, FileAccess.WRITE)
+	f.store_string("{garbage")
+	f.close()
+	g.load_game()
+	await g.get_tree().create_timer(1.0).timeout
+	check("corrupt save loads backup", g.state == "play", "state %s after loading with a corrupt save" % g.state)
+	# corrupt both: never silently replaced
+	for p in [g.SAVE_PATH, g.BAK_PATH]:
+		f = FileAccess.open(p, FileAccess.WRITE)
+		f.store_string("{garbage")
+		f.close()
+	g.load_game()
+	await g.get_tree().create_timer(0.3).timeout
+	check("broken saves ask first", g.hud.menu_open() and FileAccess.get_file_as_string(g.SAVE_PATH) == "{garbage", "menu open %s, save untouched %s" % [str(g.hud.menu_open()), str(FileAccess.get_file_as_string(g.SAVE_PATH) == "{garbage")])
+	await _snap("user://shots/save_broken.png")
+	g.hud.hide_menu()
+	g.new_game_flow()
+	await g.get_tree().create_timer(0.3).timeout
+	check("start over asks", g.hud.menu_open(), "confirmation shown with a save present")
+	await _snap("user://shots/save_confirm.png")
+	g.hud.hide_menu()
+	g.choose_origin()
+	await g.get_tree().create_timer(0.4).timeout
+	await _snap("user://shots/origin_cards.png")
+	g.hud.hide_menu()
+	var m := g.migrate({"v": 1, "seed": 3})
+	check("old saves migrate", int(m.v) == g.SAVE_VERSION and m.has("econ") and m.has("days"), "v1 -> v%d" % int(m.v))
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(g.SAVE_PATH))
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(g.BAK_PATH))
+	finish()

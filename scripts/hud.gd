@@ -313,6 +313,9 @@ func show_menu(title: String, lines: Array, buttons: Array) -> void:
 		term_button(btn)
 		btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		btn.custom_minimum_size = Vector2(400, 40)
+		if "\n" in btn.text:
+			btn.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			btn.custom_minimum_size = Vector2(480, 0)
 		btn.pressed.connect(b[1])
 		menu_box.add_child(btn)
 	menu.visible = true
@@ -331,7 +334,7 @@ func hide_menu() -> void:
 func menu_open() -> bool:
 	return menu.visible
 
-func show_title(text: String, on_start: Callable, on_continue: Callable = Callable()) -> void:
+func show_title(text: String, on_start: Callable, on_continue: Callable = Callable(), controls: String = "") -> void:
 	for c in title_layer.get_children():
 		c.queue_free()
 	title_layer.visible = true
@@ -376,6 +379,19 @@ func show_title(text: String, on_start: Callable, on_continue: Callable = Callab
 		go.text = "  Start over (new character)  "
 		go.add_theme_font_size_override("font_size", 16)
 	box.add_child(go)
+	if controls != "":
+		var cb := Button.new()
+		cb.text = "  Controls  "
+		term_button(cb)
+		cb.add_theme_font_size_override("font_size", 16)
+		cb.focus_mode = Control.FOCUS_NONE
+		cb.pressed.connect(func():
+			body.text = controls if body.text == text else text
+			cb.text = "  Back  " if body.text == controls else "  Controls  "
+			await get_tree().process_frame
+			box.reset_size()
+			box.position = (get_viewport().get_visible_rect().size - box.size) * 0.5)
+		box.add_child(cb)
 	await get_tree().process_frame
 	box.reset_size()
 	box.position = (get_viewport().get_visible_rect().size - box.size) * 0.5

@@ -422,6 +422,11 @@ func _arrive_trip() -> void:
 	else:
 		advance_time(tc.hours)
 		travel.msg = "Arrived at %s. %d hours on the road, %d food or water eaten." % [travel.to.cname, int(round(tc.hours)), tc.meals]
+	_save_after_arrival.call_deferred()
+
+func _save_after_arrival() -> void:
+	while state == "travel": await get_tree().process_frame
+	save_game()
 
 
 ## Fast travel to a discovered location from the map.
