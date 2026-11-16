@@ -403,4 +403,4 @@ func show_notes() -> void:
 		var ii: int = i
 		btns.append([Lore.NOTES[i][0], func(): show_note(ii), false])
 	btns.append(["Close", hud.hide_menu, false])
-	hud.show_menu("Notes & holotapes", ["You've found %d of %d." % [notes_read.size(), Lore.NOTES.size()]], btns)
+	hud.show_menu("Notes & tapes", ["You've found %d of %d." % [notes_read.size(), Lore.NOTES.size()]], btns)

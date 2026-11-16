@@ -104,9 +104,18 @@ func _draw() -> void:
 		draw_arc(c, r, 0, TAU, 40, Color(0.55, 1.0, 0.63, 0.85) if b.name != "fire" else Color(1.0, 0.6, 0.45, 0.9), 2.5 if b.name == "fire" else 2.0)
 		var ts := font.get_string_size(b.label, HORIZONTAL_ALIGNMENT_CENTER, -1, fs)
 		draw_string(font, c + Vector2(-ts.x * 0.5, fs * 0.38), b.label, HORIZONTAL_ALIGNMENT_CENTER, -1, fs, Color("8dffa0") if b.name != "fire" else Color("ffc0a8"))
-	for side in sticks:
-		var st: Dictionary = sticks[side]
-		if st.is_empty():
-			continue
-		draw_arc(st.origin, STICK_R, 0, TAU, 32, Color(1, 1, 1, 0.35), 2.0)
-		draw_circle(st.pos, 22, Color(1, 1, 1, 0.4))
+	if build_mode:
+		return
+	# move stick: a resting base bottom-left shows where to put your thumb;
+	# it follows your thumb (floating stick) while held
+	var st: Dictionary = sticks.L
+	var o: Vector2 = Vector2(150, size.y - 160) if st.is_empty() else st.origin
+	var k: Vector2 = o if st.is_empty() else st.pos
+	var a := 0.5 if st.is_empty() else 0.85
+	draw_circle(o, STICK_R, Color(0.1, 0.5, 0.2, 0.16 * a / 0.5))
+	draw_arc(o, STICK_R, 0, TAU, 40, Color(0.55, 1.0, 0.63, a), 2.0)
+	for i in 4:
+		var d := Vector2.RIGHT.rotated(i * PI * 0.5)
+		draw_line(o + d * (STICK_R - 12), o + d * (STICK_R - 4), Color(0.55, 1.0, 0.63, a * 0.7), 2.0)
+	draw_circle(k, 26, Color(0.55, 1.0, 0.63, 0.25 + a * 0.3))
+	draw_arc(k, 26, 0, TAU, 24, Color(0.8, 1.0, 0.85, a), 2.0)

@@ -522,7 +522,7 @@ func _discover() -> void:
 
 func _world_life(delta: float) -> void:
 	var p := player
-	# day / night colour grade — a full day takes 8 minutes
+	# day / night colour grade — a full day takes 24 minutes (DAY_LEN)
 	day_t += delta / DAY_LEN
 	if day_t >= 1.0:
 		day_t -= 1.0
@@ -667,3 +667,19 @@ func _update_camera() -> void:
 		if f.t <= 0.0:
 			l.queue_free()
 	floaters = floaters.filter(func(f): return f.t > 0.0)
+	# keep speech and damage numbers from piling on top of each other:
+	# newer labels get pushed up above any older one they overlap
+	var placed: Array[Rect2] = []
+	for f in floaters:
+		var l: Label = f.label
+		var r := Rect2(l.position, l.size).grow(2.0)
+		for _i in 8:
+			var hit := false
+			for o in placed:
+				if r.intersects(o):
+					r.position.y = o.position.y - r.size.y
+					hit = true
+			if not hit:
+				break
+		l.position = r.position + Vector2(2, 2)
+		placed.append(r)

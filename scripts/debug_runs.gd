@@ -16,8 +16,9 @@ func _debug_shots() -> void:
 	for e in g.enemies: e.aw = 0.0
 	_snap(out + "/1_start.png")
 	await g.get_tree().create_timer(0.3).timeout
-	if g.world.settlements.size() > 0:
-		g.player.wpos = g.world.settlements[0].pos + Vector2(2.5, 2.5)
+	var home: Dictionary = g.world.loc_by_id(g.origin().loc)
+	if not home.is_empty():
+		g.player.wpos = home.pos + Vector2(2.5, 2.5)
 		await g.get_tree().create_timer(0.8).timeout
 		_snap(out + "/2_settlement.png")
 	var done_in := false
@@ -46,7 +47,7 @@ func _debug_shots() -> void:
 			_snap(out + "/7_%s.png" % e.type)
 			break
 	g.player.fl = 0
-	g.player.wpos = Vector2(44, 40)
+	g.player.wpos = _city_spot()
 	await g.get_tree().create_timer(0.6).timeout
 	_snap(out + "/8_city.png")
 	for kind in ["diner", "canopy", "motel", "factory", "office", "house"]:
@@ -72,8 +73,9 @@ func _debug_shots() -> void:
 	await g.get_tree().create_timer(0.4).timeout
 	_snap(out + "/9_inventory.png")
 	g.hud.hide_menu()
+	if g.invs.visible: g.invs.close_screen()
 	g.day_t = 0.7
-	g.player.wpos = Vector2(44, 40)
+	g.player.wpos = _city_spot()
 	await g.get_tree().create_timer(0.6).timeout
 	_snap(out + "/10_night_city.png")
 	for b in g.world.buildings:
@@ -205,7 +207,18 @@ func _debug_tour() -> void:
 
 ## Playtest bot: walks from the home camp into town, then fights at a dungeon with auto-aim, logging
 ## what happens (for tuning).
+## Somewhere standable in downtown Port Sterling (for city screenshots).
+func _city_spot() -> Vector2:
+	var c: Dictionary = g.world.loc_by_id("sterling_downtown")
+	var p: Vector2 = c.pos if not c.is_empty() else g.world.start
+	for i in 30:
+		var q := p + Vector2(i * 1.3, i * 0.7)
+		if g.world.can_stand(q, 0.3, 0): return q
+	return p
+
+
 func _debug_play() -> void:
+	DirAccess.make_dir_recursive_absolute("user://shots")
 	await g.get_tree().create_timer(1.0).timeout
 	var plog := []
 	var orig_toast := g.hud.toast_l.text
@@ -254,8 +267,12 @@ func _debug_play() -> void:
 	var locks := 0
 	var first_lock := -1.0
 	t0 = g.time
+	var taken := 0
+	var hp_prev := g.player.hp
 	for i in 60 * 20:
 		await g.get_tree().process_frame
+		if g.player.hp < hp_prev: taken += hp_prev - g.player.hp
+		hp_prev = g.player.hp
 		if g.locked != null:
 			locks += 1
 			if first_lock < 0: first_lock = g.time - t0
@@ -267,7 +284,10 @@ func _debug_play() -> void:
 			plog.append("all dead at t=%.1f s" % (g.time - t0)); break
 	plog.append("fight: kills %d/6, ammo used %d, hp %d -> %d, first lock %.1f s, frames locked %d, medkits used %d" % [g.player.kills - k0, a0 - g.inv_count("ammo_pistol"), hp0, g.player.hp, first_lock, locks, 3 + 0 - g.inv_count("medkit") + (2 if g.origin_id == "drifter" else 0)])
 	for l in plog: print("PLAY ", l)
-	g.get_tree().quit()
+	check("bot reaches town", plog[0].contains("reached=true") or plog.any(func(x): return x.contains("reached=true")), "walk to start town")
+	check("fight costs health", taken >= 12, "took %d damage, %d -> %d HP (target 12+ taken)" % [taken, hp0, g.player.hp])
+	check("fight is winnable", g.state == "play", "state %s" % g.state)
+	finish()
 
 func _wants_fire_bot() -> bool:
 	return g.locked != null
@@ -679,6 +699,18 @@ func _debug_soak() -> void:
 	for e in g.enemies:
 		e.aw = 0.0
 		e.st = 0
+	# script time per frame while walking around normally (Review 1 target ~4.5 ms)
+	g.hud.hide_menu()
+	if g.invs.visible: g.invs.close_screen()
+	var pt: Array[float] = []
+	for i in 240:
+		await g.get_tree().process_frame
+		g._bot_move = Vector2(cos(i * 0.01), sin(i * 0.013))
+		if i > 30: pt.append(g.proc_ms)
+	g._bot_move = Vector2.ZERO
+	pt.sort()
+	var med: float = pt[pt.size() / 2]
+	check("script time", med <= 4.5, "median %.2f ms, 95th %.2f ms in Game._process (lavapipe CPU, so slower than a real device)" % [med, pt[int(pt.size() * 0.95)]])
 	print("camp problem: ", g.camp_problem())
 	g.new_camp()
 	g.hud.hide_menu()
@@ -696,7 +728,7 @@ func _debug_soak() -> void:
 		if n.type == "trader": tr = n
 	if tr:
 		g.open_trade(tr); g.hud.hide_menu()
-	g.open_inventory(); g.hud.hide_menu()
+	g.open_inventory(); g.hud.hide_menu(); g.invs.close_screen()
 	g.inv_add("shotgun"); g.inv_add("ammo_shell", 10); g.inv_add("combat_vest"); g.equip_item("shotgun"); g.equip_item("combat_vest")
 	for i in 30:
 		await g.get_tree().process_frame
@@ -717,11 +749,14 @@ func _debug_soak() -> void:
 			for a in ["left", "right", "up", "down"]: Input.action_release(a)
 			g.player.inv = 0.0
 			g.hud.hide_menu()
+			var lp0 := g.inv_count("lockpick")
 			g.open_door(sg)
-			for i in 200:
+			for i in 900:
 				await g.get_tree().process_frame
 				if g.busy.is_empty(): break
-			picked = 1 if sg.door == "open" else -1
+			# a snapped pick is a working lock too (40% fail chance per try)
+			picked = 1 if sg.door == "open" or g.inv_count("lockpick") < lp0 else -1
+			if picked < 0: print("DOOR pick failed: door %s, busy %s, toast '%s', inv %.2f" % [sg.door, str(g.busy), g.hud.toast_l.text, g.player.inv])
 		if sg.door == "barred" and bashed == 0:
 			g.player.wpos = Vector2(b.out) + Vector2(0.5, 0.5)
 			for i in 30:
@@ -730,7 +765,9 @@ func _debug_soak() -> void:
 			bashed = 1 if sg.door == "broken" else -1
 	print("DOORS picked=%d bashed=%d sealed=%d lockpicks=%d" % [picked, bashed, sealed_n, g.inv_count("lockpick")])
 	print("SOAK DONE state=%s hp=%d kills=%d camps=%d enemies=%d" % [g.state, g.player.hp, g.player.kills, g.camps.size(), g.enemies.size()])
-	g.get_tree().quit()
+	check("soak survives", g.state in ["play", "travel"] and g.camps.size() > 0, "state %s, camps %d" % [g.state, g.camps.size()])
+	check("doors work", picked >= 0 and bashed >= 0, "picked %d bashed %d" % [picked, bashed])
+	finish()
 
 # ------------------------------------------------------------------ balance checks (Review 1 retest)
 var fails := 0
@@ -951,4 +988,37 @@ func _debug_save_check() -> void:
 	check("old saves migrate", int(m.v) == g.SAVE_VERSION and m.has("econ") and m.has("days"), "v1 -> v%d" % int(m.v))
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(g.SAVE_PATH))
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(g.BAK_PATH))
+	finish()
+
+## Review 1 P2 UI: toast queue, stacked speech, touch layout.
+func _debug_ui_check() -> void:
+	DirAccess.make_dir_recursive_absolute("user://shots")
+	await g.get_tree().create_timer(1.0).timeout
+	for e in g.enemies: e.aw = 0.0
+	g.hud.toast_q.clear(); g.hud.toast_t = 0.0
+	g.hud.toast("First message")
+	g.hud.toast("Second message")
+	g.hud.toast("Second message")
+	g.hud.toast("Third message")
+	check("toasts queue", g.hud.toast_l.text == "First message" and g.hud.toast_q.size() == 2, "showing '%s', %d waiting" % [g.hud.toast_l.text, g.hud.toast_q.size()])
+	await g.get_tree().create_timer(1.5).timeout
+	check("toasts stay 2 s+", g.hud.toast_l.text == "First message", "still '%s' after 1.5 s" % g.hud.toast_l.text)
+	await g.get_tree().create_timer(1.5).timeout
+	check("duplicates merge", g.hud.toast_l.text.contains("Second message  (x2)"), "'%s'" % g.hud.toast_l.text)
+	for i in 4:
+		g.add_text(g.player.wpos + Vector2(0.1 * i, 0), "Overlapping line %d" % i, Color.WHITE, 3.0)
+	await g.get_tree().create_timer(0.3).timeout
+	var rs: Array[Rect2] = []
+	for f in g.floaters: rs.append(Rect2(f.label.position, f.label.size))
+	var overlap := false
+	for a in rs.size():
+		for b in range(a + 1, rs.size()):
+			if rs[a].intersects(rs[b]): overlap = true
+	check("speech doesn't overlap", not overlap and rs.size() >= 4, "%d labels, overlap %s" % [rs.size(), str(overlap)])
+	g.using_touch = true
+	g.hud.touch.enabled = true
+	g.hud.touch.visible = true
+	await g.get_tree().create_timer(0.3).timeout
+	await _snap("user://shots/ui_touch.png")
+	check("touch prompt wording", not g.hud.prompt_l.text.contains("USE ") or g.hud.prompt_l.text.begins_with("Tap"), "'%s'" % g.hud.prompt_l.text)
 	finish()

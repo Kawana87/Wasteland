@@ -119,7 +119,7 @@ func close_screen() -> void:
 func refresh() -> void:
 	if not visible: return
 	var p := game.player
-	header.text = "PIP-STAT  ·  HP %d/%d  ·  ARMOUR %d (%d%% less damage)  ·  CARRYING %d scrap · %d cloth · %d wood  ·  STASH %d scrap · %d cloth · %d wood" % [
+	header.text = "STATUS  ·  HP %d/%d  ·  ARMOUR %d (%d%% less damage)  ·  CARRYING %d scrap · %d cloth · %d wood  ·  STASH %d scrap · %d cloth · %d wood" % [
 		int(p.hp), int(p.max_hp), game.armor_total(), int(minf(0.6, game.armor_total() * 0.07) * 100),
 		p.carry.scrap, p.carry.cloth, p.carry.wood, game.stash.scrap, game.stash.cloth, game.stash.wood]
 	header.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART

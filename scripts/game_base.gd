@@ -6,6 +6,7 @@ extends Node
 
 static var I: Game
 var dbg = null                   # DebugRuns, only with --autostart
+var proc_ms := 0.0               # time spent in Game._process last frame (perf check)
 const SAVE_VERSION := 2
 const BAK_PATH := "user://save.bak.json"
 var econ := {"sat": {}, "purse": {}, "stock": {}}   # the player's effect on markets (see Economy)

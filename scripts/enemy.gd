@@ -8,7 +8,7 @@ const ATK_CD := {"rat": 0.9, "ghoul": 1.0, "shellback": 1.4, "brute": 1.7, "raid
 const STATS := {
 	#           hp  chase  dmg  windup sense  fears fire
 	"rat":       [2,  1.3,  1,   0.55,  0.7,   true],
-	"ghoul":     [6,  2.0,  2,   0.40,  1.15,  true],
+	"ghoul":     [7,  2.0,  2,   0.40,  1.15,  true],
 	"shellback": [14, 0.8,  4,   0.50,  0.9,   true],
 	"brute":     [24, 1.05, 6,   0.80,  1.0,   false],
 	"raider":    [6,  1.3,  3,   0.0,   1.0,   false],
@@ -187,7 +187,7 @@ func think(delta: float, p: Player, p_safe: bool) -> void:
 				if shoot_cd <= 0.0 and d > 3.0 and d < 8.0 and fl == p.fl and w.los(wpos, p.wpos, fl):
 					g.throw_rock(self, p.wpos)
 					shoot_cd = randf_range(3.0, 4.5)
-				if d < 0.9 and wind <= 0.0 and atk_cd <= 0.0: wind = STATS[type][3]
+				if d < 0.9 and wind <= 0.0 and atk_cd <= 0.0: wind = STATS[type][3] * randf_range(0.85, 1.2)
 			"shellback":
 				tgt = p.wpos; sp = STATS[type][1]
 				shoot_cd -= delta
@@ -195,10 +195,10 @@ func think(delta: float, p: Player, p_safe: bool) -> void:
 					charge_t -= delta; sp = 2.9
 				elif shoot_cd <= 0.0 and d > 1.5 and d < 5.0:
 					charge_t = 0.9; shoot_cd = randf_range(3.0, 4.0)
-				if d < 0.85 and wind <= 0.0 and atk_cd <= 0.0: wind = STATS[type][3]
+				if d < 0.85 and wind <= 0.0 and atk_cd <= 0.0: wind = STATS[type][3] * randf_range(0.85, 1.2)
 			_:
 				tgt = p.wpos; sp = STATS[type][1]
-				if d < 0.95 and wind <= 0.0 and atk_cd <= 0.0: wind = STATS[type][3]
+				if d < 0.95 and wind <= 0.0 and atk_cd <= 0.0: wind = STATS[type][3] * randf_range(0.85, 1.2)
 	elif st == 1 and wpos.distance_to(last) > 0.5:
 		tgt = last
 		sp = 0.6 if type == "rat" else 0.9
@@ -220,7 +220,7 @@ func think(delta: float, p: Player, p_safe: bool) -> void:
 		wind -= delta
 		sp = 0.0
 		if wind <= 0.0:
-			atk_cd = ATK_CD.get(type, 1.0)
+			atk_cd = ATK_CD.get(type, 1.0) * randf_range(0.85, 1.15)   # jitter so a pack doesn't hit in the same frame (the 0.15 s grace would eat it)
 			if d < (1.25 if type == "brute" else 1.15):
 				g.hurt_player(wpos, dmg)
 	# stuck while hunting (wedged on a wall or prop): sidestep for a moment

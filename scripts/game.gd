@@ -78,6 +78,8 @@ func _ready() -> void:
 			if a.begins_with("--origin="): oid = a.substr(9)
 		if "--continue" in args: load_game.call_deferred()
 		else: start_new_world.call_deferred({}, oid)
+		if "--uicheck" in args:
+			dbg._debug_ui_check.call_deferred()
 		if "--savecheck" in args:
 			dbg._debug_save_check.call_deferred()
 		if "--combatcheck" in args:
@@ -356,6 +358,12 @@ func _read_move() -> Vector2:
 
 # ------------------------------------------------------------------ loop
 func _process(delta: float) -> void:
+	var t_us := Time.get_ticks_usec()
+	_process_inner(delta)
+	proc_ms = (Time.get_ticks_usec() - t_us) / 1000.0
+
+
+func _process_inner(delta: float) -> void:
 	if state == "title" or world == null:
 		return
 	time += delta
@@ -611,7 +619,7 @@ func _update_hud() -> void:
 	hud.marks = mk
 	hud.job_l.text = ("JOB: " + jobs[0].title + ("  (+%d more)" % (jobs.size() - 1) if jobs.size() > 1 else "")) if jobs.size() else ""
 	var t := find_target()
-	var k := "USE" if using_touch else "[E]"
+	var k := "Tap USE to" if using_touch else "[E]"
 	var msg := ""
 	if not t.is_empty() and p.climb.is_empty():
 		match t.k:
@@ -622,13 +630,13 @@ func _update_hud() -> void:
 			"crate": msg = "%s Search %s" % [k, {"car": "car trunk", "bag": "remains", "brute": "remains", "cache": "raider stash", "crate": "crate"}.get(t.o.kind, t.o.kind.replace("_", " "))]
 			"npc": msg = "%s %s" % [k, "Talk" if t.o.type == "settler" else "Trade"]
 			"door":
-				var cmk := "MELEE" if using_touch else "[F]"
+				var cmk := "Tap HIT to" if using_touch else "[F]"
 				match t.o.door:
 					"closed": msg = "%s Open door" % k
 					"locked": msg = ("%s Pick lock (%d)   %s Bash (loud)" % [k, inv_count("lockpick"), cmk]) if inv_count("lockpick") > 0 else "Locked — %s Bash it in (loud)" % cmk
 					"barred": msg = "Barricaded — %s Bash (loud)" % cmk
 					"sealed": msg = "Boarded up"
-			"camp": msg = "%s Camp menu" % ("CAMP" if using_touch else "[B]")
+			"camp": msg = "Tap CAMP for the camp menu" if using_touch else "[B] Camp menu"
 			"examine": msg = "%s Look: %s" % [k, t.o.info.get_slice("|", 0)]
 			"bed":
 				if t.b.settlement >= 0 and not base.claimed.has(t.b.id): msg = "Someone's bed — sleep in your own, or claim a place"
@@ -641,9 +649,23 @@ func _update_hud() -> void:
 					msg = "%s Enter %s%s" % [k, ui.name, "  (cleared)" if cl else ""]
 	if not busy.is_empty():
 		msg = ("Healing… %d%%" if busy.get("kind", "") == "heal" else "Picking lock… %d%%") % int(100.0 * busy.t / busy.total)
+	if using_touch:
+		msg = _touch_case(msg)
 	hud.set_prompt(msg)
 	hud.touch.queue_redraw()
 	if p.flash > 0.0:
 		fx.flash = p.flash
 	else:
 		fx.flash = 0.0
+
+
+## "Tap USE to Open door" -> "Tap USE to open door".
+func _touch_case(msg: String) -> String:
+	for b: String in ["Tap USE to ", "Tap HIT to "]:
+		var i := msg.find(b)
+		while i >= 0:
+			var j: int = i + (b as String).length()
+			if j < msg.length():
+				msg = msg.substr(0, j) + msg[j].to_lower() + msg.substr(j + 1)
+			i = msg.find(b, j)
+	return msg

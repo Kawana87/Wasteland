@@ -16,7 +16,7 @@ const NAMES := {
 }
 const BOSSES := {
 	"cave": ["The Den Mother", "Old Gnasher", "Blind King"], "mine": ["The Foreman", "Pickaxe Pete", "Lamp-Eyes"],
-	"sewer": ["The Bloated One", "Sewer King", "Drain Rat Queen"], "vault": ["The Overseer", "Shelter Warden", "Patient Zero"]}
+	"sewer": ["The Bloated One", "Sewer King", "Drain Rat Queen"], "vault": ["The Custodian", "Shelter Warden", "Patient Zero"]}
 
 static func info(portal: String) -> Dictionary:
 	var kind := portal.get_slice(":", 0)

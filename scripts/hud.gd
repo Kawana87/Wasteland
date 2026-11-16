@@ -205,10 +205,40 @@ func _box(_c: Color) -> StyleBoxFlat:
 func _label(size: int) -> Label:
 	return term_label(size)
 
+## Toasts queue up: each shows for at least 2 s (longer for long text) and
+## repeats of the same message merge into one with a count.
+var toast_q: Array = []
+var toast_cur := ""
+var toast_n := 1
+
 func toast(msg: String) -> void:
-	toast_l.text = msg
+	if msg == toast_cur and toast_t > 0.0:
+		toast_n += 1
+		toast_l.text = "%s  (x%d)" % [msg, toast_n]
+		toast_t = maxf(toast_t, 2.0)
+		return
+	for q in toast_q:
+		if q.msg == msg:
+			q.n += 1
+			return
+	toast_q.append({"msg": msg, "n": 1})
+	if toast_t <= 0.0:
+		_next_toast()
+
+func _next_toast() -> void:
+	if toast_q.is_empty():
+		toast_box.visible = false
+		toast_cur = ""
+		return
+	var q: Dictionary = toast_q.pop_front()
+	toast_cur = q.msg
+	toast_n = q.n
+	toast_l.text = q.msg if q.n == 1 else "%s  (x%d)" % [q.msg, q.n]
 	toast_box.visible = true
-	toast_t = 3.6
+	# 2 s minimum, more for long messages; hurry along when others are waiting
+	toast_t = clampf(1.6 + q.msg.length() * 0.035, 2.0, 5.5)
+	if toast_q.size() > 2:
+		toast_t = 2.0
 
 func show_card(t: String) -> void:
 	card_l.text = t
@@ -277,7 +307,7 @@ func _process(delta: float) -> void:
 	if toast_t > 0.0:
 		toast_t -= delta
 		if toast_t <= 0.0:
-			toast_box.visible = false
+			_next_toast()
 	var sp := stats.get_parent().get_parent() as Control
 	crt_btn.position = Vector2(12, sp.position.y + sp.size.y + 6)
 	radio_btn.position = Vector2(crt_btn.position.x + crt_btn.size.x + 8, crt_btn.position.y)

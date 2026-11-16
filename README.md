@@ -23,8 +23,8 @@ The first open takes a moment while Godot imports the sprites.
 
 | | PC | Gamepad | Touch |
 |---|---|---|---|
-| Move | WASD / arrows | Left stick | Left thumb anywhere on the left half |
-| Aim | Automatic: locks on to the nearest enemy in range | | |
+| Move | WASD / arrows | Left stick | Left thumb anywhere on the left half (stick base shown bottom-left) |
+| Aim | Automatic lock-on, favouring what you face (AIM: assist button for full auto-aim) | | |
 | Shoot | Left click / Q | RT | FIRE (hold) |
 | Melee | F / right click | B | HIT |
 | Jump | Space | A | — |
@@ -32,9 +32,9 @@ The first open takes a moment while Godot imports the sprites.
 | Use / chop / climb / stairs | E | X | USE |
 | Camp menu | B | Back | CAMP |
 | Inventory / gear | I or Tab | Start | INV |
-| Quick heal (med kit, then food) | H | LB | (use items in INV) |
+| Quick heal (1.2 s, interrupted by moving or damage) | H | LB | HEAL |
 | World map | M | | MAP |
-| Fast travel | T | | (from the camp menu) |
+| Fast travel (costs hours and food; raiders may ambush cargo) | T | | (from the camp menu) |
 | CRT filter | V | | CRT button |
 
 ## What's in the game so far
@@ -78,7 +78,7 @@ The first open takes a moment while Godot imports the sprites.
 - **Jobs:** traders post work — deliveries, clearing out dungeons, bounties on named raider bosses, supply runs.
 - **XP, levels and perks:** XP for discoveries, kills, jobs, cleared sites, notes and profitable trades; pick a perk
   each level (Toughness, Gunslinger, Silver Tongue, Strong Back, Rad Skin, ...).
-- **Things to find:** notes and holotapes in containers (read them again from the inventory), scenes in the wilds that
+- **Things to find:** notes and tapes in containers (read them again from the inventory), scenes in the wilds that
   tell a story when you look closer, people who talk as you pass. Discovering a place or clearing a dungeon gets a
   title card and a mark on the map.
 - **Underground:** caves in the hills, mines in the canyons, manholes down into Port Sterling's sewers and old
@@ -87,7 +87,7 @@ The first open takes a moment while Godot imports the sprites.
   title card and XP; the ladder by the entrance takes you back up.
 - **Saving:** the game autosaves (and saves when you leave the app); **Continue** on the title screen picks up where
   you left off — your gear, camps, stash, bases, discoveries, and what you've looted and killed.
-- **Wasteland feel:** rubble, toxic spills, dead bushes, bones, crows that scatter when you get close, drifting dust, a washed-out colour grade and a day/night cycle (8 minutes per day).
+- **Wasteland feel:** rubble, toxic spills, dead bushes, bones, crows that scatter when you get close, drifting dust, a washed-out colour grade and a day/night cycle (24 minutes per day).
 - **Buildings:** houses, shops, offices, garages and shacks with furnished interiors (kitchens, beds, shelves, desks, counters). Some are ruined with collapsed corners. Pitched or flat roofs. Second floors show from outside. Buildings and trees go see-through when you walk behind them.
 - **Settlements:** friendly tin-shack villages with a campfire, gardens, a water pump, settlers, cattle and a trader. Pay the trader in scrap for guns, armour, ammo and med kits, or sell spare gear.
 - **Inventory and gear:** guns (pipe pistol, 10mm, SMG, shotgun, hunting rifle), melee weapons, head and body armour, ammo types, med kits and food. Every container rolls its own loot: fridges hold food, medicine cabinets hold med kits, gun lockers hold guns.
@@ -104,7 +104,15 @@ The first open takes a moment while Godot imports the sprites.
 project.godot          Godot project settings (Compatibility renderer, works on phones)
 scenes/main.tscn       Entry scene (just the Game node)
 scripts/
-  game.gd              Main controller: scene setup, game loop, input, combat, loot, camps, menus
+  game_base.gd         All game state (members, constants, origins); the chain below extends it
+  game_world.gd        Streaming, time of day, shared helpers
+  game_trade.gd        Inventory, goods trading, healing
+  game_combat.gd       Shooting, melee, aim, damage, death and the recovery bag
+  game_camps.gd        Camps, fast travel, sleeping, underground maps
+  game_save.gd         Saving (atomic write + backup), loading, migration, settings
+  game.gd              class_name Game: setup, title/origin menus, game loop, HUD, input
+  debug_runs.gd        Automated runs and checks (only loaded with --autostart)
+  economy.gd           Prices, saturation, trader purses and stock
   world.gd             Map data + procedural generation + collision / line of sight
   terrain_mesh.gd      Builds the sloped ground mesh (lighting per triangle)
   ground_maps.gd       World-space masks for roads, sidewalks, dirt tracks and shadows
@@ -143,7 +151,11 @@ Base building: open the camp menu (B / CAMP) near a camp and pick **Build**. Cho
 Debug runs (desktop): `godot --path . -- --autostart --shots | --tour | --soak | --fade | --char | --bestiary | --build`
 write screenshots to `user://shots`.
 
+Checks (print PASS/FAIL per item and exit non-zero on any failure, so they can run in CI):
+`--econcheck` (trade balance), `--combatcheck` (damage stacking, death), `--savecheck` (backups, corrupt saves),
+`--uicheck` (toasts, speech, touch), `--play` (bot walks to town and fights), `--soak` (long self-play).
+
 ## Next up (Milestone 2+)
 
-Save/load and sleeping, weapon mods and crafting stations, skills + Grit, survivor roles and missions,
+Weapon mods and crafting stations, skills + Grit, survivor roles and missions,
 quests from settlers, overpasses, bridges and rivers, sound and music.

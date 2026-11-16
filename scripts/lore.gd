@@ -1,5 +1,5 @@
 class_name Lore
-## Words for the world: notes and holotape transcripts found in containers, the stories told by
+## Words for the world: notes and tape transcripts found in containers, the stories told by
 ## scenes left where they happened, what people say as you pass, and the Sable Radio DJ.
 ## All original writing for the Sable Wastes.
 
@@ -12,7 +12,7 @@ const NOTES := [
 	["Torn diary page", "Day 40. Lake still glows at night but Ruth says the purifier works if you run it twice. Tastes like pennies. Better than the river.\nDay 41. Ruth's sick."],
 	["Raider tally", "Scratched into a board:\nCARAVANS ||||  ||||  ||\nSETTLERS ||||  |\nUS |||\n\n(the last row has been scratched out and rewritten three times)"],
 	["Kid's drawing", "Crayon: a house, a dog, three stick people and a big orange sun. Someone has added a mushroom cloud in pencil, small, in the corner. Then tried to rub it out."],
-	["Holotape: Ridgeback Dam log", "\"Turbine two is spinning again. We could light half of Port Sterling if there was a Port Sterling left to light. Logging this for whoever comes next — the manual override is behind the blue door. Don't let the raiders find it.\""],
+	["Tape: Ridgeback Dam log", "\"Turbine two is spinning again. We could light half of Port Sterling if there was a Port Sterling left to light. Logging this for whoever comes next — the manual override is behind the blue door. Don't let the raiders find it.\""],
 	["Letter, unsent", "Dear Ellie, the salt flats are bigger than they look on the map. Three days walking and the horizon hasn't moved. The traders at Bonewhite say water's worth more than bullets out here. I believe them now."],
 	["Greenmarsh planting guide", "GLOWBERRIES: plant at the fen's edge, not in it. POTATOES: anywhere the dog won't dig. CORN: gave up. Never plant near the old drainage pipe — things live in there."],
 	["Atomic Plaza store directory", "LEVEL 1: Food Court, Pharmacy, Atomic Toys\nLEVEL 2: Fashions, Electronics, Fallout Shelter (Staff Only)\n\nSomeone has circled 'Fallout Shelter' and written: NOT ENOUGH ROOM. THEY LOCKED IT."],
@@ -21,12 +21,12 @@ const NOTES := [
 	["Fortune from a cookie", "\"A great journey lies ahead of you.\"\nOn the back, in pen: no kidding."],
 	["Mercy General memo", "To all staff: the generator will fail at approximately 03:00. Prioritise patients by likelihood of survival. I am sorry. — Dr. A. Venn"],
 	["Diner order pad", "Table 4: 2x Atomic Burger, 1x coffee (black), 1x cherry pie. Paid? \n\nThey never came back for the pie."],
-	["Holotape: Starwatch Observatory", "\"The flashes started at 9:41. I counted fourteen. I've been looking at the sky my whole life and I've never seen it look back.\""],
+	["Tape: Starwatch Observatory", "\"The flashes started at 9:41. I counted fourteen. I've been looking at the sky my whole life and I've never seen it look back.\""],
 	["Militia flyer", "THE WASTES BELONG TO THE PEOPLE WHO WORK THEM. Join the Patchwork Watch. Three meals, a rifle, a roof. Ask for Mags at the gate."],
 	["Bottle cap collector's note", "Sterling Cola red: 4. Dusty Root Beer: 11. Gold star: 0. Still looking. They say there's a whole case of gold stars in the Victory Stadium concessions."],
 	["Water-runner's ledger", "Clearwater → Rimtown: bought 10 water @ 3, sold @ 11. Lost one to a shellback. Still worth it. Next run take the dog."],
 	["Church bulletin, Our Lady of the Wastes", "Sunday: soup and blessing. All are welcome — ghouls included. Especially ghouls. They need it more than most of us."],
-	["Holotape: Sable Radio, first broadcast", "\"...if you can hear this, you're not alone. This is Sable Radio. We've got records, a generator and nowhere to be. Stay tuned.\""],
+	["Tape: Sable Radio, first broadcast", "\"...if you can hear this, you're not alone. This is Sable Radio. We've got records, a generator and nowhere to be. Stay tuned.\""],
 	["Rattlebone recruitment slip", "WANTED: shooters, drivers, people who don't ask questions. Pay: whatever you can carry. Apply at the Rattlebone camp. Bring your own gun."],
 	["Motel guest book", "Room 6 — \"Lovely stay, will return!\" (1 day before)\nRoom 2 — \"lock your doors\"\nRoom 2 — \"LOCK YOUR DOORS\""],
 	["Scav's warning", "Chalk on a wall: GHOULS IN BASEMENT. TOOK MY BROTHER. DON'T GO DOWN THERE. → → →"],
