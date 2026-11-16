@@ -59,6 +59,8 @@ var faded_trees := {}
 var inventory: Array = []        # [{id, n}]
 var equip := {"gun": "pipe_pistol", "melee": "fists", "head": "", "body": ""}
 var day_t := 0.3                 # 0..1 time of day (0.25 = morning)
+const DAY_LEN := 1440.0           # real seconds per game day: one minute per hour
+var rested_t := 0.0               # Well Rested time left (game seconds)
 var grade: ShaderMaterial
 var lights: LightLayer
 var noise_level := 0.0
@@ -139,6 +141,8 @@ func _ready() -> void:
 			if a.begins_with("--origin="): oid = a.substr(9)
 		if "--continue" in args: load_game.call_deferred()
 		else: start_new_world.call_deferred({}, oid)
+		if "--sleep" in args:
+			_debug_sleep.call_deferred()
 		if "--under" in args:
 			_debug_under.call_deferred()
 		if "--imm" in args:
@@ -377,6 +381,7 @@ func perk(id: String) -> int:
 	return int(perks.get(id, 0))
 
 func gain_xp(n: int, why: String = "") -> void:
+	if rested_t > 0.0: n = int(ceil(n * 1.1))
 	xp += n
 	if why != "": add_text(player.wpos + Vector2(0, -0.6), "+%d XP  %s" % [n, why], Color(0.95, 0.85, 0.4), 1.8)
 	while xp >= Perks.xp_needed(level):
@@ -1195,6 +1200,13 @@ func find_target() -> Dictionary:
 	if dn != null:
 		var dd := p.wpos.distance_to((dn.a + dn.b) * 0.5)
 		if dd < bd: bd = dd; best = {"k": "door", "o": dn}
+	if pb != 0:
+		var hb := world.bld(pb)
+		if hb:
+			for f in hb.furn:
+				if f.name == "bed" and f.fl == p.fl:
+					var dd: float = p.wpos.distance_to(f.pos)
+					if dd < 1.5 and dd < bd: bd = dd; best = {"k": "bed", "o": f, "b": hb}
 	if p.fl == 0 and pb == 0:
 		for d in world.near(p.wpos, "decor"):
 			if d.portal != "":
@@ -1258,6 +1270,11 @@ func interact() -> void:
 				add_text(tp, "+%d wood" % wd, Color("d8b880"))
 		"crate":
 			_loot(t.o)
+		"bed":
+			if t.b.settlement >= 0 and not base.claimed.has(t.b.id):
+				add_text(player.wpos, "That bed belongs to someone.", Color("e8a090"), 2.0)
+			else:
+				open_sleep(false)
 		"portal":
 			var pd: World.Decor = t.o
 			if pd.portal == "exit": exit_under()
@@ -1318,6 +1335,56 @@ func _loot(c: World.Crate) -> void:
 	add_text(c.pos, " · ".join(parts) if parts.size() else "empty", Color("f2e6c8"), 2.2)
 	if found_gear != "":
 		hud.toast("Found %s! Press %s to open your inventory and equip it." % [found_gear, "INV" if using_touch else "I"])
+
+# ------------------------------------------------------------------ sleeping
+## Sleep in any bed nobody owns (ruins, motels, claimed dens) or at your camp. Time passes, you heal,
+## and a full night's sleep leaves you Well Rested (+10% XP for a day). Out in the open ruins
+## something might find you while you sleep; camps are safer.
+func open_sleep(at_camp: bool) -> void:
+	if danger():
+		hud.toast("You can't sleep with enemies hunting you.")
+		return
+	var hh := fmod(day_t * 24.0 + 6.0, 24.0)
+	var to_morning := fmod(6.0 - hh + 24.0, 24.0)
+	var to_evening := fmod(19.0 - hh + 24.0, 24.0)
+	var lines := ["It's %02d:%02d. HP %d/%d.%s" % [int(hh), int(fmod(hh, 1.0) * 60.0), int(player.hp), int(player.max_hp),
+		"" if at_camp else "\nAn old bed. Lumpy, but it beats the dirt."]]
+	var btns := []
+	for o in [[1.0, "Sleep 1 hour"], [3.0, "Sleep 3 hours"], [to_morning, "Sleep until morning (06:00)"], [to_evening, "Sleep until evening (19:00)"]]:
+		var h: float = o[0]
+		if h < 0.5: continue
+		btns.append(["%s — %dh" % [o[1], int(round(h))] if o[0] != 1.0 and o[0] != 3.0 else o[1], func(): hud.hide_menu(); _sleep(h, at_camp), false])
+	btns.append(["Not now", hud.hide_menu, false])
+	hud.show_menu("Sleep", lines, btns)
+
+func _sleep(hours: float, at_camp: bool) -> void:
+	var safe := at_camp or world.settlement_at(player.wpos, 2.0) >= 0 or base.claimed.has(player.building()) or under != ""
+	var ambush := not safe and hours >= 2.0 and randf() < 0.18
+	var slept := hours * (randf_range(0.3, 0.8) if ambush else 1.0)
+	travel = {"to": {"cname": "", "wpos": player.wpos}, "t": 0.0, "done": false, "text": "Sleeping…", "card": false,
+		"swap": func():
+			day_t = fmod(day_t + slept / 24.0, 1.0)
+			player.hp = minf(player.max_hp, player.hp + slept * player.max_hp / 6.0)
+			if slept >= 6.0:
+				rested_t = DAY_LEN
+			for e in enemies: e.aw = 0.0
+			if ambush: _sleep_ambush()
+			else:
+				travel.msg = ("You wake up Well Rested (+10% XP for a day)." if slept >= 6.0 else "You slept %d hours." % int(round(slept)))}
+	state = "travel"
+
+func _sleep_ambush() -> void:
+	var p := player.wpos
+	var t: String = ["raider", "ghoul", "rat"][randi() % 3]
+	var key := World.ckey(World.chunk_of(p).x, World.chunk_of(p).y)
+	for k in (3 if t == "rat" else 2):
+		var at := p + Vector2.from_angle(randf() * TAU) * randf_range(4.0, 6.0)
+		if not world.can_stand(at, 0.3, player.fl): continue
+		var sp := {"type": t, "pos": at, "home": p, "home_r": 6.0, "chunk": key}
+		world.spawns.append(sp); world._bucket(key).spawns.append(sp)
+		var e := _spawn_enemy(sp)
+		e.aw = 100.0; e.last = p
+	travel.msg = "Something's moving in the dark — you're awake!"
 
 # ------------------------------------------------------------------ underground
 ## Entering a cave/mine/sewer/shelter swaps the World for that place's own map; the overworld is kept
@@ -1893,6 +1960,8 @@ func open_camp_menu() -> void:
 	var c = camp_near(player.wpos, 3.2)
 	var line := "Shared stash: %d scrap · %d cloth · %d wood" % [stash.scrap, stash.cloth, stash.wood]
 	var btns := []
+	if c != null:
+		btns.append(["Sleep by the fire", func(): hud.hide_menu(); open_sleep(true), false])
 	var den = _den_near(player.wpos)
 	if den != null:
 		btns.append(["Claim this raider den as your outpost", func(): claim_den(den), false])
@@ -2000,7 +2069,8 @@ func _process(delta: float) -> void:
 			_discover()
 		if travel.t >= 1.0:
 			state = "play"
-			if travel.has("swap"): hud.show_card(travel.to.cname.to_upper())
+			if travel.has("msg"): hud.toast(travel.msg)
+			elif travel.has("swap"): hud.show_card(travel.to.cname.to_upper())
 			else: hud.toast("Arrived at %s. A few hours pass." % travel.to.cname)
 		fx.fade = 1.0 - absf(travel.t * 2.0 - 1.0)
 		fx.fade_text = travel.get("text", "Traveling to %s…" % travel.to.cname)
@@ -2149,7 +2219,7 @@ func save_game() -> void:
 		"kills": player.kills, "carry": player.carry, "inventory": inventory, "equip": equip, "stash": stash, "day_t": day_t,
 		"camps": cps, "pieces": pcs, "floors": fls, "founds": fds, "vh": vhs, "claimed": claimed, "recruited": rec,
 		"discovered": world.discovered, "opened": world.opened, "killed": world.killed, "origin": origin_id,
-		"xp": xp, "level": level, "perks": perks, "jobs": jobs, "notes": notes_read, "examined": examined, "cleared": world.cleared}
+		"rested": rested_t, "xp": xp, "level": level, "perks": perks, "jobs": jobs, "notes": notes_read, "examined": examined, "cleared": world.cleared}
 	d["under"] = under_state
 	world = w_saved
 	player.wpos = pos_saved
@@ -2200,6 +2270,7 @@ func _apply_save(d: Dictionary) -> void:
 	day_t = d.day_t
 	origin_id = d.get("origin", "")
 	_recruited_names = d.get("recruited", [])
+	rested_t = float(d.get("rested", 0.0))
 	xp = int(d.get("xp", 0)); level = int(d.get("level", 1)); perks = d.get("perks", {})
 	notes_read = []
 	for n in d.get("notes", []): notes_read.append(int(n))
@@ -2376,7 +2447,8 @@ func travel_to_loc(l: Dictionary) -> void:
 func _world_life(delta: float) -> void:
 	var p := player
 	# day / night colour grade — a full day takes 8 minutes
-	day_t = fmod(day_t + delta / 480.0, 1.0)
+	day_t = fmod(day_t + delta / DAY_LEN, 1.0)
+	rested_t = maxf(0.0, rested_t - delta)
 	var sun := sin(day_t * TAU)          # 0.25 = noon, 0.75 = midnight
 	var dayness := clampf(sun * 1.6 + 0.5, 0.0, 1.0)
 	var dusk := clampf(1.0 - absf(sun) * 3.0, 0.0, 1.0)
@@ -2554,8 +2626,9 @@ func _update_hud() -> void:
 	for s in survivors:
 		if s.get_meta("recruited"): nrec += 1
 	var wx: String = {"dust": "  · dust", "rain": "  · rain", "rad": "  · RADSTORM"}.get(weather.kind, "") if weather and weather.amt > 0.2 else ""
+	if rested_t > 0.0: wx += "  · Rested"
 	hud.stats.text = "%s   ARM %d   %02d:00%s\nScrap %d  ·  Med %d  ·  Goods %d/%d%s" % [
-		gun_s, armor_total(), hh, wx, p.carry.scrap + stash.scrap, inv_count("medkit"), goods_carried(), goods_cap(), "   [SNEAKING]" if p.crouch else ""]
+		gun_s, armor_total(), hh, wx, p.carry.scrap + stash.scrap, inv_count("medkit"), goods_carried(), goods_cap(), ("   [SNEAKING]" if p.crouch else "")]
 	hud.hp = p.hp
 	hud.hp_max = p.max_hp
 	hud.level = level
@@ -2606,6 +2679,9 @@ func _update_hud() -> void:
 					"sealed": msg = "Boarded up"
 			"camp": msg = "%s Camp menu" % ("CAMP" if using_touch else "[B]")
 			"examine": msg = "%s Look: %s" % [k, t.o.info.get_slice("|", 0)]
+			"bed":
+				if t.b.settlement >= 0 and not base.claimed.has(t.b.id): msg = "Someone's bed — sleep in your own, or claim a place"
+				else: msg = "%s Sleep" % k
 			"portal":
 				if t.o.portal == "exit": msg = "%s Climb back up to the surface" % k
 				else:
@@ -2979,6 +3055,38 @@ func _debug_under() -> void:
 		await get_tree().create_timer(0.3).timeout
 	print("UNDER back on surface at ", player.wpos, " world interior=", world.interior, " loaded ", loaded.size())
 	await _snap("user://shots/under_back.png")
+	get_tree().quit()
+
+## Sleep check: find an unowned bed nearby, sleep until morning.
+func _debug_sleep() -> void:
+	DirAccess.make_dir_recursive_absolute("user://shots")
+	await get_tree().create_timer(1.0).timeout
+	var bed: World.Furn = null
+	var bb: World.Bld = null
+	for b in world.buildings:
+		if b.settlement >= 0: continue
+		for f in b.furn:
+			if f.name == "bed" and f.fl == 0 and b.door_seg != null: bed = f; bb = b; break
+		if bed: break
+	print("SLEEP bed ", bed != null, " in ", bb.kind if bb else "-")
+	if bed == null: get_tree().quit(); return
+	player.wpos = bed.pos + Vector2(0.6, 0.6)
+	for t in 20:
+		if world.can_stand(player.wpos, 0.2, 0) and world.building_at(player.wpos.x, player.wpos.y) == bb.id: break
+		player.wpos = bed.pos + Vector2(randf_range(-1, 1), randf_range(-1, 1))
+	player.sync(); rebase(); _stream(true)
+	await get_tree().create_timer(0.5).timeout
+	var t := find_target()
+	print("SLEEP target ", t.get("k", "none"), " prompt ", hud.prompt.text if hud.get("prompt") else "")
+	await _snap("user://shots/sleep_bed.png")
+	player.hp = 6.0
+	var d0 := day_t
+	_sleep(8.0, false)
+	await get_tree().create_timer(2.0).timeout
+	print("SLEEP day %.3f -> %.3f, hp %.1f, rested %.0f, state %s" % [d0, day_t, player.hp, rested_t, state])
+	open_sleep(false)
+	await get_tree().create_timer(0.4).timeout
+	await _snap("user://shots/sleep_menu.png")
 	get_tree().quit()
 
 ## Walk along the interstate for a while, measuring frame times while chunks stream in.
