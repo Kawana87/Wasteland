@@ -725,6 +725,37 @@ hb = ndimage.gaussian_filter(H, 0.6)
 Image.fromarray(np.clip(glow * 255, 0, 255).astype(np.uint8)).save(TMP + "/glow.png")
 Image.fromarray(np.clip(water_all * 255, 0, 255).astype(np.uint8)).save(TMP + "/water.png")
 np.save(TMP + "/height.npy", H.astype(np.float32))
+# ---- game data: the same world at 1 px per tile, read by the game's chunk generator (World.gen_chunk)
+DATA = os.path.join(OUT, "data"); os.makedirs(DATA, exist_ok=True)
+BIOMES = ["waste", "hills", "woods", "farm", "salt", "marsh", "canyon", "crater", "city", "suburb", "water", "gorge", "peak", "beach"]
+bio = np.zeros((N, N), np.uint8)
+bio[hm > 0.28] = 1
+bio[pk > 0.45] = 12
+bio[soft(deadwood, 1) > 0.5] = 2
+bio[keep & farms if False else farms] = 3
+bio[LY.salt] = 4
+bio[marsh] = 5
+bio[can_area > 0.5] = 6
+bio[(gorge > 0.5) & (can_area > 0.3)] = 11
+bio[cr < 1.15] = 7
+bio[D > 0.16] = 9
+bio[D > 0.4] = 8
+bio[marsh & ~water_all] = 5
+bio[(dw < 0.004) & ~water_all] = 13
+bio[water_all] = 10
+rk = np.zeros((N, N), np.uint8)
+for i_, k_ in enumerate(("track", "road", "highway", "interstate")):
+    rk[road_m[k_]] = i_ + 1
+wsh = (sstep(0.003, 0.0, dwash) * 255).astype(np.uint8)
+Image.fromarray(np.stack([bio, np.clip(D * 255, 0, 255).astype(np.uint8), wsh, rk * 60], -1), "RGBA").save(DATA + "/biome.png")
+hn = (H - H.min()) / (H.max() - H.min())
+Image.fromarray((hn * 65535).astype(np.uint16)).save(DATA + "/height.png")
+json.dump({"size": N, "hmin": float(H.min()), "hmax": float(H.max()), "water_level": float(WL), "biomes": BIOMES,
+           "road_kinds": ["none", "track", "road", "highway", "interstate"], "cbd": list(CBD),
+           "roads": [dict(kind=k, path=[[round(x * N, 1), round(y * N, 1)] for x, y in pts[::2] + [pts[-1]]]) for k, pts in ROADS],
+           "metro": [[round(x * N, 1), round(y * N, 1)] for x, y in METRO]},
+          open(DATA + "/world.json", "w"))
+log("game data written")
 json.dump([dict(kind=k, path=[[round(x, 4), round(y, 4)] for x, y in pts[::3] + [pts[-1]]]) for k, pts in ROADS], open(TMP + "/roads.json", "w"))
 geo_v = np.concatenate(GV); geo_c = np.concatenate(GC)
 log("buildings: %d verts, colour range %.3f..%.3f nan %d, z %.2f..%.2f" % (len(geo_v), geo_c.min(), geo_c.max(), np.isnan(geo_c).sum(), geo_v[:,2].min(), geo_v[:,2].max()))

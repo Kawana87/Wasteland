@@ -33,6 +33,7 @@ var views: Array = []
 var base: BaseBuild
 var terrain: TerrainMesh
 var wmap: WorldMap
+var invs: InventoryScreen
 var crate_nodes := {}            # Crate -> Sprite2D
 var tree_nodes := {}             # tile index -> Sprite2D
 var chop_hits := {}
@@ -122,6 +123,9 @@ func _ready() -> void:
 	wmap = WorldMap.new()
 	add_child(wmap)
 	wmap.setup(self)
+	invs = InventoryScreen.new()
+	add_child(invs)
+	invs.setup(self)
 	_load_settings()
 	var args := OS.get_cmdline_user_args()
 	if "--autostart" in args:
@@ -144,6 +148,8 @@ func _ready() -> void:
 			_debug_desks.call_deferred()
 		if "--ruins" in args:
 			_debug_ruins.call_deferred()
+		if "--inv" in args:
+			_debug_inv.call_deferred()
 		if "--map" in args:
 			_debug_map.call_deferred()
 		if "--build" in args:
@@ -496,7 +502,7 @@ func use_item(id: String) -> void:
 	if d.get("heal", 0) > 0 and player.hp < player.max_hp and inv_take(id):
 		player.hp = minf(player.max_hp, player.hp + d.heal)
 		add_text(player.wpos, "+%d hp" % d.heal, Color("9fd08a"))
-	if hud.menu_open(): open_inventory()
+	if hud.menu_open() or invs.visible: open_inventory()
 
 func quick_heal() -> void:
 	if player.hp >= player.max_hp: return
@@ -511,29 +517,30 @@ func _refresh_gun() -> void:
 
 func open_inventory() -> void:
 	if state != "play": return
-	var lines := ["HP %d/%d   ·   Armour %d (%d%% less damage)" % [int(player.hp), int(player.max_hp), armor_total(), int(_reduction() * 100)],
-		"Gun: %s   ·   Melee: %s   ·   Head: %s   ·   Body: %s" % [Items.iname(equip.gun) if equip.gun != "" else "none", Items.iname(equip.melee), Items.iname(equip.head) if equip.head != "" else "none", Items.iname(equip.body) if equip.body != "" else "none"],
-		"Carrying: %d scrap · %d cloth · %d wood" % [player.carry.scrap, player.carry.cloth, player.carry.wood]]
-	var ammo_line := []
-	var btns := []
-	for it in inventory:
-		var d := Items.info(it.id)
-		var nm: String = d.get("name", it.id)
-		match d.get("slot", ""):
-			"ammo": ammo_line.append("%s ×%d" % [nm, it.n])
-			"use":
-				var iid: String = it.id
-				btns.append(["Use %s ×%d  (+%d hp)" % [nm, it.n, d.heal], func(): use_item(iid), player.hp >= player.max_hp])
-			"gun", "melee", "head", "body":
-				var iid: String = it.id
-				var on: bool = equip[d.slot] == iid
-				var stat := ("dmg %d · %s" % [d.dmg * d.get("pellets", 1), Items.iname(d.ammo)]) if d.slot == "gun" else (("dmg %d" % d.dmg) if d.slot == "melee" else ("armour %d" % d.armor))
-				btns.append([("✓ " if on else "Equip ") + "%s  (%s)" % [nm, stat], func(): equip_item(iid), on])
-	if ammo_line.size(): lines.append("Ammo: " + "  ·  ".join(ammo_line))
-	if equip.melee != "fists":
-		btns.append(["Put away melee weapon (fists)", func(): equip_item("fists"), false])
-	btns.append(["Close", hud.hide_menu, false])
-	hud.show_menu("Inventory", lines, btns)
+	if invs.visible: invs.refresh()
+	else: invs.open()
+
+func unequip(slot: String) -> void:
+	equip[slot] = "fists" if slot == "melee" else ""
+	_refresh_gun()
+	open_inventory()
+
+## Drop one of an item on the ground as a bag you can pick back up.
+func drop_item(id: String) -> void:
+	var slot: String = Items.info(id).get("slot", "")
+	if slot in ["gun", "melee", "head", "body"] and equip[slot] == id and inv_count(id) <= 1:
+		unequip(slot)
+	if not inv_take(id): return
+	var cr := World.Crate.new()
+	cr.pos = player.wpos + Vector2(0.4, 0.4)
+	cr.kind = "bag"
+	cr.fl = player.fl
+	cr.set_meta("loot", [[id, 1]])
+	world.crates.append(cr)
+	var s := _sprite("bag", cr.pos, world.stand_z(cr.pos.x, cr.pos.y, cr.fl), Vector2(-4, -8), 0.1)
+	crate_nodes[cr] = s
+	hud.toast("Dropped %s." % Items.iname(id))
+	open_inventory()
 
 func _reduction() -> float:
 	return minf(0.6, armor_total() * 0.07)
@@ -606,6 +613,10 @@ func _unhandled_input(ev: InputEvent) -> void:
 	if hud.menu_open() and (ev.is_action_pressed("close") or ev.is_action_pressed("inventory")):
 		hud.hide_menu()
 		get_viewport().set_input_as_handled()
+		return
+	if invs and invs.visible:
+		if ev is InputEventKey and ev.pressed and ev.keycode in [KEY_I, KEY_ESCAPE, KEY_TAB]:
+			invs.close_screen(); get_viewport().set_input_as_handled()
 		return
 	if wmap and wmap.visible:
 		if (ev is InputEventKey and ev.pressed and ev.keycode in [KEY_M, KEY_ESCAPE]):
@@ -801,6 +812,8 @@ func _loot(c: World.Crate) -> void:
 	noise(c.pos, (5.0 if c.kind == "car" else 4.5) * q, (35.0 if c.kind == "car" else 24.0) * q)
 	var mats := Items.roll_materials(c.kind, rng)
 	var items := Items.roll_loot(c.kind, rng)
+	if c.has_meta("loot"):                       # something you dropped: exactly that comes back
+		mats = [0, 0, 0]; items = c.get_meta("loot")
 	if c.has_meta("extra"): items.append([c.get_meta("extra"), 1])
 	if any_up("bench") and rng.randf() < 0.5:
 		items.append([gun_info().get("ammo", "ammo_pistol"), 2])
@@ -1260,7 +1273,7 @@ func _process(delta: float) -> void:
 			respawn()
 		_update_camera()
 		return
-	if hud.menu_open() or (wmap and wmap.visible):
+	if hud.menu_open() or (wmap and wmap.visible) or (invs and invs.visible):
 		_update_camera()
 		return
 	var p := player
@@ -1919,6 +1932,18 @@ func _debug_build() -> void:
 		await get_tree().create_timer(0.5).timeout
 		await _snap(out + "/build_den.png")
 		for v in views: v.visible = true
+	get_tree().quit()
+
+func _debug_inv() -> void:
+	DirAccess.make_dir_recursive_absolute("user://shots")
+	await get_tree().create_timer(1.0).timeout
+	for k in ["pistol_10mm", "shotgun", "rifle", "smg", "machete", "spiked_bat", "road_helmet", "combat_vest", "jacket", "ammo_shell", "ammo_rifle"]:
+		inv_add(k, 1 if not k.begins_with("ammo") else 12)
+	equip_item("pistol_10mm")
+	invs.sel = "shotgun"
+	open_inventory()
+	await get_tree().create_timer(0.5).timeout
+	await _snap("user://shots/inventory.png")
 	get_tree().quit()
 
 func _debug_map() -> void:

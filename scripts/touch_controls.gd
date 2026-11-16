@@ -14,12 +14,10 @@ var held := {}                        # touch index -> button name
 var buttons := [
 	{"name": "use", "label": "USE", "pos": Vector2(-90, -250)},
 	{"name": "melee", "label": "HIT", "pos": Vector2(-200, -300)},
-	{"name": "jump", "label": "JUMP", "pos": Vector2(-90, -370)},
 	{"name": "sneak", "label": "SNEAK", "pos": Vector2(-200, -180)},
-	{"name": "camp", "label": "CAMP", "pos": Vector2(-90, -490)},
+	{"name": "camp", "label": "CAMP", "pos": Vector2(-90, -370)},
 	{"name": "inv", "label": "INV", "pos": Vector2(-200, -420)},
-	{"name": "heal", "label": "HEAL", "pos": Vector2(-310, -240)},
-	{"name": "map", "label": "MAP", "pos": Vector2(-310, -360)},
+	{"name": "map", "label": "MAP", "pos": Vector2(-310, -300)},
 ]
 const BTN_R := 44.0
 
