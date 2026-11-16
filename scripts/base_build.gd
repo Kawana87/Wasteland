@@ -381,6 +381,7 @@ func found_problem(t: Vector2i, top: float) -> String:
 func _commit() -> void:
 	var ts := targets(drag_a, drag_b)
 	if ts.is_empty(): return
+	g.audio.play("build", Vector2.INF, -5.0)
 	if piece == "remove":
 		for k in ts: remove(k)
 		return

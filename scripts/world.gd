@@ -1583,13 +1583,13 @@ func _chunk_city(r: Rect2i) -> void:
 		for x in range(r.position.x + 2, r.end.x - 3):
 			var gx := posmod(x, GRID)
 			var gy := posmod(y, GRID)
-			if (gx == 3 or gx == 8) and (gy == 3 or gy == 8):
+			if (gx == 3 or gx == 7 or gx == 10) and (gy == 3 or gy == 7 or gy == 10):
 				lots.append(Vector2i(x, y))
 	lots.shuffle()
 	for lot in lots:
 		var d := density(lot.x + 2, lot.y + 2)
 		var b := biome(lot.x + 2, lot.y + 2)
-		if d < 70 or T[idx(lot.x, lot.y)] != GRASS and T[idx(lot.x, lot.y)] != SIDE: continue
+		if d < 60 or T[idx(lot.x, lot.y)] != GRASS and T[idx(lot.x, lot.y)] != SIDE: continue
 		if b == B_WATER: continue
 		var kind := "house"
 		var q := rng.randf()
@@ -1600,10 +1600,10 @@ func _chunk_city(r: Rect2i) -> void:
 		elif d > 100:
 			kind = "house" if q < 0.7 else ["garage", "shop"][ri(0, 1)]
 		else:
-			if q < 0.4: continue
+			if q < 0.25: continue
 			kind = "house" if q < 0.9 else "garage"
 		var parts := shape_for(kind, lot.x, lot.y)
-		if not _inside(parts, r): continue
+		if not _inside(parts, r, -6): continue      # may reach into neighbours (they have a base; not yet shown)
 		place_shape(parts, kind)
 
 ## Houses strung along roads where density is light, and roadside stops (gas, diner, motel) along
@@ -1636,7 +1636,7 @@ func _chunk_roadside(cx: int, cy: int, r: Rect2i) -> void:
 		var off: float = pth.w + rf(1.6, 3.2)
 		var at := p + dir.orthogonal() * side * (off + 2.5)
 		var parts := shape_for(kind, int(at.x) - 2, int(at.y) - 2)
-		if not _inside(parts, r): continue
+		if not _inside(parts, r, -6): continue
 		place_shape(parts, kind)
 
 # ---------------------------------------------------------------- towns and sites
@@ -1745,6 +1745,19 @@ func _town(l: Dictionary) -> void:
 		add_decor("stall", tp + Vector2(0, -0.6), true, Vector2(0.5, 0.2))
 		critters.append({"type": "trader", "pos": tp, "home": tp, "settlement": si})
 	add_decor("pump", c + Vector2(-1.5, -1.8), true, Vector2(0.15, 0.15))
+	# market row: stalls along one side of the yard, busier in bigger towns
+	var mdir := Vector2.from_angle(a0 + PI * 0.5)
+	for k in int(r / 5.0) + 1:
+		var mp := c + mdir * (2.6 + k * 1.7) + mdir.orthogonal() * 1.6
+		_try_decor("stall", mp, true, Vector2(0.5, 0.2))
+		_try_decor(["barrel", "trashbag", "barrel_rust"][ri(0, 2)], mp + mdir.orthogonal() * 0.9, true, Vector2(0.17, 0.17))
+	# lamps around the yard so towns glow at night
+	for k in int(r / 3.0) + 2:
+		var lp := c + Vector2.from_angle(a0 + k * TAU / (int(r / 3.0) + 2) + 0.3) * r * 0.55
+		_try_decor("lamp", lp, true, Vector2(0.08, 0.08))
+	# drifters camped at the edge
+	for k in ri(1, 3):
+		_try_decor("tent", c + Vector2.from_angle(rf(0, TAU)) * r * 0.8, true, Vector2(0.45, 0.45))
 	add_decor("tower_decor", c + Vector2.from_angle(a0 + 0.7) * r * 0.85, true, Vector2(0.25, 0.25))
 	if r > 12.0: add_decor("tower_decor", c + Vector2.from_angle(a0 + 3.6) * r * 0.85, true, Vector2(0.25, 0.25))
 	for k in 6:

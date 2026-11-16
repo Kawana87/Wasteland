@@ -1226,6 +1226,7 @@ func interact() -> void:
 			chop_hits[i] = n
 			var tp := Vector2(t.x + 0.5, t.y + 0.5)
 			burst(tp, 5, [Color("c8a070"), Color("8a6a44"), Color("5f9448")], 10.0)
+			audio.play("chop", tp, -4.0)
 			noise(tp, 3.0 if p.crouch else 5.0, 8.0 if p.crouch else 16.0)
 			var spr: Sprite2D = tree_nodes.get(i)
 			if spr:
@@ -1480,6 +1481,7 @@ func _view_of(bid: int) -> BuildingView:
 	return null
 
 func set_door(sg: World.Seg, st: String) -> void:
+	if audio and sg.door != st and (st == "open" or st == "closed"): audio.play("door", (sg.a + sg.b) * 0.5, -6.0)
 	world.set_door(sg, st)
 	if sg.bid == -1:
 		base.refresh(sg)
