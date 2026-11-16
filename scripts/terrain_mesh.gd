@@ -56,7 +56,7 @@ func build(w: World, ccx: int, ccy: int, near: Array) -> void:
 			var B := Vector3(X + 1, Y, w.vh(X + 1, Y))
 			var C := Vector3(X + 1, Y + 1, w.vh(X + 1, Y + 1))
 			var D := Vector3(X, Y + 1, w.vh(X, Y + 1))
-			_tile_m = _material(w, X + 0.5, Y + 0.5, 0.0)
+			_tile_m = tile_mat(w, X, Y)
 			_tri(w, A, B, C, front, verts, cols, uvs, x0, y0)
 			_tri(w, A, C, D, front, verts, cols, uvs, x0, y0)
 	var arr := []
@@ -73,12 +73,29 @@ func build(w: World, ccx: int, ccy: int, near: Array) -> void:
 	for k in maps:
 		mat.set_shader_parameter(k + "_map", maps[k])
 	mat.set_shader_parameter("origin", Vector2(x0, y0))
+	var mi := Image.create(World.CH + 2, World.CH + 2, false, Image.FORMAT_R8)
+	for y in range(-1, World.CH + 1):
+		for x in range(-1, World.CH + 1):
+			var X := clampi(x0 + x, 0, World.N - 1)
+			var Y := clampi(y0 + y, 0, World.N - 1)
+			var mm := tile_mat(w, X, Y)
+			mi.set_pixel(x + 1, y + 1, Color8(mm, 0, 0))
+	mat.set_shader_parameter("mat_map", ImageTexture.create_from_image(mi))
+	mat.set_shader_parameter("pal", PAL)
 	mat.set_shader_parameter("city", 1.0 if w.density(x0 + 16, y0 + 16) > 110 else 0.0)
 	material = mat
 	z_index = -4096
 	z_as_relative = false
 
 const SHADER := preload("res://shaders/terrain.gdshader")
+static var PAL := _pal()
+
+static func _pal() -> PackedVector3Array:
+	var out := PackedVector3Array()
+	for k in 25:
+		var c: Color = MAT_COL.get(k, Color.MAGENTA)
+		out.append(Vector3(c.r, c.g, c.b))
+	return out
 
 static func _winding(a: Vector2, b: Vector2, c: Vector2) -> float:
 	return (b.y - c.y) * (a.x - c.x) + (c.x - b.x) * (a.y - c.y)
@@ -95,13 +112,7 @@ func _tri(w: World, A: Vector3, B: Vector3, C: Vector3, front: bool, verts: Pack
 		n = -n
 	n = n.normalized()
 	var lit := maxf(0.0, n.dot(LIGHT))
-	var steep := sqrt(n.x * n.x + n.y * n.y) / maxf(0.05, n.z)
-	var m: int
-	if steep > 1.25:
-		var bb := w.biome(int(A.x), int(A.y))
-		m = 17 if bb == World.B_CANYON or bb == World.B_GORGE else 4
-	else:
-		m = _tile_m
+	var m: int = _tile_m
 	var col: Color = MAT_COL[m]
 	col.a = lit
 	verts.append(a); verts.append(b); verts.append(c)
@@ -110,6 +121,19 @@ func _tri(w: World, A: Vector3, B: Vector3, C: Vector3, front: bool, verts: Pack
 	uvs.append(Vector2(A.x + mo, A.y - y0)); uvs.append(Vector2(B.x + mo, B.y - y0)); uvs.append(Vector2(C.x + mo, C.y - y0))
 
 var _tile_m := 0
+
+## Material of a tile including its slope: steep tiles are rock (red rock in canyon country). Water
+## banks don't count as cliffs. Worked out per tile so the shader can blend rock edges like any other.
+func tile_mat(w: World, X: int, Y: int) -> int:
+	var a := w.vh(X, Y)
+	var b := w.vh(X + 1, Y)
+	var c := w.vh(X + 1, Y + 1)
+	var d := w.vh(X, Y + 1)
+	var gx := maxf(absf(b - a), absf(c - d)) / 16.0
+	var gy := maxf(absf(d - a), absf(c - b)) / 16.0
+	var steep := sqrt(gx * gx + gy * gy)
+	var wet := minf(minf(a, b), minf(c, d)) <= w.VH_W + 0.01
+	return _material(w, X + 0.5, Y + 0.5, 0.0 if wet else steep)
 
 func _material(w: World, x: float, y: float, steep: float) -> int:
 	if steep > 1.25:

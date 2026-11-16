@@ -1350,7 +1350,18 @@ func _vert_h(vx: int, vy: int) -> float:
 		if braw[(y * N + x) * 4] == B_WATER: wet = true
 		s += hn(x, y)
 	if wet: return VH_W
-	return (s * 0.25 - hmin) * HS
+	var h := (s * 0.25 - hmin) * HS
+	# ease banks down to the water so shores slope gently instead of stepping off a ledge
+	var near := 9.0
+	for oy in range(-3, 3):
+		for ox in range(-3, 3):
+			var x: int = clampi(vx + ox, 0, N - 1)
+			var y: int = clampi(vy + oy, 0, N - 1)
+			if braw[(y * N + x) * 4] == B_WATER:
+				near = minf(near, Vector2(ox + 0.5, oy + 0.5).length())
+	if near < 3.5:
+		h = lerpf(VH_W + 1.0, h, sstep((near - 0.7) / 2.8))
+	return h
 
 func _ground_for(b: int, x: int, y: int) -> int:
 	var n := sin(x * 0.37 + seed_value) + sin(y * 0.29 - seed_value * 0.7) + sin((x + y) * 0.17 + 3.0)

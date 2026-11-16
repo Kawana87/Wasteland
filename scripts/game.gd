@@ -2223,6 +2223,10 @@ func _debug_tour() -> void:
 	var only := ""
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--only="): only = a.substr(7)
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--at="):
+			var xy := a.substr(5).split(",")
+			stops.append(["at_%s_%s" % [xy[0], xy[1]], Vector2(float(xy[0]), float(xy[1]))])
 	for l in world.locs:
 		if only == "" or l.id in only.split(","): stops.append([l.id, l.pos + Vector2(0, l.r * 0.3)])
 	if only == "" or "biomes" in only.split(","):

@@ -17,6 +17,8 @@ uniform sampler2D path_map : filter_linear, repeat_disable;
 uniform float shadow_strength = 1.0;
 uniform vec2 origin = vec2(0.0);     // chunk origin in tiles (UV holds tile position within the chunk)
 uniform float city = 0.0;
+uniform sampler2D mat_map : filter_nearest, repeat_disable;   // tile materials of the chunk + 1-tile border (34x34)
+uniform vec3 pal[25];                                         // material mid-tones (TerrainMesh.MAT_COL)
 
 varying vec2 lpos;
 varying float mat;
@@ -41,6 +43,14 @@ float vnoise(vec2 p) {
 	return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x), f.y);
 }
 
+bool is_floor_m(float m) {
+	return (m >= 6.5 && m <= 10.5) || (m > 13.5 && m < 14.5);
+}
+
+float mat_at(vec2 q) {
+	return floor(texture(mat_map, (clamp(q, vec2(-0.99), vec2(32.99)) + 1.0) / 34.0).r * 255.0 + 0.5);
+}
+
 void fragment() {
 	vec2 cell = floor(pix);
 	float n = hash(cell);
@@ -53,9 +63,39 @@ void fragment() {
 	vec2 wpos = lpos + origin;
 	float lt = lit;
 	bool floor_mat = (m >= 6.5 && m <= 10.5) || (m > 13.5 && m < 14.5);
-	bool water = m > 14.5 && m < 15.5;
 	bool is_city = city > 0.5;
-	if (!floor_mat && !water) {
+	// Biome blending: look up which material this pixel belongs to at a noise-warped position, with an
+	// ordered-dither fringe, so borders between grass, sand, marsh, salt, rock and water wander and
+	// interleave instead of following the tile grid.
+	bool foam = false;
+	if (!floor_mat) {
+		vec2 warp = vec2(vnoise(wpos * 0.55) - 0.5, vnoise(wpos * 0.55 + 31.7) - 0.5) * 1.35
+			+ vec2(vnoise(wpos * 2.3 + 7.1) - 0.5, vnoise(wpos * 2.3 + 3.3) - 0.5) * 0.5
+			+ vec2(th - 0.5, fract(th * 7.0) - 0.5) * 0.4;
+		vec2 q = lpos + warp;
+		float mm = mat_at(q);
+		if (!is_floor_m(mm)) {
+			m = mm;
+			base = pal[int(mm + 0.5)];
+		}
+		// shorelines: foam on the water's edge, darker wet ground on the bank
+		float wn = 0.0;
+		float ln = 0.0;
+		for (int k = 0; k < 4; k++) {
+			vec2 o = vec2(k == 0 ? 0.32 : (k == 1 ? -0.32 : 0.0), k == 2 ? 0.32 : (k == 3 ? -0.32 : 0.0));
+			float mk = mat_at(q + o);
+			if (abs(mk - 15.0) < 0.5) { wn += 1.0; } else { ln += 1.0; }
+		}
+		if (abs(m - 15.0) < 0.5 && ln > 0.0) {
+			float fo = vnoise(wpos * 3.0 + vec2(TIME * 0.4, 0.0));
+			if (fo > 0.5 + th * 0.35) { base = vec3(0.50, 0.60, 0.58); } else { base = vec3(0.22, 0.36, 0.38); }
+			foam = true;
+		} else if (abs(m - 15.0) >= 0.5 && wn > 0.0) {
+			base = mix(base, vec3(0.30, 0.30, 0.26), 0.45);
+		}
+	}
+	bool water = abs(m - 15.0) < 0.5;
+	if (!floor_mat) {
 		float rough = (vnoise(wpos * 4.0) - 0.5) * 0.4 + (vnoise(wpos * 11.0) - 0.5) * 0.2;   // ragged edges
 		float rd = texture(road_map, uv).r + rough * 0.6;
 		float sd = texture(side_map, uv).r;
@@ -77,6 +117,8 @@ void fragment() {
 			if (ph < 0.05 && dot(f, f) < 0.06) { base *= 0.6; }
 			if (vnoise(wpos * 0.7) > 0.72) { base = mix(base, vec3(0.42, 0.40, 0.36), 0.5); }
 			if (vnoise(wpos * 1.3 + 7.0) > 0.78 && n < 0.25) { base = vec3(0.42, 0.48, 0.28); }   // weeds pushing through
+		} else if (water && dd <= edge) {
+			// open water: nothing painted
 		} else if (sd > edge) {
 			if (is_city) {
 				base = vec3(0.56, 0.54, 0.50); m = 6.0;        // concrete sidewalk slabs
@@ -122,11 +164,14 @@ void fragment() {
 	if (m == 21.0) { if (fract(wpos.x * 0.7 + sin(wpos.y * 0.9) * 0.6) < 0.08) { extra = 1.0; } }
 	if (m == 22.0) { if (n < 0.08) { extra = -1.0; } if (vnoise(wpos * 3.0) > 0.7) { base = mix(base, vec3(0.42, 0.33, 0.2), 0.5); } }
 	if (m == 23.0) { vec2 f = fract(wpos * 0.5); if (f.x < 0.03 || f.y < 0.03) { extra = 1.0; } if (abs(vnoise(wpos * 2.0) - 0.5) < 0.025) { extra = 1.0; } if (vnoise(wpos * 1.1 + 4.0) > 0.75 && n < 0.3) { base = vec3(0.42, 0.46, 0.28); } }
+	water = abs(m - 15.0) < 0.5;
 	if (water) {
 		float t = TIME * 0.6;
 		float wv = vnoise(wpos * 1.3 + vec2(t, t * 0.6)) + vnoise(wpos * 3.1 - vec2(t * 0.8, 0.0)) * 0.5;
-		base = mix(vec3(0.17, 0.30, 0.34), vec3(0.23, 0.40, 0.42), clamp(wv - 0.4, 0.0, 1.0));
-		if (wv > 1.18 && n > 0.4) { base = vec3(0.55, 0.66, 0.62); }   // glints
+		if (!foam) {
+			base = mix(vec3(0.17, 0.30, 0.34), vec3(0.23, 0.40, 0.42), clamp(wv - 0.4, 0.0, 1.0));
+			if (wv > 1.18 && n > 0.4) { base = vec3(0.55, 0.66, 0.62); }   // glints
+		}
 		lt = 0.9;
 	}
 	float v = 0.5 + (lt - 0.80) * 3.0 + (n - 0.5) * 0.14;
