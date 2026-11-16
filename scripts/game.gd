@@ -32,6 +32,7 @@ var survivors: Array = []
 var views: Array = []
 var base: BaseBuild
 var terrain: TerrainMesh
+var wmap: WorldMap
 var crate_nodes := {}            # Crate -> Sprite2D
 var tree_nodes := {}             # tile index -> Sprite2D
 var chop_hits := {}
@@ -118,6 +119,9 @@ func _ready() -> void:
 	add_child(hud)
 	hud.crt_toggled.connect(toggle_crt)
 	hud.touch.action.connect(_on_touch_action)
+	wmap = WorldMap.new()
+	add_child(wmap)
+	wmap.setup(self)
 	_load_settings()
 	var args := OS.get_cmdline_user_args()
 	if "--autostart" in args:
@@ -140,6 +144,8 @@ func _ready() -> void:
 			_debug_desks.call_deferred()
 		if "--ruins" in args:
 			_debug_ruins.call_deferred()
+		if "--map" in args:
+			_debug_map.call_deferred()
 		if "--build" in args:
 			_debug_build.call_deferred()
 		return
@@ -601,6 +607,12 @@ func _unhandled_input(ev: InputEvent) -> void:
 		hud.hide_menu()
 		get_viewport().set_input_as_handled()
 		return
+	if wmap and wmap.visible:
+		if (ev is InputEventKey and ev.pressed and ev.keycode in [KEY_M, KEY_ESCAPE]):
+			wmap.close(); get_viewport().set_input_as_handled()
+		return
+	if ev is InputEventKey and ev.pressed and not ev.echo and ev.keycode == KEY_M and state == "play" and not hud.menu_open():
+		wmap.open(); return
 	if state != "play" or hud.menu_open():
 		return
 	if base and base.active and _build_input(ev):
@@ -648,6 +660,7 @@ func _on_touch_action(n: String) -> void:
 		"camp": open_camp_menu()
 		"inv": open_inventory()
 		"heal": quick_heal()
+		"map": wmap.open()
 
 func _read_move() -> Vector2:
 	var v := Vector2(Input.get_action_strength("right") - Input.get_action_strength("left"), Input.get_action_strength("down") - Input.get_action_strength("up"))
@@ -1183,6 +1196,16 @@ func _pack(c: Camp) -> void:
 	hud.toast("Packed up %s. Got 2 wood back." % c.cname)
 	hud.hide_menu()
 
+## Fast travel from the world map.
+func travel_to(c) -> void:
+	if danger():
+		hud.toast("Enemies are hunting you. Lose them first.")
+		return
+	if c == camp_near(player.wpos, 3.2):
+		hud.toast("You're already here.")
+		return
+	_start_travel(c)
+
 func open_travel_menu() -> void:
 	if state != "play": return
 	var here = camp_near(player.wpos, 3.2)
@@ -1237,7 +1260,7 @@ func _process(delta: float) -> void:
 			respawn()
 		_update_camera()
 		return
-	if hud.menu_open():
+	if hud.menu_open() or (wmap and wmap.visible):
 		_update_camera()
 		return
 	var p := player
@@ -1896,6 +1919,15 @@ func _debug_build() -> void:
 		await get_tree().create_timer(0.5).timeout
 		await _snap(out + "/build_den.png")
 		for v in views: v.visible = true
+	get_tree().quit()
+
+func _debug_map() -> void:
+	DirAccess.make_dir_recursive_absolute("user://shots")
+	await get_tree().create_timer(1.0).timeout
+	await _snap("user://shots/hud.png")
+	wmap.open()
+	await get_tree().create_timer(0.6).timeout
+	await _snap("user://shots/worldmap.png")
 	get_tree().quit()
 
 func _snap(path: String) -> void:

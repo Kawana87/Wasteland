@@ -10,12 +10,7 @@ var info: Label
 
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(0.12, 0.1, 0.08, 0.9)
-	sb.border_color = Color("f2c36b")
-	sb.set_border_width_all(2)
-	sb.set_content_margin_all(8)
-	add_theme_stylebox_override("panel", sb)
+	add_theme_stylebox_override("panel", Hud.term_box())
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 6)
 	add_child(col)
@@ -33,7 +28,7 @@ func _ready() -> void:
 		piece_btns[p] = _btn(r2, BaseBuild.NAMES[p], func(): base.select("", p))
 	info = Label.new()
 	info.add_theme_font_size_override("font_size", 15)
-	info.add_theme_color_override("font_color", Color("f2e6c8"))
+	info.add_theme_color_override("font_color", Hud.INK)
 	info.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	col.add_child(info)
 
@@ -43,7 +38,7 @@ func _btn(parent: Control, text: String, cb: Callable) -> Button:
 	b.toggle_mode = false
 	b.focus_mode = Control.FOCUS_NONE
 	b.custom_minimum_size = Vector2(92, 52)
-	b.add_theme_font_size_override("font_size", 16)
+	Hud.term_button(b)
 	b.pressed.connect(cb)
 	parent.add_child(b)
 	return b
@@ -72,4 +67,4 @@ func refresh() -> void:
 	position = Vector2(get_viewport().get_visible_rect().size.x - size.x - 8, 8)
 
 func _mark(b: Button, on: bool) -> void:
-	b.modulate = Color(1.0, 0.85, 0.45) if on else Color(1, 1, 1)
+	b.modulate = Color(1.6, 1.6, 1.0) if on else Color(1, 1, 1)

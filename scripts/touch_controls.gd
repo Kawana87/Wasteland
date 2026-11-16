@@ -19,6 +19,7 @@ var buttons := [
 	{"name": "camp", "label": "CAMP", "pos": Vector2(-90, -490)},
 	{"name": "inv", "label": "INV", "pos": Vector2(-200, -420)},
 	{"name": "heal", "label": "HEAL", "pos": Vector2(-310, -240)},
+	{"name": "map", "label": "MAP", "pos": Vector2(-310, -360)},
 ]
 const BTN_R := 44.0
 
@@ -94,10 +95,10 @@ func _draw() -> void:
 	var font := get_theme_default_font()
 	for b in ([] if build_mode else buttons):
 		var c := _btn_center(b)
-		draw_circle(c, BTN_R, Color(0.95, 0.76, 0.42, 0.18))
-		draw_arc(c, BTN_R, 0, TAU, 32, Color(0.95, 0.76, 0.42, 0.8), 2.0)
+		draw_circle(c, BTN_R, Color(0.1, 0.5, 0.2, 0.22))
+		draw_arc(c, BTN_R, 0, TAU, 32, Color(0.55, 1.0, 0.63, 0.85), 2.0)
 		var ts := font.get_string_size(b.label, HORIZONTAL_ALIGNMENT_CENTER, -1, 16)
-		draw_string(font, c + Vector2(-ts.x * 0.5, 6), b.label, HORIZONTAL_ALIGNMENT_CENTER, -1, 16, Color("f2e6c8"))
+		draw_string(font, c + Vector2(-ts.x * 0.5, 6), b.label, HORIZONTAL_ALIGNMENT_CENTER, -1, 16, Color("8dffa0"))
 	for side in sticks:
 		var st: Dictionary = sticks[side]
 		if st.is_empty():

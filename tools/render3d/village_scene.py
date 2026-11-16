@@ -571,7 +571,57 @@ def patchwork(M, rng):
     desert(20, rng, avoid=[(0, 2, 33, 26)])
 
 
+def sunbeam_commune(M, rng):
+    """A hilltop commune that worships the bomb's light: a big painted sun on the ground, tents in a ring,
+    gardens, a wooden sun-tower."""
+    ground(amp=0.35)
+    tint(10, 6, 24, 20, [(0.3, '#c8a040'), (0.7, '#d8b050')])
+    for k in range(12):
+        a = k / 12 * 6.283
+        box(17 + math.cos(a) * 5.5 - 0.15, 13 + math.sin(a) * 5.5 - 0.15, 0, 17 + math.cos(a) * 5.5 + 0.15, 13 + math.sin(a) * 5.5 + 0.15, 0.08, MAT("paint:#e0c050:0.2"))
+    box(16.6, 12.6, 0, 17.4, 13.4, 4.5, MAT("wood:#6a4a30:#4a3220"))
+    sphere(17, 13, 4.9, 0.6, MAT("glow:#ffd860"))
+    with P.zone(prio=2):
+        for k in range(10):
+            a = k / 10 * 6.283 + 0.3
+            P.lean_to(17 + math.cos(a) * 9.5, 13 + math.sin(a) * 8, math.degrees(a) + 90, rng)
+        P.campfire_pit(17, 17, 0, rng); purifier_t1(25, 4, 0, rng)
+    for (x0, y0) in ((2, 3), (27, 18)):
+        LM.field(x0, y0, x0 + 5, y0 + 4, rng, crop="furrow")
+    trees(25, rng, kinds=("dead", "scrub"), avoid=[(4, 2, 30, 24)])
+
+
+def hangmans_gap(M, rng):
+    """Where the interstate leaves the valley between rock walls: a toll barricade, shacks, a gallows sign."""
+    ground(flats=[(-16, 11, W_ + 16, 15)], amp=0.2)
+    kit.road(-16, 11.5, W_ + 16, 14.5, z=0.006, name="hwy")
+    cliff(-16, -16, W_ + 16, 7.5, 3.0, rng, col=("#7a6a58", "#5a4e42"))
+    cliff(-16, 18.5, W_ + 16, H_ + 16, 1.8, rng, col=("#7a6a58", "#5a4e42"))
+    LM.barricade_line(16.0, 11.3, 16.6, 14.7, rng)
+    box(18.5, 9.8, 0, 18.7, 10.0, 3.0, MAT("wood:#4e3622:#3a2a1a")); box(18.5, 9.8, 3.0, 20.0, 10.0, 3.2, MAT("wood:#4e3622:#3a2a1a"))
+    for (x, y) in ((8, 8.5), (12, 8.3), (22, 8.6), (26, 16), (9, 16)):
+        shack(x, y, rng)
+    with P.zone(prio=2):
+        for k in range(6): P.car_wreck(rng.uniform(2, 14), rng.uniform(11.8, 14.2), rng.choice([0, 180]), rng)
+        for k in range(8): P.sandbags(15.2, 11.2 + k * 0.45, 90, rng)
+
+
+def lookout_station_3(M, rng):
+    """Rangers' fire tower and cabin in the dead woods."""
+    ground(amp=0.3)
+    wood = MAT("wood:#4e3622:#3a2a1a")
+    for (a, b) in ((0, 0), (2, 0), (0, 2), (2, 2)):
+        box(15 + a - 0.1, 11 + b - 0.1, 0, 15 + a + 0.1, 11 + b + 0.1, 6.0, wood)
+    box(14.6, 10.6, 6.0, 17.4, 13.4, 7.6, MAT("paint:#6a7a5a:0.4")); box(14.4, 10.4, 7.6, 17.6, 13.6, 7.8, MAT("metal:#7a7468"))
+    S.ranch(M, 20, 14, rng, "s")
+    with P.zone(prio=2):
+        P.water_tank(13, 15, 0, rng); P.generator(12, 13, 0, rng); P.campfire_pit(18.5, 17.5, 0, rng)
+    trees(90, rng, kinds=("dead", "dead", "pine"), avoid=[(11, 9, 26, 20)])
+
+
 RECIPES = {
+    "sunbeam_commune": (sunbeam_commune, "Sunbeam Commune"), "hangmans_gap": (hangmans_gap, "Hangman's Gap"),
+    "lookout_station_3": (lookout_station_3, "Lookout Station 3"),
     "clearwater": (clearwater, "Clearwater"), "redwall": (redwall, "Redwall"), "greenmarsh": (greenmarsh, "Greenmarsh"),
     "atomic_plaza": (atomic_plaza, "Atomic Plaza"), "iron_gate_pen": (iron_gate, "Iron Gate"),
     "victory_stadium": (victory_stadium, "Victory Stadium"), "ridgeback_dam": (ridgeback_dam, "Ridgeback Dam"),
@@ -598,11 +648,26 @@ def purifier_sheet():
     W_, H_ = 34, 26
 
 
+def purifier_sprites():
+    """Game sprites (same camera and scale as every other prop) for the three purifier tiers."""
+    import port_common as PC
+    reset(); lights()
+    rng = random.Random(3)
+    for name, fn, w, h, ay in (("purifier_t1", purifier_t1, 72, 56, 40), ("purifier_t2", purifier_t2, 112, 150, 120), ("purifier_t3", purifier_t3, 168, 140, 100)):
+        obs = fn(0, 0, 0, rng)
+        PC.sprite(name, w, h, w // 2, ay, samples=24, bright=1.1, outline=True)
+        PC.set_anchor(name, w // 2, ay)
+        PC.clear(obs)
+        print("sprite", name, flush=True)
+
+
 if __name__ == "__main__":
     ids = [i for w_ in WHICH for i in (list(RECIPES) if w_ == "all" else [w_])]
     for i, k in enumerate(ids):
         if k == "purifiers":
             purifier_sheet(); continue
+        if k == "sprites":
+            purifier_sprites(); continue
         if os.path.exists(os.path.join(OUT, k + ".png")) and os.environ.get("SKIP"):
             continue
         fn, title = RECIPES[k]
