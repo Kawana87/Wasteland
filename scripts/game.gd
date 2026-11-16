@@ -53,7 +53,7 @@ var _last_pb := -99999
 var _last_pfl := -1
 var npcs: Array = []
 var furn_nodes := {}             # Furn -> Sprite2D
-var decor_nodes: Array = []      # [Decor, Sprite2D]
+var decor_nodes := {}             # Decor -> Sprite2D
 var smoke_spots: Array = []      # Vector2 world positions that puff smoke
 var faded_trees := {}
 var inventory: Array = []        # [{id, n}]
@@ -140,6 +140,8 @@ func _ready() -> void:
 			_debug_fade.call_deferred()
 		if "--tour" in args:
 			_debug_tour.call_deferred()
+		if "--walk" in args:
+			_debug_walk.call_deferred()
 		if "--bestiary" in args:
 			_debug_bestiary.call_deferred()
 		if "--upstairs" in args:
@@ -182,7 +184,7 @@ func start_new_world() -> void:
 			c.queue_free()
 	enemies.clear(); camps.clear(); survivors.clear(); views.clear(); bullets.clear(); particles.clear()
 	crate_nodes.clear(); tree_nodes.clear(); chop_hits.clear(); npcs.clear(); furn_nodes.clear(); decor_nodes.clear()
-	smoke_spots.clear(); faded_trees.clear(); dust.clear(); lights.lights.clear()
+	smoke_spots.clear(); faded_trees.clear(); dust.clear(); lights.lights.clear(); loaded.clear()
 	inventory = [{"id": "pipe_pistol", "n": 1}, {"id": "ammo_pistol", "n": 18}, {"id": "medkit", "n": 1}, {"id": "food", "n": 2}, {"id": "lockpick", "n": 3}]
 	equip = {"gun": "pipe_pistol", "melee": "fists", "head": "", "body": ""}
 	day_t = 0.3
@@ -192,20 +194,18 @@ func start_new_world() -> void:
 	floaters.clear()
 	stash = {"scrap": 0, "cloth": 0, "wood": 0}
 	world = World.new()
-	world.generate(randi() % 1000000)
+	world.load_data(randi() % 1000000)
+	Iso.origin = world.start.x + world.start.y
 	root = Node2D.new()
 	vp.add_child(root)
-	terrain = TerrainMesh.new()
-	terrain.build(world)
-	root.add_child(terrain)
-	for b in world.buildings:
-		for rp in b.roof_props:
-			_light_for(rp.tex, rp.pos, b.h0 + b.floors_at(rp.cell) * World.FLOOR_H)
-		var v := BuildingView.new()
-		v.setup(world, b)
-		root.add_child(v)
-		views.append(v)
-	_spawn_props()
+	terrain_root = Node2D.new()
+	root.add_child(terrain_root)
+	_parent = root
+	# home camp: a cleared spot on the road west of Patchwork
+	world._flatten(world.start, 3.5, world.hz(world.start.x, world.start.y), true)
+	for y in range(int(world.start.y) - 4, int(world.start.y) + 5):
+		for x in range(int(world.start.x) - 4, int(world.start.x) + 5):
+			if world.T[world.idx(x, y)] == World.TREE: world.T[world.idx(x, y)] = World.GRASS
 	var c := Camp.new()
 	root.add_child(c)
 	c.setup(world.start, "Home Camp", true)
@@ -220,21 +220,6 @@ func start_new_world() -> void:
 	dog = Dog.new()
 	root.add_child(dog)
 	dog.wpos = player.wpos + Vector2(-1, 0)
-	for s in world.spawns:
-		_spawn_enemy(s)
-	for d in world.critters:
-		_spawn_npc(d)
-	var wps := [world.road_point(), world.road_point(), world.road_point(), world.road_point()]
-	_spawn_npc({"type": "wanderer", "pos": wps[0], "patrol": wps})
-	for s in world.survivors:
-		var a := Actor.new()
-		root.add_child(a)
-		if not a.use_rendered("survivor", 8): a.make_body("survivor", 6, 16, 24)
-		a.wpos = s.pos
-		a.set_meta("name", s.name)
-		a.set_meta("recruited", false)
-		a.set_meta("slot", survivors.size())
-		survivors.append(a)
 	fx = FxLayer.new()
 	fx.z_index = 4095
 	fx.z_as_relative = false
@@ -242,10 +227,224 @@ func start_new_world() -> void:
 	cam = Camera2D.new()
 	root.add_child(cam)
 	cam.make_current()
-	time = 0.0; spawn_t = 0.0; patrol_t = 0.0; income_t = 0.0
+	_stream(true)
+	var wps := [world.road_point_near(player.wpos), world.road_point_near(player.wpos), world.road_point_near(player.wpos), world.road_point_near(player.wpos)]
+	_spawn_npc({"type": "wanderer", "pos": wps[0], "patrol": wps})
+	time = 0.0; spawn_t = 0.0; patrol_t = 0.0; income_t = 0.0; encounter_t = 0.0
 	_last_pb = -99999
 	state = "play"
-	hud.toast("Hills to the west, a ruined city to the east. Find a settlement to trade — and press I for your inventory.")
+	_discover()
+	hud.toast("The Sable Wastes. Patchwork is just east along the road — press M for the map, I for your inventory.")
+
+# ------------------------------------------------------------------ streaming
+## Chunks within LOAD_R tiles of the player are shown; chunks beyond KEEP_R are dropped (their data
+## stays in World, so walking back finds things as you left them). Content is generated a ring ahead.
+const LOAD_R := 34.0
+const KEEP_R := 62.0
+const AHEAD_R := 80.0
+var loaded := {}                 # chunk key -> {node, terrain, trees, crates, furn, decor, views}
+var terrain_root: Node2D
+var _parent: Node2D
+var _light_tag := -1
+var encounter_t := 0.0
+
+func _chunk_dist(cx: int, cy: int, p: Vector2) -> float:
+	var r := Rect2(cx * World.CH, cy * World.CH, World.CH, World.CH)
+	var dx := maxf(0.0, maxf(r.position.x - p.x, p.x - r.end.x))
+	var dy := maxf(0.0, maxf(r.position.y - p.y, p.y - r.end.y))
+	return maxf(dx, dy)
+
+func _stream(sync: bool) -> void:
+	var p := player.wpos
+	var t0 := Time.get_ticks_msec()
+	var c0 := World.chunk_of(p)
+	var want := []
+	var ahead := []
+	for cy in range(c0.y - 3, c0.y + 4):
+		for cx in range(c0.x - 3, c0.x + 4):
+			if cx < 0 or cy < 0 or cx >= World.NC or cy >= World.NC: continue
+			var d := _chunk_dist(cx, cy, p)
+			var key := World.ckey(cx, cy)
+			if d <= LOAD_R and not loaded.has(key): want.append([d, cx, cy])
+			elif d <= AHEAD_R and not world.content_done[key]: ahead.append([d, cx, cy])
+	want.sort_custom(func(a, b): return a[0] < b[0])
+	for w in want:
+		world.ensure_ready(w[1], w[2])
+		_load_chunk(w[1], w[2])
+		if not sync and Time.get_ticks_msec() - t0 > 8: return
+	if not sync and Time.get_ticks_msec() - t0 < 4 and ahead.size() > 0:
+		ahead.sort_custom(func(a, b): return a[0] < b[0])
+		world.ensure_content(ahead[0][1], ahead[0][2])
+	for key in loaded.keys():
+		var cx: int = key % World.NC
+		var cy: int = key / World.NC
+		if _chunk_dist(cx, cy, p) > KEEP_R: _unload_chunk(key)
+	# actors that wandered (or were left) far away go back to their spawn records
+	for e in enemies:
+		if not e.dead and absf(e.wpos.x - p.x) + absf(e.wpos.y - p.y) > KEEP_R * 1.6:
+			var sp = e.get_meta("sp") if e.has_meta("sp") else null
+			if sp != null:
+				sp.active = false
+				sp.pos = e.wpos
+			e.dead = true
+			e.queue_free()
+	enemies = enemies.filter(func(e): return not e.dead)
+	for n in npcs:
+		if absf(n.wpos.x - p.x) + absf(n.wpos.y - p.y) > KEEP_R * 1.6:
+			var d = n.get_meta("sp") if n.has_meta("sp") else null
+			if d != null: d.active = false
+			n.queue_free()
+	npcs = npcs.filter(func(n): return is_instance_valid(n) and not n.is_queued_for_deletion())
+
+func _load_chunk(cx: int, cy: int) -> void:
+	var key := World.ckey(cx, cy)
+	var cn := Node2D.new()
+	root.add_child(cn)
+	_parent = cn
+	_light_tag = key
+	var rec := {"node": cn, "trees": [], "crates": [], "furn": [], "decor": [], "views": []}
+	loaded[key] = rec
+	var near := []
+	for oy in range(-1, 2):
+		for ox in range(-1, 2):
+			if cx + ox >= 0 and cy + oy >= 0 and cx + ox < World.NC and cy + oy < World.NC:
+				near.append(world._bucket(World.ckey(cx + ox, cy + oy)))
+	var tm := TerrainMesh.new()
+	tm.build(world, cx, cy, near)
+	rec.terrain = tm
+	# keep ground meshes in back-to-front chunk order
+	var order := cx + cy
+	var at := terrain_root.get_child_count()
+	for i in terrain_root.get_child_count():
+		var o: TerrainMesh = terrain_root.get_child(i)
+		if o.chunk.x + o.chunk.y > order or (o.chunk.x + o.chunk.y == order and o.chunk.x > cx):
+			at = i; break
+	terrain_root.add_child(tm)
+	terrain_root.move_child(tm, at)
+	var w := world
+	var x0 := cx * World.CH
+	var y0 := cy * World.CH
+	for y in range(y0, y0 + World.CH):
+		for x in range(x0, x0 + World.CH):
+			var i := y * World.N + x
+			if w.T[i] == World.TREE:
+				var p := Vector2(x + 0.5, y + 0.5)
+				tree_nodes[i] = _sprite(_tree_tex(x, y, w.V[i]), p, w.hz(p.x, p.y), Vector2(-12, -36))
+				rec.trees.append(i)
+	var bk: Dictionary = w._bucket(key)
+	for b in bk.buildings:
+		for rp in b.roof_props:
+			_light_for(rp.tex, rp.pos, b.h0 + b.floors_at(rp.cell) * World.FLOOR_H)
+		var v := BuildingView.new()
+		v.setup(w, b)
+		cn.add_child(v)
+		views.append(v)
+		rec.views.append(v)
+		for f in b.furn:
+			var s := _sprite("furn_%s_%s" % [f.name, f.orient], f.pos, w.stand_z(f.pos.x, f.pos.y, f.fl), Vector2(-24, -40))
+			s.z_index = Iso.z_for(f.pos.x + f.pos.y, 3 + f.fl * 2)
+			if f.crate != null and f.crate.open: s.modulate = Color(0.78, 0.74, 0.7)
+			furn_nodes[f] = s
+			rec.furn.append(f)
+	for c in bk.cars:
+		_sprite("car_%s_%d" % [c.spr, c.k], c.pos, w.hz(c.pos.x, c.pos.y), Vector2(-40, -34))
+	for d in bk.decor:
+		var s := _decor_sprite(d)
+		decor_nodes[d] = s
+		rec.decor.append(d)
+	for line in bk.poles:
+		_pole_line(line)
+	for cr in bk.crates:
+		if cr.kind == "car" or cr.kind == "brute_drop": continue
+		if cr.kind != "crate" and cr.kind != "cache" and cr.kind != "bag" and cr.kind != "brute": continue
+		var z := w.stand_z(cr.pos.x, cr.pos.y, cr.fl)
+		var tex: String = cr.kind if cr.kind != "brute" else "bag"
+		if cr.open and (cr.kind == "crate" or cr.kind == "cache"): tex = cr.kind + "_open"
+		if cr.open and (cr.kind == "bag" or cr.kind == "brute"): continue
+		var s := _sprite(tex, cr.pos, z, Vector2(-8, -12), 0.1)
+		s.z_index = Iso.z_for(cr.pos.x + cr.pos.y, 3 + cr.fl * 2)
+		crate_nodes[cr] = s
+		rec.crates.append(cr)
+	for p in bk.posts:
+		_sprite("post", p, w.hz(p.x, p.y), Vector2(-1, -14))
+	for p in bk.flags:
+		_sprite("flag_raider", p, w.hz(p.x, p.y), Vector2(-1, -30))
+	for r in bk.ropes:
+		_rope(r)
+	for sp in bk.spawns:
+		if not sp.get("dead", false) and not sp.get("active", false):
+			_spawn_enemy(sp)
+	for d in bk.critters:
+		if not d.get("active", false):
+			var n := _spawn_npc(d)
+			n.set_meta("sp", d)
+			d.active = true
+	for s in bk.survivors:
+		if s.get("active", false): continue
+		s.active = true
+		var a := Actor.new()
+		root.add_child(a)
+		if not a.use_rendered("survivor", 8): a.make_body("survivor", 6, 16, 24)
+		a.wpos = s.pos
+		a.set_meta("name", s.name)
+		a.set_meta("recruited", false)
+		a.set_meta("slot", survivors.size())
+		a.set_meta("sp", s)
+		survivors.append(a)
+	_parent = root
+	_light_tag = -1
+
+func _unload_chunk(key: int) -> void:
+	var rec: Dictionary = loaded[key]
+	loaded.erase(key)
+	for i in rec.trees: tree_nodes.erase(i)
+	for c in rec.crates: crate_nodes.erase(c)
+	for f in rec.furn: furn_nodes.erase(f)
+	for d in rec.decor: decor_nodes.erase(d)
+	for v in rec.views: views.erase(v)
+	lights.remove_tag(key)
+	var r := Rect2(key % World.NC * World.CH, key / World.NC * World.CH, World.CH, World.CH)
+	smoke_spots = smoke_spots.filter(func(q): return not r.has_point(q))
+	rec.terrain.queue_free()
+	rec.node.queue_free()
+	for s in survivors:
+		if not s.get_meta("recruited") and r.has_point(s.wpos):
+			s.get_meta("sp").active = false
+			s.queue_free()
+	survivors = survivors.filter(func(s): return not s.is_queued_for_deletion())
+
+## Rebuild the ground meshes of loaded chunks touching rect (after the ground was re-levelled).
+func rebuild_ground(rect: Rect2) -> void:
+	for key in loaded:
+		var cx: int = key % World.NC
+		var cy: int = key / World.NC
+		if not Rect2(cx * World.CH - 1, cy * World.CH - 1, World.CH + 2, World.CH + 2).intersects(rect): continue
+		var near := []
+		for oy in range(-1, 2):
+			for ox in range(-1, 2):
+				if cx + ox >= 0 and cy + oy >= 0 and cx + ox < World.NC and cy + oy < World.NC:
+					near.append(world._bucket(World.ckey(cx + ox, cy + oy)))
+		loaded[key].terrain.build(world, cx, cy, near)
+
+## z_index only spans +-4096: every so often re-centre draw order on the player and shift every
+## placed node to match (fixed layers like the ground and the FX layer stay put).
+func rebase() -> void:
+	var o := player.wpos.x + player.wpos.y
+	var dz := -int(round((o - Iso.origin) * 16.0))
+	if dz == 0: return
+	Iso.origin += -dz / 16.0
+	_shift_z(root, dz, false)
+
+func _shift_z(n: Node, dz: int, under: bool) -> void:
+	for c in n.get_children():
+		if not (c is CanvasItem):
+			continue
+		var ci := c as CanvasItem
+		var moved := under
+		if (not ci.z_as_relative or not under) and ci.z_index > -3990 and ci.z_index < 3990 and ci.z_index != 0:
+			ci.z_index = clampi(ci.z_index + dz, -3985, 3985)
+			moved = true
+		_shift_z(c, dz, moved and ci.z_as_relative)
 
 func _spawn_npc(d: Dictionary) -> Npc:
 	var n := Npc.new()
@@ -258,6 +457,8 @@ func _spawn_enemy(s: Dictionary) -> Enemy:
 	var e := Enemy.new()
 	root.add_child(e)
 	e.setup(s)
+	e.set_meta("sp", s)
+	s.active = true
 	enemies.append(e)
 	return e
 
@@ -268,7 +469,7 @@ func _sprite(tex: String, at: Vector2, z: float, off: Vector2, depth_bias: float
 	s.offset = Assets.off(tex)
 	s.position = Iso.to_screen(at.x, at.y, z).round()
 	s.z_index = Iso.z_for(at.x + at.y + depth_bias, 3)
-	root.add_child(s)
+	_parent.add_child(s)
 	return s
 
 const LIGHTS := {   # decor name -> [height (logical px), screen x offset, colour, radius, flicker]
@@ -286,7 +487,7 @@ const LIGHTS := {   # decor name -> [height (logical px), screen x offset, colou
 func _light_for(nm: String, p: Vector2, z: float) -> void:
 	if LIGHTS.has(nm):
 		var L: Array = LIGHTS[nm]
-		lights.add(Iso.to_screen(p.x, p.y, z + L[0]) + Vector2(L[1], 0), L[2], L[3], L[4])
+		lights.add(Iso.to_screen(p.x, p.y, z + L[0]) + Vector2(L[1], 0), L[2], L[3], L[4], _light_tag)
 
 const TREES_LEAFY := ["tree0", "tree1", "tree2", "tree5", "tree7"]
 const TREES_PINE := ["tree3", "tree4", "tree3"]
@@ -304,94 +505,72 @@ func _tree_tex(x: int, y: int, v: int) -> String:
 	var tex: String = pool[h % pool.size()]
 	return tex if ResourceLoader.exists("res://assets/sprites/%s.png" % tex) else "tree%d" % (v % 3)
 
-func _spawn_props() -> void:
+func _decor_sprite(d: World.Decor) -> Sprite2D:
 	var w := world
-	for y in World.N:
-		for x in World.N:
-			if w.T[w.idx(x, y)] == World.TREE:
-				var v := w.V[w.idx(x, y)]
-				var tex := _tree_tex(x, y, v)
-				var p := Vector2(x + 0.5, y + 0.5)
-				tree_nodes[w.idx(x, y)] = _sprite(tex, p, w.hz(p.x, p.y), Vector2(-12, -36))
-	for c in w.cars:
-		_sprite("car_%s_%d" % [c.spr, c.k], c.pos, w.hz(c.pos.x, c.pos.y), Vector2(-40, -34))
-	for b in w.buildings:
-		for f in b.furn:
-			var s := _sprite("furn_%s_%s" % [f.name, f.orient], f.pos, w.stand_z(f.pos.x, f.pos.y, f.fl), Vector2(-24, -40))
-			s.z_index = Iso.z_for(f.pos.x + f.pos.y, 3 + f.fl * 2)
-			furn_nodes[f] = s
-	for d in w.decor:
-		var z := w.stand_z(d.pos.x, d.pos.y, 0)
-		var s: Sprite2D
-		match d.name:
-			"campfire_decor":
-				s = _sprite("campfire0", d.pos, z, Vector2(-8, -16))
-				smoke_spots.append(d.pos)
-				s.set_meta("anim", true)
-			"stall": s = _sprite("furn_shopcounter_a", d.pos, z, Vector2(-24, -40))
-			"tower_decor": s = _sprite("tower", d.pos, z, Vector2(-12, -48))
-			"pump": s = _sprite("pump", d.pos, z, Vector2(-6, -29))
-			"garden":
-				s = _sprite("garden", d.pos, w.vh(int(d.pos.x), int(d.pos.y)), Vector2(-16, 0))
-				s.z_index = -3000
-			_:
-				s = _sprite(d.name, d.pos, z, Vector2.ZERO)
-				if d.flat:
-					s.z_index = -3000 if d.name.begins_with("tuft") or d.name == "puddle_toxic" else Iso.z_for(d.pos.x + d.pos.y - 0.6, 0)
-		decor_nodes.append([d, s])
-		_light_for(d.name, d.pos, z)
-	for line in w.pole_lines:
-		var tops := []
-		for p in line:
-			var z := w.hz(p.x, p.y)
-			_sprite("pole", p, z, Vector2(-4, -60))
-			tops.append(Iso.to_screen(p.x, p.y, z) + Vector2(0, -83))
-		for i in range(tops.size() - 1):
-			for side in [-5.0, 18.0]:
-				var l := Line2D.new()
-				l.width = 1.0
-				l.default_color = Color("2a2420")
-				l.antialiased = false
-				var a: Vector2 = tops[i] + Vector2(side, 0)
-				var bb: Vector2 = tops[i + 1] + Vector2(side, 0)
-				var pts := PackedVector2Array()
-				for k in 9:
-					var t := k / 8.0
-					pts.append((a.lerp(bb, t) + Vector2(0, sin(t * PI) * 6.0)).round())
-				l.points = pts
-				l.z_index = Iso.z_for(line[i].x + line[i].y + 1.0, 8)
-				root.add_child(l)
-	for cr in w.crates:
-		if cr.kind != "crate" and cr.kind != "cache":
-			continue
-		var z := w.stand_z(cr.pos.x, cr.pos.y, cr.fl)
-		var s := _sprite(cr.kind, cr.pos, z, Vector2(-8, -12), 0.1)
-		s.z_index = Iso.z_for(cr.pos.x + cr.pos.y, 3 + cr.fl * 2)
-		crate_nodes[cr] = s
-	for p in w.posts:
-		_sprite("post", p, w.hz(p.x, p.y), Vector2(-1, -14))
-	for p in w.raider_flags:
-		_sprite("flag_raider", p, w.hz(p.x, p.y), Vector2(-1, -30))
-	for r in w.ropes:
-		var l := Line2D.new()
-		l.width = 1.0
-		l.default_color = Color("e0c890")
-		l.antialiased = false
-		var a := Iso.to_screen(r.top.x, r.top.y, w.hz(r.top.x, r.top.y) + 2)
-		var b := Iso.to_screen(r.bottom.x, r.bottom.y, w.hz(r.bottom.x, r.bottom.y))
-		var pts := PackedVector2Array()
-		for i in 13:
-			var t := i / 12.0
-			pts.append((a.lerp(b, t) + Vector2(sin(t * 3.1) * 2.0, 0)).round())
-		l.points = pts
-		l.z_index = Iso.z_for(r.bottom.x + r.bottom.y, 3)
-		root.add_child(l)
-		var hook := Line2D.new()
-		hook.width = 1.0
-		hook.default_color = Color("9a9a9a")
-		hook.points = PackedVector2Array([(a + Vector2(-2, 0)).round(), (a + Vector2(2, -2)).round()])
-		hook.z_index = l.z_index
-		root.add_child(hook)
+	var z := w.stand_z(d.pos.x, d.pos.y, 0)
+	var s: Sprite2D
+	match d.name:
+		"campfire_decor":
+			s = _sprite("campfire0", d.pos, z, Vector2(-8, -16))
+			smoke_spots.append(d.pos)
+			s.set_meta("anim", true)
+		"stall": s = _sprite("furn_shopcounter_a", d.pos, z, Vector2(-24, -40))
+		"tower_decor": s = _sprite("tower", d.pos, z, Vector2(-12, -48))
+		"pump": s = _sprite("pump", d.pos, z, Vector2(-6, -29))
+		"garden":
+			s = _sprite("garden", d.pos, w.vh(int(d.pos.x), int(d.pos.y)), Vector2(-16, 0))
+			s.z_index = -4000
+		_:
+			s = _sprite(d.name, d.pos, z, Vector2.ZERO)
+			if d.flat:
+				s.z_index = -4000 if d.name.begins_with("tuft") or d.name == "puddle_toxic" else Iso.z_for(d.pos.x + d.pos.y - 0.6, 0)
+	_light_for(d.name, d.pos, z)
+	return s
+
+func _pole_line(line: PackedVector2Array) -> void:
+	var w := world
+	var tops := []
+	for p in line:
+		var z := w.hz(p.x, p.y)
+		_sprite("pole", p, z, Vector2(-4, -60))
+		tops.append(Iso.to_screen(p.x, p.y, z) + Vector2(0, -83))
+	for i in range(tops.size() - 1):
+		for side in [-5.0, 18.0]:
+			var l := Line2D.new()
+			l.width = 1.0
+			l.default_color = Color("2a2420")
+			l.antialiased = false
+			var a: Vector2 = tops[i] + Vector2(side, 0)
+			var bb: Vector2 = tops[i + 1] + Vector2(side, 0)
+			var pts := PackedVector2Array()
+			for k in 9:
+				var t := k / 8.0
+				pts.append((a.lerp(bb, t) + Vector2(0, sin(t * PI) * 6.0)).round())
+			l.points = pts
+			l.z_index = Iso.z_for(line[i].x + line[i].y + 1.0, 8)
+			_parent.add_child(l)
+
+func _rope(r: World.Rope) -> void:
+	var w := world
+	var l := Line2D.new()
+	l.width = 1.0
+	l.default_color = Color("e0c890")
+	l.antialiased = false
+	var a := Iso.to_screen(r.top.x, r.top.y, w.hz(r.top.x, r.top.y) + 2)
+	var b := Iso.to_screen(r.bottom.x, r.bottom.y, w.hz(r.bottom.x, r.bottom.y))
+	var pts := PackedVector2Array()
+	for i in 13:
+		var t := i / 12.0
+		pts.append((a.lerp(b, t) + Vector2(sin(t * 3.1) * 2.0, 0)).round())
+	l.points = pts
+	l.z_index = Iso.z_for(r.bottom.x + r.bottom.y, 3)
+	_parent.add_child(l)
+	var hook := Line2D.new()
+	hook.width = 1.0
+	hook.default_color = Color("9a9a9a")
+	hook.points = PackedVector2Array([(a + Vector2(-2, 0)).round(), (a + Vector2(2, -2)).round()])
+	hook.z_index = l.z_index
+	_parent.add_child(hook)
 
 # ------------------------------------------------------------------ settings
 func _load_settings() -> void:
@@ -536,9 +715,7 @@ func drop_item(id: String) -> void:
 	cr.kind = "bag"
 	cr.fl = player.fl
 	cr.set_meta("loot", [[id, 1]])
-	world.crates.append(cr)
-	var s := _sprite("bag", cr.pos, world.stand_z(cr.pos.x, cr.pos.y, cr.fl), Vector2(-4, -8), 0.1)
-	crate_nodes[cr] = s
+	_place_crate(cr)
 	hud.toast("Dropped %s." % Items.iname(id))
 	open_inventory()
 
@@ -709,7 +886,7 @@ func find_target() -> Dictionary:
 		var d: float = p.wpos.distance_to(s.wpos)
 		if d < 1.5 and d < bd: bd = d; best = {"k": "survivor", "o": s}
 	if p.fl == 0:
-		for r in world.ropes:
+		for r in world.near(p.wpos, "ropes"):
 			for end in [["top", r.top], ["bottom", r.bottom]]:
 				var d: float = p.wpos.distance_to(end[1])
 				if d < 1.0 and d < bd: bd = d; best = {"k": "rope", "o": r, "end": end[0]}
@@ -718,7 +895,7 @@ func find_target() -> Dictionary:
 		if b.stairs.x >= 0:
 			var d := p.wpos.distance_to(Vector2(b.stairs) + Vector2(0.5, 0.5))
 			if d < 0.9 and d < bd: bd = d; best = {"k": "stairs", "o": b}
-	for c in world.crates:
+	for c in world.near(p.wpos, "crates"):
 		if c.open or c.bid != pb or c.fl != p.fl:
 			continue
 		var d: float = p.wpos.distance_to(c.pos)
@@ -1018,15 +1195,28 @@ func _drop(pos: Vector2, kind: String, fl: int) -> World.Crate:
 	c.kind = kind
 	c.bid = world.building_at(pos.x, pos.y)
 	c.fl = fl
-	world.crates.append(c)
-	var s := _sprite("bag", c.pos, world.stand_z(c.pos.x, c.pos.y, c.fl), Vector2(-4, -8), 0.1)
-	crate_nodes[c] = s
+	_place_crate(c)
 	return c
+
+## A crate made during play (drops, bags): filed with its chunk so it survives unloading.
+func _place_crate(c: World.Crate) -> void:
+	world.crates.append(c)
+	var ck := World.chunk_of(c.pos)
+	var key := World.ckey(ck.x, ck.y)
+	world._bucket(key).crates.append(c)
+	var rec = loaded.get(key)
+	_parent = rec.node if rec != null else root
+	var s := _sprite("bag", c.pos, world.stand_z(c.pos.x, c.pos.y, c.fl), Vector2(-4, -8), 0.1)
+	_parent = root
+	crate_nodes[c] = s
+	if rec != null: rec.crates.append(c)
 
 func kill_enemy(e: Enemy, silent: bool) -> void:
 	if e.dead:
 		return
 	e.dead = true
+	var sp = e.get_meta("sp") if e.has_meta("sp") else null
+	if sp != null: sp.dead = true
 	player.kills += 1
 	var cols := [Color("8a6a4a"), Color("5a3a24"), Color("3a2a2a")] if e.type == "shellback" else ([Color("6a8a4a"), Color("8a3a3a"), Color("3a2a2a")] if e.type in ["ghoul", "brute"] else [Color("a83a2a"), Color("5a3a2a"), Color("3a2a2a")])
 	burst(e.wpos, 12, cols, 9.0, e.fl)
@@ -1061,6 +1251,9 @@ func respawn() -> void:
 	p.hp = p.max_hp
 	p.inv = 2.0
 	dog.wpos = p.wpos + Vector2(-1, 0)
+	p.sync()
+	rebase()
+	_stream(true)
 	for e in enemies:
 		if e.wpos.distance_to(c.wpos) < 12.0:
 			e.aw = 0.0
@@ -1090,7 +1283,11 @@ func camp_name() -> String:
 	for y in range(-3, 4):
 		for x in range(-3, 4):
 			if world.tile(p.wpos.x + x, p.wpos.y + y) == World.TREE: trees += 1
-	if world.hz(p.wpos.x, p.wpos.y) > 26.0: n = "Hilltop Camp"
+	var bn := world.biome_name(p.wpos)
+	if bn == "hills" or bn == "peak": n = "Hilltop Camp"
+	elif bn == "salt": n = "Saltpan Camp"
+	elif bn == "marsh": n = "Fen Camp"
+	elif bn == "canyon" or bn == "gorge": n = "Canyon Camp"
 	elif world.in_city(p.wpos.x, p.wpos.y): n = "City Camp"
 	elif world.near_road(int(p.wpos.x), int(p.wpos.y), 2): n = "Roadside Camp"
 	elif trees > 5: n = "Woodland Camp"
@@ -1251,12 +1448,16 @@ func _process(delta: float) -> void:
 		travel.t += delta / 1.4
 		if travel.t >= 0.5 and not travel.done:
 			travel.done = true
-			var c: Camp = travel.to
+			var c = travel.to
 			player.wpos = c.wpos + Vector2(0, 1.4)
 			player.fl = 0
 			player.climb = {}
 			dog.wpos = player.wpos + Vector2(-1, 0)
+			player.sync()
+			rebase()
+			_stream(true)
 			for e in enemies: e.aw = 0.0
+			_discover()
 		if travel.t >= 1.0:
 			state = "play"
 			hud.toast("Arrived at %s. A few hours pass." % travel.to.cname)
@@ -1277,6 +1478,10 @@ func _process(delta: float) -> void:
 		_update_camera()
 		return
 	var p := player
+	if absf(p.wpos.x + p.wpos.y - Iso.origin) > 48.0:
+		rebase()
+	_stream(false)
+	_discover()
 	var mv := _read_move()
 	_update_busy(delta, mv.length() > 0.2)
 	if not busy.is_empty(): mv = Vector2.ZERO
@@ -1338,26 +1543,103 @@ func _process(delta: float) -> void:
 		var mutants := 0
 		for e in enemies:
 			if e.type != "raider": mutants += 1
-		if mutants < 10:
+		if mutants < 12 and world.settlement_at(p.wpos, 12.0) < 0:
 			var cps := []
 			for c in camps: cps.append(c.wpos)
 			var before := world.spawns.size()
-			world.add_monster(p.wpos, 20.0, cps)
+			world.add_monster(p.wpos, 22.0, cps)
 			for i in range(before, world.spawns.size()): _spawn_enemy(world.spawns[i])
 	patrol_t += delta
-	if patrol_t > 70.0:
+	if patrol_t > 90.0:
 		patrol_t = 0.0
 		var has := false
 		for e in enemies:
 			if e.patrol.size() > 0: has = true
-		if not has:
+		if not has and world.settlement_at(p.wpos, 20.0) < 0 and randf() < 0.6:
 			var before := world.spawns.size()
-			world.add_patrol()
+			world.add_patrol(p.wpos)
 			for i in range(before, world.spawns.size()): _spawn_enemy(world.spawns[i])
+	_encounters(delta)
 	_update_bullets(delta)
 	_update_visibility()
 	_update_camera()
 	_update_hud()
+
+## Roaming encounters out in the open: every so often something comes over the rise — a raider
+## gang, a pack of hounds... er, mutants, a lone merchant with a pack animal. Never next to towns.
+func _encounters(delta: float) -> void:
+	encounter_t += delta
+	if encounter_t < 75.0: return
+	encounter_t = randf_range(-30.0, 0.0)
+	var p := player.wpos
+	if world.settlement_at(p, 25.0) >= 0 or not world.nearest_loc(p, 10.0).is_empty(): return
+	if camp_near(p, 15.0) != null: return
+	var a := randf() * TAU
+	var at := p + Vector2.from_angle(a) * 24.0
+	if not world.can_stand(at, 0.3, 0): return
+	var far := clampf(p.distance_to(world.start) / 900.0, 0.0, 1.0)
+	var r := randf()
+	var key := World.ckey(World.chunk_of(at).x, World.chunk_of(at).y)
+	var bk := world._bucket(key)
+	if r < 0.3:
+		var n := 2 + int(randf() * (2.0 + far * 3.0))
+		for k in n:
+			var sp := {"type": "raider", "pos": at + Vector2(randf_range(-1.5, 1.5), randf_range(-1.5, 1.5)), "home": p, "home_r": 6.0, "roam": true, "chunk": key}
+			world.spawns.append(sp); bk.spawns.append(sp)
+			var e := _spawn_enemy(sp)
+			e.aw = 60.0
+		hud.toast("Voices on the wind — raiders, and they've seen you.")
+	elif r < 0.55:
+		var t: String = ["ghoul", "rat", "shellback", "brute"][mini(3, int(randf() * (2.5 + far * 2.0)))]
+		for k in (4 if t == "rat" else 2):
+			var sp := {"type": t, "pos": at + Vector2(randf_range(-1.5, 1.5), randf_range(-1.5, 1.5)), "home": at, "home_r": 8.0, "roam": true, "chunk": key}
+			world.spawns.append(sp); bk.spawns.append(sp)
+			_spawn_enemy(sp)
+	elif r < 0.8:
+		var wps := [at, world.road_point_near(at, 20.0), p + Vector2(randf_range(-20, 20), randf_range(-20, 20)), world.road_point_near(p, 30.0)]
+		var d := {"type": "wanderer", "pos": at, "patrol": wps, "chunk": key}
+		bk.critters.append(d)
+		var nn := _spawn_npc(d)
+		nn.set_meta("sp", d)
+		d.active = true
+		var cow := {"type": "cattle", "pos": at + Vector2(1.0, 0.5), "home": at, "chunk": key}
+		hud.toast("A travelling merchant is heading your way.")
+	else:
+		var cr := World.Crate.new()
+		cr.pos = at
+		cr.kind = "cache"
+		_place_crate(cr)
+		crate_nodes[cr].texture = Assets.tex("cache")
+		add_text(at, "something glints over there", Color("f2e27a"), 3.0)
+
+## Locations come up on the map once you get near them (or can see their lights over the hill).
+func _discover() -> void:
+	var p := player.wpos
+	for l in world.locs:
+		if world.discovered.has(l.id): continue
+		if p.distance_to(l.pos) < l.r + 30.0:
+			world.discovered[l.id] = true
+			if time > 1.0: hud.toast("Discovered: %s" % l.name)
+
+## Fast travel to a discovered location from the map.
+func travel_to_loc(l: Dictionary) -> void:
+	if danger():
+		hud.toast("Enemies are hunting you. Lose them first.")
+		return
+	var c: Vector2 = l.pos
+	world.ensure_ready(World.chunk_of(c).x, World.chunk_of(c).y)
+	c = l.pos
+	var at := c + Vector2(0, l.r * 0.5)
+	for ring in range(0, 40):
+		var found := false
+		for k in 12:
+			var q: Vector2 = c + Vector2.from_angle(k * TAU / 12.0 + 0.3) * float(l.r * 0.45 + ring * 0.6)
+			world.ensure_ready(World.chunk_of(q).x, World.chunk_of(q).y)
+			if world.can_stand(q, 0.3, 0) and world.building_at(q.x, q.y) == 0:
+				at = q; found = true; break
+		if found: break
+	travel = {"to": {"cname": l.name, "wpos": at - Vector2(0, 1.4)}, "t": 0.0, "done": false}
+	state = "travel"
 
 func _world_life(delta: float) -> void:
 	var p := player
@@ -1381,8 +1663,8 @@ func _world_life(delta: float) -> void:
 			hud.toast("%s — a settlement. Folks here are friendly. Look for the trader." % world.settlements[si].name)
 	# campfires flicker and smoke
 	var fr := int(time * 6.0) % 2
-	for pair in decor_nodes:
-		var spr: Sprite2D = pair[1]
+	for d in decor_nodes:
+		var spr: Sprite2D = decor_nodes[d]
 		if spr.has_meta("anim"):
 			spr.texture = Assets.tex("campfire%d" % fr)
 	for sp in smoke_spots:
@@ -1463,10 +1745,9 @@ func _update_visibility() -> void:
 		var fs: Sprite2D = furn_nodes[f]
 		fs.visible = (f.bid == pb and f.fl == p.fl) or (f.bid != pb and world.open_from_outside(f.pos.x, f.pos.y, f.fl))
 		if f.crate != null and f.crate.open: fs.modulate = Color(0.78, 0.74, 0.7)
-	for pair in decor_nodes:
-		var d: World.Decor = pair[0]
+	for d in decor_nodes:
 		if d.bid > 0:
-			(pair[1] as Sprite2D).visible = (d.bid == pb and p.fl == 0) or (d.bid != pb and world.open_from_outside(d.pos.x, d.pos.y, 0))
+			(decor_nodes[d] as Sprite2D).visible = (d.bid == pb and p.fl == 0) or (d.bid != pb and world.open_from_outside(d.pos.x, d.pos.y, 0))
 	for n in npcs:
 		if n.type != "crow":
 			n.visible = vis.call(n.wpos.x, n.wpos.y, 0)
@@ -1706,34 +1987,64 @@ func _debug_bestiary() -> void:
 	get_tree().quit()
 
 func _debug_tour() -> void:
-	# Visual QA: a grid of camera stops over the whole map plus every building interior kind.
+	# Visual QA over the streamed world: towns and sample spots in every biome, with timings.
 	var out := "user://shots"
 	DirAccess.make_dir_recursive_absolute(out)
 	await get_tree().create_timer(1.0).timeout
-	for e in enemies: e.aw = 0.0
-	var n := 0
-	for gy in range(6, World.N, 13):
-		for gx in range(6, World.N, 13):
-			var p := Vector2(gx, gy)
-			var ok := false
-			for t in 30:
-				if world.can_stand(p, 0.25, 0) and world.building_at(p.x, p.y) == 0: ok = true; break
-				p += Vector2(randf_range(-2, 2), randf_range(-2, 2)); p = p.clamp(Vector2(1, 1), Vector2(World.N - 2, World.N - 2))
-			player.fl = 0
-			player.wpos = p
-			for e in enemies: e.aw = 0.0; e.st = 0
-			await get_tree().create_timer(0.35).timeout
-			for v in views:
-				if v._faded: print("FADED shot %d: b%d %s parts=%s player=%s" % [n, v.b.id, v.b.kind, str(v.b.parts), str(player.wpos)])
-			await _snap(out + "/t_%02d.png" % n); n += 1
-	var seen := {}
-	for b in world.buildings:
-		if seen.has(b.kind) or b.raider: continue
-		seen[b.kind] = true
+	await _snap(out + "/w_start.png")
+	var stops := []
+	var only := ""
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--only="): only = a.substr(7)
+	for l in world.locs:
+		if only == "" or l.id in only.split(","): stops.append([l.id, l.pos + Vector2(0, l.r * 0.3)])
+	if only == "" or only == "biomes":
+		var seen := {}
+		var r := RandomNumberGenerator.new()
+		r.seed = 3
+		for t in 4000:
+			var q := Vector2(r.randf_range(40, World.N - 40), r.randf_range(40, World.N - 40))
+			var bn := world.biome_name(q)
+			if seen.get(bn, 0) >= 1: continue
+			seen[bn] = seen.get(bn, 0) + 1
+			stops.append(["biome_" + bn, q])
+	for st in stops:
+		var t0 := Time.get_ticks_msec()
+		var p: Vector2 = st[1]
+		world.ensure_ready(World.chunk_of(p).x, World.chunk_of(p).y)
+		for ring in 30:
+			if world.can_stand(p, 0.25, 0) and world.building_at(p.x, p.y) == 0: break
+			p += Vector2(randf_range(-2, 2), randf_range(-2, 2)) * (1 + ring * 0.3)
 		player.fl = 0
-		player.wpos = Vector2(b.x0 + b.w * 0.5, b.y0 + b.h * 0.5)
-		await get_tree().create_timer(0.35).timeout
-		await _snap(out + "/i_%s.png" % b.kind)
+		player.wpos = p
+		player.sync()
+		rebase()
+		_stream(true)
+		var t1 := Time.get_ticks_msec()
+		for e in enemies: e.aw = 0.0; e.st = 0
+		await get_tree().create_timer(0.3).timeout
+		await _snap(out + "/w_%s.png" % st[0])
+		print("TOUR %s at %s: %d ms, loaded %d chunks, %d enemies, %d npcs, %d views, %d trees" % [st[0], str(p.round()), t1 - t0, loaded.size(), enemies.size(), npcs.size(), views.size(), tree_nodes.size()])
+	get_tree().quit()
+
+## Walk along the interstate for a while, measuring frame times while chunks stream in.
+func _debug_walk() -> void:
+	await get_tree().create_timer(1.0).timeout
+	var worst := 0.0
+	var sum := 0.0
+	var n := 0
+	var dir := Vector2(1, 0.15).normalized()
+	for i in 900:
+		var t0 := Time.get_ticks_usec()
+		player.wpos += dir * 3.4 / 60.0 * 4.0
+		player.sync()
+		await get_tree().process_frame
+		var dt := (Time.get_ticks_usec() - t0) / 1000.0
+		worst = maxf(worst, dt); sum += dt; n += 1
+		if i % 150 == 0:
+			print("WALK %d at %s: avg %.1f ms worst %.1f ms, loaded %d, nodes %d, enemies %d" % [i, str(player.wpos.round()), sum / n, worst, loaded.size(), root.get_child_count(), enemies.size()])
+			await _snap("user://shots/walk_%d.png" % i)
+			worst = 0.0; sum = 0.0; n = 0
 	get_tree().quit()
 
 func _debug_fade() -> void:

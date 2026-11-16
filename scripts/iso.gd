@@ -13,6 +13,10 @@ static func screen_dir_to_world(v: Vector2) -> Vector2:
 	var w := Vector2(v.x / 48.0 + v.y / 24.0, v.y / 24.0 - v.x / 48.0)
 	return w.normalized() if w.length() > 0.0001 else Vector2.ZERO
 
-## Draw order: larger depth draws on top. Used for z_index of world objects.
+## Draw order: larger depth draws on top. Used for z_index of world objects. z_index only spans
+## +-4096, so depth is measured from `origin`, which the game moves along as the player travels
+## (Game.rebase shifts every placed node when it does).
+static var origin := 0.0
+
 static func z_for(depth: float, bias: int = 0) -> int:
-	return clampi(int(depth * 16.0) + bias, -4000, 4090)
+	return clampi(int((depth - origin) * 16.0) + bias, -3980, 3980)

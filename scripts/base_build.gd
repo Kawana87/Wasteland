@@ -292,7 +292,7 @@ func _level(verts: Array) -> bool:
 	return changed
 
 func _relevel_done() -> void:
-	g.terrain.build(w)
+	g.rebuild_ground(Rect2(g.player.wpos - Vector2(BASE_R + 4, BASE_R + 4), Vector2(BASE_R + 4, BASE_R + 4) * 2.0))
 	for k in pieces: _dress(k)
 	for t in floors:
 		var spr: Sprite2D = floors[t].spr

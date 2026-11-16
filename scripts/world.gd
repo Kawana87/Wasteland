@@ -3,9 +3,11 @@ extends RefCounted
 ## Map data + procedural generation + spatial queries (heights, walls, line of sight).
 ## World units are tiles. Screen projection lives in Iso.
 
-const N := 64
+const N := 2048
 const NV := N + 1
-const CITY := 24
+const CH := 32                 # chunk size (tiles)
+const NC := N / CH             # chunks per side
+const HS := 800.0              # pixels of height per unit of world-map height
 const FLOOR_H := 28.0          # height of one storey in pixels
 
 const GRASS := 0
@@ -15,6 +17,7 @@ const TREE := 5
 const SIDE := 7
 const STUMP := 8
 const DIRT_ROAD := 9
+const WATER := 10
 
 class Seg:
 	var a: Vector2
@@ -107,6 +110,9 @@ class Settlement:
 	var pos: Vector2
 	var radius := 7.0
 	var trader := Vector2.ZERO
+	var id := ""
+	var hook := ""
+	var small := false
 
 class Rope:
 	var top: Vector2
@@ -204,7 +210,7 @@ func stand_z(x: float, y: float, fl: int) -> float:
 	return hz(x, y)
 
 func in_city(x: float, y: float) -> bool:
-	return x >= CITY and y >= CITY
+	return density(int(x), int(y)) > 110
 
 # ------------------------------------------------------------------ collision
 static func seg_dist(p: Vector2, s: Seg) -> float:
@@ -235,7 +241,7 @@ func tree_hit(p: Vector2, r: float) -> bool:
 	return false
 
 func car_hit(p: Vector2, r: float) -> bool:
-	for c in cars:
+	for c in car_grid.get(int(floor(p.y)) * N + int(floor(p.x)), []):
 		var d: Vector2 = (p - c.pos).rotated(-c.ang)
 		if absf(d.x) < 1.2 + r and absf(d.y) < 0.42 + r:
 			return true
@@ -271,6 +277,8 @@ func can_stand(p: Vector2, r: float, fl: int) -> bool:
 	if wall_hit(p, r, fl):
 		return false
 	if furn_hit(p, r, fl):
+		return false
+	if fl == 0 and tile(p.x, p.y) == WATER:
 		return false
 	if fl > 0:
 		var id := building_at(p.x, p.y)
@@ -373,256 +381,9 @@ const CONTAINER_CHANCE := {"fridge": 0.9, "dresser": 0.9, "desk": 0.9, "filing":
 	"shopcounter": 1.0, "workbench": 0.9, "bookshelf": 0.4, "counter": 0.35, "barrel": 0.3, "mattress": 0.2,
 	"locker": 0.8, "terminal": 0.5, "vending": 0.7, "jukebox": 0.3, "booth": 0.15}
 
-func generate(sd: int) -> void:
-	seed_value = sd
-	rng.seed = sd
-	T.resize(N * N); T.fill(GRASS)
-	BID.resize(N * N); BID.fill(0)
-	V.resize(N * N)
-	G.resize(N * N); G.fill(0)
-	CL.resize(N * N); CL.fill(0)
-	VH.resize(NV * NV); VH.fill(0.0)
-	road_d.resize(NV * NV); road_d.fill(99.0)
-	for i in N * N:
-		V[i] = rng.randi_range(0, 3)
-	for a in [buildings, crates, cars, ropes, posts, raider_flags, rcamps, spawns, survivors, decor, settlements, paths, pole_lines, critters]:
-		a.clear()
-	seg_grid.clear(); decor_grid.clear()
-	_roads()
-	_heights()
-	# start camp clearing
-	var sh := hz(start.x, start.y)
-	for y in range(5, 17):
-		for x in range(5, 17):
-			var d := Vector2(x, y).distance_to(start)
-			var t := sstep(1.0 - (d - 3.0) / 2.5)
-			set_vh(x, y, lerpf(vh(x, y), sh, t))
-			if in_bounds(x, y) and d < 4.5:
-				CL[idx(x, y)] = 1
-	# sidewalks along city roads
-	for y in range(1, N - 1):
-		for x in range(1, N - 1):
-			if T[idx(x, y)] != GRASS or not in_city(x, y):
-				continue
-			for o in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
-				if T[idx(x + o.x, y + o.y)] == ROAD:
-					T[idx(x, y)] = SIDE
-					break
-	# raider camps on plateaus
-	var tries := 0
-	while rcamps.size() < 2 and tries < 2000:
-		tries += 1
-		var x := ri(6, N - 7)
-		var y := ri(6, N - 7)
-		if min(x, y) > CITY - 6: continue
-		if Vector2(x, y).distance_to(start) < 17: continue
-		var close := false
-		for c in rcamps:
-			if Vector2(x, y).distance_to(c.pos) < 13: close = true
-		if close or near_road(x, y, 5): continue
-		_raider_camp(Vector2(x + 0.5, y + 0.5))
-	# friendly settlements
-	tries = 0
-	var names := SETTLEMENT_NAMES.duplicate()
-	names.shuffle()
-	while settlements.size() < 2 and tries < 2000:
-		tries += 1
-		var x := ri(7, N - 8)
-		var y := ri(7, N - 8)
-		if in_city(x, y) and rng.randf() < 0.7: continue
-		var c := Vector2(x + 0.5, y + 0.5)
-		if c.distance_to(start) < 13: continue
-		var bad := false
-		for r in rcamps:
-			if c.distance_to(r.pos) < 15: bad = true
-		for s in settlements:
-			if c.distance_to(s.pos) < 16: bad = true
-		if bad: continue
-		var hs := []
-		for o in [Vector2(-4, -4), Vector2(4, -4), Vector2(-4, 4), Vector2(4, 4), Vector2.ZERO]:
-			hs.append(hz(c.x + o.x, c.y + o.y))
-		if hs.max() - hs.min() > 22.0: continue
-		_settlement(c, names[settlements.size()])
-	# city blocks: diners, motels, gas stations, shops, offices, factories, houses
-	var lots := []
-	for y in range(CITY, N - 4):
-		for x in range(CITY, N - 4):
-			lots.append(Vector2i(x, y))
-	for i in range(lots.size() - 1, 0, -1):
-		var j := ri(0, i)
-		var t: Vector2i = lots[i]; lots[i] = lots[j]; lots[j] = t
-	# big landmarks first so they get room, then fill the gaps with smaller buildings
-	var big := {"office": 3, "factory": 2, "motel": 1, "diner": 2, "gas": 1}
-	for lot in lots:
-		if BID[idx(lot.x, lot.y)] != 0 or T[idx(lot.x, lot.y)] == ROAD: continue
-		var opts := []
-		for k in big:
-			if big[k] > 0: opts.append(k)
-		if opts.is_empty(): break
-		var kind: String = opts[ri(0, opts.size() - 1)]
-		if kind in ["diner", "gas", "motel"] and not near_road(lot.x + 2, lot.y + 2, 4): continue
-		var before := buildings.size()
-		place_shape(shape_for(kind, lot.x, lot.y), kind)
-		if buildings.size() > before: big[kind] -= 1
-	for lot in lots:
-		if BID[idx(lot.x, lot.y)] != 0 or T[idx(lot.x, lot.y)] == ROAD: continue
-		var kind := _pick_kind(lot.x, lot.y)
-		if place_shape(shape_for(kind, lot.x, lot.y), kind) == null and kind != "gas":
-			var fb: String = ["house", "garage", "shop"][ri(0, 2)]
-			place_shape(shape_for(fb, lot.x, lot.y), fb)
-	# outskirts: ranch houses, garages and roadside stops
-	for k in 160:
-		var x := ri(2, 18) if rng.randf() < 0.5 else ri(18, 56)
-		var y := ri(18, 56) if x < 18 else ri(2, 18)
-		var kind := _pick_kind(x, y)
-		place_shape(shape_for(kind, x, y), kind)
-	# a few landmarks
-	for k in 2:
-		for t in 60:
-			var p := Vector2(rf(6, N - 6), rf(6, N - 6))
-			if _free_spot(p) and T[idx(int(p.x), int(p.y))] == GRASS and p.distance_to(start) > 10 and _clear_of_buildings(p, 2.0):
-				add_decor("watertower", p, true, Vector2(0.55, 0.55))
-				break
-	for k in 4:
-		for t in 60:
-			var p := road_point() + Vector2(rf(-2.5, 2.5), rf(-2.5, 2.5))
-			var axb := ri(0, 1)
-			var far := true
-			for d0 in decor:
-				if d0.name.begins_with("billboard") and d0.pos.distance_to(p) < 8.0: far = false
-			if far and _free_spot(p) and T[idx(int(p.x), int(p.y))] == GRASS and not near_road(int(p.x), int(p.y), 0) and _clear_of_buildings(p, 1.6):
-				add_decor("billboard_" + ["x", "y"][axb], p, true, Vector2(1.0, 0.2) if axb == 0 else Vector2(0.2, 1.0))
-				break
-	# trees
-	for y in N:
-		for x in N:
-			var i := idx(x, y)
-			if T[i] != GRASS or CL[i] == 1: continue
-			if rng.randf() < (0.03 if in_city(x, y) else 0.13) and _clear_of_buildings(Vector2(x + 0.5, y + 0.5), 0.75):
-				T[i] = TREE
-	_cars()
-	# keep doors clear of trees and wrecks
-	for b in buildings:
-		for yy in range(b.out.y - 2, b.out.y + 3):
-			for xx in range(b.out.x - 2, b.out.x + 3):
-				if in_bounds(xx, yy) and T[idx(xx, yy)] == TREE:
-					T[idx(xx, yy)] = GRASS
-		var door := Vector2(b.out.x + 0.5, b.out.y + 0.5)
-		for k in range(cars.size() - 1, -1, -1):
-			if cars[k].pos.distance_to(door) < 2.0:
-				var cp: Vector2 = cars[k].pos
-				cars.remove_at(k)
-				for q in range(crates.size() - 1, -1, -1):
-					if crates[q].kind == "car" and crates[q].pos.distance_to(cp) < 2.2:
-						crates.remove_at(q)
-	# ground variety
-	var so := rng.randf() * 100.0
-	for y in N:
-		for x in N:
-			var n := sin(x * 0.37 + so) + sin(y * 0.29 - so * 0.7) + sin((x + y) * 0.17 + so * 0.3)
-			var i := idx(x, y)
-			G[i] = 1 if n > 1.0 else (2 if n < -1.35 else 0)
-			if T[i] == ROAD:
-				var r := rng.randf()
-				G[i] = 2 if r < 0.04 else (1 if r < 0.3 else 0)
-			if T[i] == SIDE:
-				G[i] = 1 if rng.randf() < 0.25 else 0
-			if T[i] == GRASS and G[i] == 0 and rng.randf() < 0.12:
-				G[i] = 3
-			if T[i] == GRASS and near_road(x, y, 1) and rng.randf() < 0.5:
-				G[i] = 4
-	_lamps()
-	_debris()
-	_creatures()
-	# survivors holed up in city buildings
-	var cand := []
-	for b in buildings:
-		if b.kind in ["house", "shop", "office", "motel", "factory"] and not b.sealed and b.cells.size() >= 12 and in_city(b.x0, b.y0):
-			cand.append(b)
-	cand.shuffle()
-	var sn := ["Mara", "Dez", "Jun", "Otis", "Rosa", "Hank", "Priya", "Theo", "Wren", "Gus"]
-	sn.shuffle()
-	for k in min(3, cand.size()):
-		var b: Bld = cand[k]
-		for t in 20:
-			var p := rand_cell(b)
-			if can_stand(p, 0.28, 0):
-				survivors.append({"pos": p, "name": sn[k], "bid": b.id})
-				break
-	_tidy()
-	_fix_spawns()
-	_fix_critters()
-
-## Final real-world-logic pass over everything placed: nothing solid inside walls or in front of doors,
-## no trees growing through props, wrecks that collide with props are scrapped, door exits are clear.
-func _tidy() -> void:
-	var doors := []
-	for b in buildings:
-		doors.append(Vector2(b.out.x + 0.5, b.out.y + 0.5))
-	var keep := []
-	for d in decor:
-		if (d.name.begins_with("fence") or d.name.begins_with("picket")) and d.bid == 0 and building_at(d.pos.x, d.pos.y) != 0:
-			continue
-		if d.bid != 0 or d.flat or not d.solid or d.name in ["pillar", "fuelpump", "mailbox"]:
-			keep.append(d); continue
-		var bad := func(q: Vector2) -> bool:
-			if building_at(q.x, q.y) != 0 or not _clear_of_buildings(q, d.half.x + 0.05): return true
-			for o in keep:
-				if o.solid and o.bid == 0 and absf(o.pos.x - q.x) < (o.half.x + d.half.x) * 0.8 and absf(o.pos.y - q.y) < (o.half.y + d.half.y) * 0.8: return true
-			for dp in doors:
-				if dp.distance_to(q) < 1.05: return true
-			return false
-		if bad.call(d.pos):
-			if d.name.begins_with("fence") or d.name.begins_with("picket"):
-				continue                      # fence runs simply stop at the wall
-			var moved := false
-			for ring in range(1, 9):
-				for k in 12:
-					var q: Vector2 = d.pos + Vector2.from_angle(k * TAU / 12.0) * ring * 0.25
-					if in_bounds(int(q.x), int(q.y)) and not bad.call(q):
-						d.pos = q; moved = true; break
-				if moved: break
-			if not moved:
-				continue                      # nowhere sensible: drop it
-		keep.append(d)
-	decor = keep
-	decor_grid.clear()
-	for d in decor:
-		if d.solid:
-			var k := int(floor(d.pos.y)) * N + int(floor(d.pos.x))
-			if not decor_grid.has(k): decor_grid[k] = []
-			decor_grid[k].append(d)
-	# trees under solid props, wrecks hitting props or doors
-	for d in decor:
-		if not d.solid or d.bid != 0: continue
-		for yy in range(int(d.pos.y - d.half.y - 0.4), int(d.pos.y + d.half.y + 0.4) + 1):
-			for xx in range(int(d.pos.x - d.half.x - 0.4), int(d.pos.x + d.half.x + 0.4) + 1):
-				if in_bounds(xx, yy) and T[idx(xx, yy)] == TREE: T[idx(xx, yy)] = GRASS
-	for k in range(cars.size() - 1, -1, -1):
-		var c: Car = cars[k]
-		var hit := decor_hit(c.pos, 0.9)
-		for dp in doors:
-			if dp.distance_to(c.pos) < 1.8: hit = true
-		if hit:
-			cars.remove_at(k)
-			for q in range(crates.size() - 1, -1, -1):
-				if crates[q].kind == "car" and crates[q].pos.distance_to(c.pos) < 2.2:
-					crates.remove_at(q)
-	# loot left outdoors that ended up inside a wall
-	for cr in crates:
-		if cr.bid == 0 and cr.kind != "car" and building_at(cr.pos.x, cr.pos.y) != 0:
-			for ring in range(1, 10):
-				var q: Vector2 = cr.pos + Vector2.from_angle(ring * 2.4) * ring * 0.3
-				if building_at(q.x, q.y) == 0 and can_stand(q, 0.2, 0):
-					cr.pos = q; break
-	# door exits: the tile outside every door must be walkable
-	for b in buildings:
-		var o := Vector2i(b.out)
-		if in_bounds(o.x, o.y) and T[idx(o.x, o.y)] == TREE: T[idx(o.x, o.y)] = GRASS
-
 ## Livestock and crows start (and keep their home) outdoors on open ground; settlers on standable ground.
-func _fix_critters() -> void:
-	for cr in critters:
+func _fix_critters(from: int = 0) -> void:
+	for cr in critters.slice(from):
 		var outdoor: bool = cr.type in ["cattle", "crow"]
 		for key in ["pos", "home"]:
 			if not cr.has(key): continue
@@ -639,8 +400,8 @@ func _fix_critters() -> void:
 				if found: break
 
 ## Move any spawn that landed inside a wall, furniture, tree or wreck to the nearest spot it can stand on.
-func _fix_spawns() -> void:
-	for sp in spawns:
+func _fix_spawns(from: int = 0) -> void:
+	for sp in spawns.slice(from):
 		var fl: int = sp.get("fl", 0)
 		var p: Vector2 = sp.pos
 		if can_stand(p, 0.22, fl):
@@ -660,133 +421,6 @@ static func _catmull(p0: Vector2, p1: Vector2, p2: Vector2, p3: Vector2, t: floa
 	var t3 := t2 * t
 	return 0.5 * ((2.0 * p1) + (-p0 + p2) * t + (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3) * t2 + (-p0 + 3.0 * p1 - 3.0 * p2 + p3) * t3)
 
-func _path(ctrl: Array, w: float, kind: String) -> void:
-	var c := [ctrl[0]] + ctrl + [ctrl[-1]]
-	var pts := PackedVector2Array()
-	for i in range(1, c.size() - 2):
-		var n := maxi(2, int(c[i].distance_to(c[i + 1]) * 4.0))
-		for k in n:
-			pts.append(_catmull(c[i - 1], c[i], c[i + 1], c[i + 2], float(k) / n))
-	pts.append(ctrl[-1])
-	paths.append({"pts": pts, "w": w, "kind": kind})
-	var td := {}
-	for p in pts:
-		for yy in range(int(floor(p.y - w - 1)), int(p.y + w + 2)):
-			for xx in range(int(floor(p.x - w - 1)), int(p.x + w + 2)):
-				if not in_bounds(xx, yy): continue
-				var d := p.distance_to(Vector2(xx + 0.5, yy + 0.5))
-				if d <= w:
-					var i := idx(xx, yy)
-					if kind == "dirt":
-						if T[i] == GRASS: T[i] = DIRT_ROAD
-					else:
-						T[i] = ROAD
-		if kind != "dirt":
-			for vy in range(int(floor(p.y - 6)), int(p.y + 7)):
-				for vx in range(int(floor(p.x - 6)), int(p.x + 7)):
-					if vx < 0 or vy < 0 or vx > N or vy > N: continue
-					var dv := p.distance_to(Vector2(vx, vy))
-					if dv < road_d[vy * NV + vx]:
-						road_d[vy * NV + vx] = dv
-
-func _wobbly(a: Vector2, b: Vector2, steps: int, amp: float) -> Array:
-	var ctrl := [a]
-	var nrm := (b - a).orthogonal().normalized()
-	for k in range(1, steps):
-		var t := float(k) / steps
-		ctrl.append(a.lerp(b, t) + nrm * rf(-amp, amp))
-	ctrl.append(b)
-	return ctrl
-
-func _roads() -> void:
-	# two highways cross the map and meet in the city, plus curving city streets and dirt tracks
-	var h1 := _wobbly(Vector2(-3, rf(24, 34)), Vector2(N + 3, rf(36, 54)), 6, 3.5)
-	h1.insert(3, Vector2(rf(38, 46), rf(38, 46)))
-	_path(h1, 1.15, "highway")
-	var h2 := _wobbly(Vector2(rf(24, 34), -3), Vector2(rf(36, 54), N + 3), 6, 3.5)
-	_path(h2, 1.15, "highway")
-	_path(_wobbly(Vector2(rf(28, 36), N + 3), Vector2(N + 3, rf(28, 36)), 4, 3.0), 0.95, "street")
-	_path(_wobbly(Vector2(CITY - 3, rf(48, 58)), Vector2(rf(50, 58), CITY - 3), 4, 3.0), 0.95, "street")
-	for k in 3:
-		var p1: PackedVector2Array = paths[k % 2].pts
-		var from := Vector2.ZERO
-		for t in 50:
-			from = p1[ri(0, p1.size() - 1)]
-			if min(from.x, from.y) < CITY - 3 and from.distance_to(start) > 9: break
-		var to := from + Vector2.from_angle(rf(0, TAU)) * rf(10, 18)
-		to = to.clamp(Vector2(3, 3), Vector2(N - 4, N - 4))
-		_path(_wobbly(from, to, 3, 2.5), 0.6, "dirt")
-
-func _heights() -> void:
-	var s1 := rng.randf() * 10.0
-	var s2 := rng.randf() * 10.0
-	var s3 := rng.randf() * 10.0
-	for y in NV:
-		for x in NV:
-			var h := 14.0 * (sin(x * 0.19 + s1) + sin(y * 0.23 + s2)) + 9.0 * sin((x + y) * 0.13 + s3) + 10.0 * sin((x - y) * 0.17 + s1 * 2.0) + 10.0
-			h = maxf(0.0, h) * sstep((CITY - min(x, y)) / 7.0)
-			var rd := road_d[y * NV + x]
-			h *= 0.35 + 0.65 * sstep((rd - 1.0) / 4.0)
-			VH[y * NV + x] = h
-	for _it in 2:
-		var C := VH.duplicate()
-		for y in range(1, N):
-			for x in range(1, N):
-				VH[y * NV + x] = (C[y * NV + x] * 4.0 + C[y * NV + x - 1] + C[y * NV + x + 1] + C[(y - 1) * NV + x] + C[(y + 1) * NV + x]) / 8.0
-
-func _cars() -> void:
-	for pth in paths:
-		if pth.kind == "dirt": continue
-		var pts: PackedVector2Array = pth.pts
-		var n := pts.size()
-		for t in int(n / 22):
-			var i := ri(2, n - 3)
-			var p := pts[i]
-			if p.distance_to(start) < 9 or not in_bounds(int(p.x), int(p.y)): continue
-			var dir := (pts[i + 1] - pts[i - 1]).normalized()
-			var lane := 0.45 if rng.randf() < 0.5 else -0.45
-			var c := Car.new()
-			c.k = posmod(int(round(dir.angle() / (PI / 4.0))) + (4 if rng.randf() < 0.3 else 0), 8)
-			c.ang = c.k * PI / 4.0
-			c.pos = p + dir.orthogonal() * lane
-			c.spr = ["teal", "red", "yellow", "teal", "red", "burned"][ri(0, 5)]
-			var clash := false
-			for o in cars:
-				if o.pos.distance_to(c.pos) < 3.0: clash = true
-			if clash: continue
-			# whole body footprint (and a little margin) must be clear of buildings and trees
-			var fw := Vector2.from_angle(c.ang)
-			var bad := false
-			for u in [-1.4, -0.7, 0.0, 0.7, 1.4]:
-				for v in [-0.5, 0.5]:
-					var q: Vector2 = c.pos + fw * u + fw.orthogonal() * v
-					if not in_bounds(int(q.x), int(q.y)) or building_at(q.x, q.y) > 0 or T[idx(int(q.x), int(q.y))] == TREE:
-						bad = true
-			if bad: continue
-			cars.append(c)
-			var cr := Crate.new()
-			var fwd := Vector2.from_angle(c.ang)
-			cr.pos = c.pos - fwd * 1.5 + fwd.orthogonal() * 0.55
-			cr.kind = "car"
-			crates.append(cr)
-	# power poles with sagging wires along the highways
-	for pth in paths:
-		if pth.kind != "highway": continue
-		var pts: PackedVector2Array = pth.pts
-		var line := PackedVector2Array()
-		var i := 0
-		while i < pts.size() - 1:
-			var dir := (pts[mini(i + 1, pts.size() - 1)] - pts[maxi(i - 1, 0)]).normalized()
-			var p := pts[i] + dir.orthogonal() * 2.3
-			if in_bounds(int(p.x), int(p.y)) and T[idx(int(p.x), int(p.y))] in [GRASS, SIDE] and rng.randf() < 0.9 and _clear_of_buildings(p, 0.8) and not tree_hit(p, 0.3) and not car_hit(p, 0.4):
-				line.append(p)
-			elif line.size() > 1:
-				pole_lines.append(line)
-				line = PackedVector2Array()
-			i += 26
-		if line.size() > 1:
-			pole_lines.append(line)
-
 func add_decor(name: String, p: Vector2, solid: bool = false, half: Vector2 = Vector2(0.2, 0.2), flat: bool = false) -> void:
 	var d := Decor.new()
 	d.name = name; d.pos = p; d.solid = solid; d.half = half; d.flat = flat
@@ -796,21 +430,6 @@ func add_decor(name: String, p: Vector2, solid: bool = false, half: Vector2 = Ve
 		var k := int(floor(p.y)) * N + int(floor(p.x))
 		if not decor_grid.has(k): decor_grid[k] = []
 		decor_grid[k].append(d)
-
-## Retro street lamps along city streets and highways, alternating sides.
-func _lamps() -> void:
-	for pth in paths:
-		if pth.kind == "dirt": continue
-		var pts: PackedVector2Array = pth.pts
-		var side := 1.0
-		for i in range(6, pts.size() - 2, 22):
-			var p := pts[i]
-			if not in_city(p.x, p.y) and rng.randf() < 0.6: continue
-			var dir := (pts[i + 1] - pts[i - 1]).normalized()
-			var q: Vector2 = p + dir.orthogonal() * side * (pth.w + 0.75)
-			side = -side
-			if _free_spot(q) and T[idx(int(q.x), int(q.y))] != ROAD and _clear_of_buildings(q, 0.7):
-				add_decor("lamp", q, true, Vector2(0.08, 0.08))
 
 ## No building within r tiles of p (tall props must not stand against or inside walls).
 func _clear_of_buildings(p: Vector2, r: float) -> bool:
@@ -824,115 +443,8 @@ func _free_spot(p: Vector2) -> bool:
 	if not in_bounds(int(p.x), int(p.y)): return false
 	var t := T[idx(int(p.x), int(p.y))]
 	if (t == GRASS or t == SIDE or t == ROAD or t == DIRT_ROAD) and not car_hit(p, 0.3) and not tree_hit(p, 0.3) and building_at(p.x, p.y) == 0 and not decor_hit(p, 0.15):
-		for b in buildings:
-			if Vector2(b.out.x + 0.5, b.out.y + 0.5).distance_squared_to(p) < 1.2:
-				return false
-		return true
+		return not door_grid.has(int(p.y) * N + int(p.x))
 	return false
-
-func _debris() -> void:
-	for pth in paths:
-		var pts: PackedVector2Array = pth.pts
-		for t in int(pts.size() / 10):
-			var i := ri(1, pts.size() - 2)
-			var dir := (pts[i + 1] - pts[i - 1]).normalized()
-			var side := 1.0 if rng.randf() < 0.5 else -1.0
-			var r := rng.randf()
-			if pth.kind != "dirt" and r < 0.12:
-				var p: Vector2 = pts[i] + dir.orthogonal() * rf(-0.4, 0.4)
-				if _free_spot(p):
-					var along_x := absf(dir.x) > absf(dir.y)
-					add_decor("jersey_x" if along_x else "jersey_y", p, true, Vector2(0.5, 0.13) if along_x else Vector2(0.13, 0.5))
-			else:
-				var p: Vector2 = pts[i] + dir.orthogonal() * side * (pth.w + rf(0.3, 1.4))
-				if not _free_spot(p): continue
-				var pick: String = ["trashbag", "tire", "rubble0", "papers", "barrel_rust", "cart", "rubble1"][ri(0, 6)]
-				if pick == "cart" and not in_city(p.x, p.y): pick = "tire"
-				add_decor(pick, p, pick == "barrel_rust", Vector2(0.17, 0.17), pick == "papers")
-	# city clutter
-	for k in 70:
-		var p := Vector2(rf(CITY, N - 2), rf(CITY, N - 2))
-		if _free_spot(p):
-			var pick: String = ["rubble0", "rubble1", "rubble2", "bricks", "papers", "trashbag", "barrel_rust", "tire"][ri(0, 7)]
-			add_decor(pick, p, pick == "barrel_rust", Vector2(0.17, 0.17), pick == "papers")
-	# wild clutter: bones, dead bushes, fences, toxic spills
-	for k in 160:
-		var p := Vector2(rf(2, N - 2), rf(2, N - 2))
-		if in_city(p.x, p.y) or not _free_spot(p) or CL[idx(int(p.x), int(p.y))] == 1: continue
-		add_decor(["deadbush", "deadbush", "bones", "rubble2", "fence", "tire"][ri(0, 5)], p)
-	for k in 3:
-		for t in 50:
-			var c := Vector2(rf(4, N - 5), rf(4, N - 5))
-			if not _free_spot(c) or c.distance_to(start) < 10 or settlement_at(c, 4.0) >= 0: continue
-			add_decor("puddle_toxic", c, false, Vector2.ZERO, true)
-			add_decor("puddle_toxic", c + Vector2(rf(-1.5, 1.5), rf(-1.5, 1.5)), false, Vector2.ZERO, true)
-			for m in 3:
-				var bp := c + Vector2.from_angle(rf(0, TAU)) * rf(1.0, 2.2)
-				if _free_spot(bp): add_decor("barrel_toxic", bp, true, Vector2(0.17, 0.17))
-			add_decor("sign_rad", c + Vector2(2.4, 0.5))
-			spawns.append({"type": "shellback", "pos": c + Vector2(1.5, 1.5), "home": c, "home_r": 4.0})
-			break
-	# grass tufts
-	for y in N:
-		for x in N:
-			var i := idx(x, y)
-			if T[i] == GRASS and (G[i] == 3 or rng.randf() < 0.06):
-				add_decor("tuft%d" % ri(0, 2), Vector2(x + rf(0.2, 0.8), y + rf(0.2, 0.8)), false, Vector2.ZERO, true)
-	# crows pecking about out in the wilds
-	for k in 6:
-		var c := Vector2(rf(3, N - 3), rf(3, N - 3))
-		if _free_spot(c) and not in_city(c.x, c.y):
-			for m in ri(3, 5):
-				critters.append({"type": "crow", "pos": c + Vector2(rf(-1, 1), rf(-1, 1)), "home": c})
-
-func _creatures() -> void:
-	# fewer, tougher mutants: feral ghouls in the ruins, a couple of brutes, rats indoors
-	var placed := 0
-	for b in buildings:
-		if placed >= 5: break
-		if (b.ruined or (in_city(b.x0, b.y0) and rng.randf() < 0.25)) and not b.kind in ["den", "shack", "canopy", "kiosk"] and not b.sealed and b.settlement < 0:
-			var p := rand_cell(b)
-			if p.distance_to(start) < 14: continue
-			spawns.append({"type": "ghoul", "pos": p + Vector2(rf(-1, 1), rf(-1, 1)), "home": p, "home_r": 3.0})
-			if rng.randf() < 0.4:
-				spawns.append({"type": "ghoul", "pos": p + Vector2(rf(-1, 1), rf(-1, 1)), "home": p, "home_r": 3.0})
-			placed += 1
-	var brutes := 0
-	for t in 300:
-		if brutes >= 2: break
-		var p := Vector2(rf(4, N - 4), rf(4, N - 4))
-		if not _free_spot(p) or p.distance_to(start) < 20 or settlement_at(p, 6.0) >= 0: continue
-		var ok := true
-		for s in spawns:
-			if s.type == "brute" and s.pos.distance_to(p) < 20: ok = false
-		if not ok: continue
-		spawns.append({"type": "brute", "pos": p, "home": p, "home_r": 5.0})
-		brutes += 1
-	add_patrol()
-
-func add_monster(avoid: Vector2, min_d: float, camps: Array) -> void:
-	for t in 200:
-		var p := Vector2(rf(3, N - 4), rf(3, N - 4))
-		if not _free_spot(p) or p.distance_to(avoid) < min_d or settlement_at(p, 6.0) >= 0: continue
-		var near_camp := false
-		for c in camps:
-			if p.distance_to(c) < 12.0: near_camp = true
-		if near_camp: continue
-		spawns.append({"type": "ghoul" if rng.randf() < 0.7 else "shellback", "pos": p, "home": p, "home_r": 5.0})
-		return
-
-func road_point() -> Vector2:
-	for t in 300:
-		var x := ri(2, N - 3)
-		var y := ri(2, N - 3)
-		if T[idx(x, y)] == ROAD:
-			return Vector2(x + 0.5, y + 0.5)
-	return Vector2(30, 30)
-
-func add_patrol() -> void:
-	var wps := [road_point(), road_point(), road_point(), road_point()]
-	for k in 2:
-		spawns.append({"type": "raider", "pos": wps[0] + Vector2(k * 0.6, 0), "patrol": wps})
 
 func _raider_camp(c: Vector2) -> void:
 	var base := hz(c.x, c.y)
@@ -981,54 +493,6 @@ func _raider_camp(c: Vector2) -> void:
 	ropes.append(rope)
 	add_decor("barrel_rust", c + Vector2.from_angle(ang + 3.6) * 2.6, true, Vector2(0.17, 0.17))
 	add_decor("bones", c + Vector2.from_angle(ang - 0.8) * 2.4)
-
-func _settlement(c: Vector2, sname: String) -> void:
-	var st := Settlement.new()
-	st.name = sname
-	st.pos = c
-	settlements.append(st)
-	var si := settlements.size() - 1
-	# flatten a yard
-	var h0 := hz(c.x, c.y)
-	for vy in range(int(c.y - 9), int(c.y + 10)):
-		for vx in range(int(c.x - 9), int(c.x + 10)):
-			var d := Vector2(vx, vy).distance_to(c)
-			set_vh(vx, vy, lerpf(vh(vx, vy), h0, sstep(1.0 - (d - 6.0) / 3.0)))
-	for y in range(int(c.y - 7), int(c.y + 8)):
-		for x in range(int(c.x - 7), int(c.x + 8)):
-			if in_bounds(x, y) and Vector2(x + 0.5, y + 0.5).distance_to(c) < 7.0:
-				CL[idx(x, y)] = 1
-				if T[idx(x, y)] == GRASS: G[idx(x, y)] = 2
-	# shacks in a rough ring, doors facing the fire
-	var a0 := rf(0, TAU)
-	for k in 4:
-		var a := a0 + k * TAU / 4.0 + rf(-0.3, 0.3)
-		var w := ri(3, 4)
-		var h := ri(3, 4)
-		var p := c + Vector2.from_angle(a) * 4.6
-		var side := 0
-		var dv := c - p
-		if absf(dv.x) > absf(dv.y): side = 3 if dv.x > 0 else 2
-		else: side = 1 if dv.y > 0 else 0
-		var b := place_building(int(round(p.x - w * 0.5)), int(round(p.y - h * 0.5)), w, h, "shack", side, true)
-		if b: b.settlement = si
-	add_decor("campfire_decor", c, true, Vector2(0.25, 0.25))
-	st.trader = c + Vector2(1.6, 0.4)
-	add_decor("stall", st.trader + Vector2(0, -0.6), true, Vector2(0.5, 0.2))
-	for k in 4:
-		var gp := c + Vector2(-2.6 + (k % 2), 1.6 + int(k / 2))
-		add_decor("garden", Vector2(floor(gp.x), floor(gp.y)), false, Vector2.ZERO, true)
-	add_decor("pump", c + Vector2(-1.5, -1.8), true, Vector2(0.15, 0.15))
-	add_decor("tower_decor", c + Vector2(2.6, -2.6), true, Vector2(0.25, 0.25))
-	for k in 10:
-		var a := k * TAU / 10.0 + rf(-0.1, 0.1)
-		if k % 3 == 1: continue
-		add_decor("fence", c + Vector2.from_angle(a) * 6.8)
-	critters.append({"type": "trader", "pos": st.trader, "home": st.trader, "settlement": si})
-	for k in ri(3, 4):
-		critters.append({"type": "settler", "pos": c + Vector2(rf(-2, 2), rf(-2, 2)), "home": c, "settlement": si, "look": ri(1, 3)})
-	for k in ri(1, 2):
-		critters.append({"type": "cattle", "pos": c + Vector2(rf(-5, 5), rf(3, 5)), "home": c + Vector2(0, 4)})
 
 const DIRS := [Vector2i(0, -1), Vector2i(0, 1), Vector2i(-1, 0), Vector2i(1, 0)]   # n s w e
 const DIR_SIDE := ["n", "s", "w", "e"]
@@ -1682,3 +1146,1137 @@ func _furnish(b: Bld, gaps: Dictionary) -> void:
 					var pp := Vector2(rf(rx0 + 0.4, rx1 - 0.4), rf(r.position.y + 1.2, r.end.y - 0.4))
 					if fl == 0:
 						add_decor(["papers", "papers", "rubble2", "bones", "trashbag"][ri(0, 4)] if b.kind != "shack" else "papers", pp, false, Vector2.ZERO, true)
+
+# ------------------------------------------------------------------ streamed world
+## The Sable Wastes is one 2048x2048-tile world made from the world-map data (height, biome, city
+## density and road polylines at one pixel per tile). Nothing is generated up front: a chunk gets its
+## base (terrain, water, roads) the first time something near it is needed, and its content (towns,
+## buildings, props, people) once its neighbours have a base. Content only ever touches its own chunk
+## plus a small margin, so a chunk whose ring of neighbours has content is final and can be shown.
+
+const BIOMES := ["waste", "hills", "woods", "farm", "salt", "marsh", "canyon", "crater", "city", "suburb", "water", "gorge", "peak", "beach"]
+const B_WASTE := 0
+const B_HILLS := 1
+const B_WOODS := 2
+const B_FARM := 3
+const B_SALT := 4
+const B_MARSH := 5
+const B_CANYON := 6
+const B_CRATER := 7
+const B_CITY := 8
+const B_SUBURB := 9
+const B_WATER := 10
+const B_GORGE := 11
+const B_PEAK := 12
+const B_BEACH := 13
+const ROAD_W := {"interstate": 2.1, "highway": 1.55, "road": 1.15, "track": 0.75}
+const GRID := 13                 # city street grid spacing (tiles)
+
+var data: WorldData
+var hraw := PackedByteArray()
+var braw := PackedByteArray()
+var hmin := 0.0
+var hmax := 1.0
+var VH_W := 16.0                 # water surface height (px)
+var base_done := PackedByteArray()
+var content_done := PackedByteArray()
+var road_pts := {}               # chunk key -> PackedInt32Array of path_index * 65536 + point index
+var road_h := PackedFloat32Array()
+var locs: Array = []             # world-map locations: {id, name, type, hook, pos (tiles), r, done, rect}
+var items := {}                  # chunk key -> {buildings, decor, cars, crates, spawns, critters, poles, posts, flags, ropes, survivors, lights}
+var car_grid := {}               # tile index -> Array[Car]
+var door_grid := {}              # tile index -> true (outside tile of a door, and its neighbours)
+var discovered := {}             # location id -> true
+var _mark := {}
+
+static func ckey(cx: int, cy: int) -> int:
+	return cy * NC + cx
+
+static func chunk_of(p: Vector2) -> Vector2i:
+	return Vector2i(clampi(int(p.x) / CH, 0, NC - 1), clampi(int(p.y) / CH, 0, NC - 1))
+
+func hn(x: int, y: int) -> float:
+	var i := clampi(y, 0, N - 1) * N + clampi(x, 0, N - 1)
+	return hraw.decode_u16(i * 2) / 65535.0 * (hmax - hmin) + hmin
+
+func biome(x: int, y: int) -> int:
+	return braw[(clampi(y, 0, N - 1) * N + clampi(x, 0, N - 1)) * 4]
+
+func density(x: int, y: int) -> int:
+	return braw[(clampi(y, 0, N - 1) * N + clampi(x, 0, N - 1)) * 4 + 1]
+
+func biome_name(p: Vector2) -> String:
+	return BIOMES[biome(int(p.x), int(p.y))]
+
+func load_data(sd: int) -> void:
+	seed_value = sd
+	rng.seed = sd
+	data = load("res://assets/worldmap/data/world_data.res")
+	hraw = data.height
+	braw = data.biome
+	var m: Dictionary = data.meta
+	hmin = float(m.hmin)
+	hmax = float(m.hmax)
+	VH_W = (float(m.water_level) - hmin) * HS
+	T.resize(N * N); T.fill(GRASS)
+	BID.resize(N * N); BID.fill(0)
+	V.resize(N * N); V.fill(0)
+	G.resize(N * N); G.fill(0)
+	CL.resize(N * N); CL.fill(0)
+	VH.resize(NV * NV); VH.fill(0.0)
+	road_d.resize(NV * NV); road_d.fill(99.0)
+	road_h.resize(NV * NV); road_h.fill(0.0)
+	base_done.resize(NC * NC); base_done.fill(0)
+	content_done.resize(NC * NC); content_done.fill(0)
+	_prep_roads(m.roads)
+	_prep_locations()
+	for l in locs:
+		if l.id == "patchwork":
+			start = l.pos + Vector2(-26.5, 9.5)
+	ensure_content(chunk_of(start).x, chunk_of(start).y)
+
+## Road polylines become dense point lists with a height profile: smoothed along the road, and carried
+## level over water and gorges as a causeway.
+func _prep_roads(roads: Array) -> void:
+	paths.clear()
+	for r in roads:
+		var kind: String = r.kind
+		var ctrl := []
+		for q in r.path:
+			ctrl.append(Vector2(q[0], q[1]))
+		if ctrl.size() < 2: continue
+		var c := [ctrl[0]] + ctrl + [ctrl[-1]]
+		var pts := PackedVector2Array()
+		for i in range(1, c.size() - 2):
+			var n := maxi(1, int(c[i].distance_to(c[i + 1]) * 3.0))
+			for k in n:
+				pts.append(_catmull(c[i - 1], c[i], c[i + 1], c[i + 2], float(k) / n))
+		pts.append(ctrl[-1])
+		var hs := PackedFloat32Array()
+		var wet := []
+		for p in pts:
+			var b := biome(int(p.x), int(p.y))
+			var h := hn(int(p.x), int(p.y))
+			var w: bool = b == B_WATER or b == B_GORGE or h < 0.004
+			wet.append(w)
+			hs.append(h)
+		# bridges: interpolate across wet runs between the dry ends
+		var i := 0
+		while i < pts.size():
+			if not wet[i]: i += 1; continue
+			var j := i
+			while j < pts.size() and wet[j]: j += 1
+			var ha: float = hs[i - 1] if i > 0 else (hs[j] if j < pts.size() else 0.01)
+			var hb: float = hs[j] if j < pts.size() else ha
+			for k in range(i, j):
+				var t := float(k - i + 1) / (j - i + 1)
+				hs[k] = maxf(lerpf(ha, hb, t), 0.012)
+			i = j
+		# smooth the profile
+		var sm := PackedFloat32Array()
+		sm.resize(hs.size())
+		for k in hs.size():
+			var s := 0.0
+			var n := 0
+			for o in range(-8, 9):
+				var q := clampi(k + o, 0, hs.size() - 1)
+				s += hs[q]; n += 1
+			sm[k] = s / n
+		var pi := paths.size()
+		paths.append({"pts": pts, "w": ROAD_W.get(kind, 1.0), "kind": "dirt" if kind == "track" else kind, "h": sm})
+		var last := -1
+		for k in pts.size():
+			var ck := chunk_of(pts[k])
+			var key := ckey(ck.x, ck.y)
+			if not road_pts.has(key): road_pts[key] = PackedInt32Array()
+			road_pts[key].append(pi * 65536 + k)
+
+func _prep_locations() -> void:
+	locs.clear()
+	var f := FileAccess.open("res://assets/worldmap/locations.json", FileAccess.READ)
+	if f == null: return
+	var d = JSON.parse_string(f.get_as_text())
+	for l in d.locations:
+		var p := Vector2(l.px[0] + 0.5, l.px[1] + 0.5)
+		var r: float = clampf(float(l.size) * 0.11, 7.0, 21.0)
+		var e := {"id": l.id, "name": l.name, "type": l.type, "hook": l.hook, "pos": p, "r": r, "done": false,
+			"danger": int(l.get("danger", 1)), "faction": l.get("faction", ""), "trade": l.get("trade", ""), "biome": l.get("biome", "")}
+		var m := r + 14.0
+		e.rect = Rect2(p - Vector2(m, m), Vector2(m, m) * 2.0)
+		locs.append(e)
+
+func loc_by_id(id: String) -> Dictionary:
+	for l in locs:
+		if l.id == id: return l
+	return {}
+
+func nearest_loc(p: Vector2, extra: float = 0.0) -> Dictionary:
+	var best := {}
+	var bd := 1e9
+	for l in locs:
+		var d: float = p.distance_to(l.pos) - l.r - extra
+		if d < bd: bd = d; best = l
+	return best if bd < 0.0 else {}
+
+func chunk_rect(cx: int, cy: int) -> Rect2i:
+	return Rect2i(cx * CH, cy * CH, CH, CH)
+
+# ---------------------------------------------------------------- base
+func _vert_h(vx: int, vy: int) -> float:
+	var s := 0.0
+	var wet := false
+	for o in [Vector2i(-1, -1), Vector2i(0, -1), Vector2i(-1, 0), Vector2i(0, 0)]:
+		var x: int = clampi(vx + o.x, 0, N - 1)
+		var y: int = clampi(vy + o.y, 0, N - 1)
+		if braw[(y * N + x) * 4] == B_WATER: wet = true
+		s += hn(x, y)
+	if wet: return VH_W
+	return (s * 0.25 - hmin) * HS
+
+func _ground_for(b: int, x: int, y: int) -> int:
+	var n := sin(x * 0.37 + seed_value) + sin(y * 0.29 - seed_value * 0.7) + sin((x + y) * 0.17 + 3.0)
+	var r := rng.randf()
+	match b:
+		B_WASTE: return 2 if n < -1.1 else (1 if n > 0.2 else (3 if r < 0.04 else 0))
+		B_HILLS: return 1 if n > 0.6 else (4 if n < -1.5 else 0)
+		B_WOODS: return 11 if n > -0.4 else 0
+		B_FARM: return 9 if n > -0.8 else 1
+		B_SALT: return 5 if n > -1.6 else 2
+		B_MARSH: return 7 if n > -0.3 else 0
+		B_CANYON, B_GORGE: return 6 if n > -0.9 else 12
+		B_CRATER: return 8 if n > 0.0 else 2
+		B_CITY: return 13 if n > -0.6 else 2
+		B_SUBURB: return 0 if n > -0.6 else 1
+		B_PEAK: return 4 if n > -0.4 else 6
+		B_BEACH: return 10
+	return 0
+
+func ensure_base(cx: int, cy: int) -> void:
+	if cx < 0 or cy < 0 or cx >= NC or cy >= NC: return
+	var key := ckey(cx, cy)
+	if base_done[key]: return
+	base_done[key] = 1
+	rng.seed = hash(key * 7919 + seed_value)
+	var x0 := cx * CH
+	var y0 := cy * CH
+	for y in range(y0, y0 + CH):
+		for x in range(x0, x0 + CH):
+			var i := y * N + x
+			var b := braw[i * 4]
+			T[i] = WATER if b == B_WATER else GRASS
+			V[i] = rng.randi_range(0, 3)
+			G[i] = _ground_for(b, x, y)
+	var vx1 := x0 + CH + (1 if cx == NC - 1 else 0)
+	var vy1 := y0 + CH + (1 if cy == NC - 1 else 0)
+	for vy in range(y0, vy1):
+		for vx in range(x0, vx1):
+			VH[vy * NV + vx] = _vert_h(vx, vy)
+			road_d[vy * NV + vx] = 99.0
+	# roads from points in this chunk and its neighbours
+	var rect := Rect2i(x0, y0, CH, CH)
+	for oy in range(-1, 2):
+		for ox in range(-1, 2):
+			var lst = road_pts.get(ckey(cx + ox, cy + oy))
+			if lst == null or cx + ox < 0 or cy + oy < 0 or cx + ox >= NC or cy + oy >= NC: continue
+			for e in lst:
+				var pth: Dictionary = paths[e >> 16]
+				var k: int = e & 65535
+				var p: Vector2 = pth.pts[k]
+				var w: float = pth.w
+				var hh: float = (pth.h[k] - hmin) * HS
+				var dirt: bool = pth.kind == "dirt"
+				for yy in range(maxi(int(floor(p.y - w - 1)), y0), mini(int(p.y + w + 2), y0 + CH)):
+					for xx in range(maxi(int(floor(p.x - w - 1)), x0), mini(int(p.x + w + 2), x0 + CH)):
+						if p.distance_to(Vector2(xx + 0.5, yy + 0.5)) <= w:
+							var i := yy * N + xx
+							if dirt:
+								if T[i] == GRASS or T[i] == WATER: T[i] = DIRT_ROAD
+							else:
+								T[i] = ROAD
+				var R := w + 5.0
+				for vy in range(maxi(int(floor(p.y - R)), y0), mini(int(p.y + R + 1), vy1)):
+					for vx in range(maxi(int(floor(p.x - R)), x0), mini(int(p.x + R + 1), vx1)):
+						var dv := p.distance_to(Vector2(vx, vy)) - w
+						var vi := vy * NV + vx
+						if dv < road_d[vi]:
+							road_d[vi] = dv
+							road_h[vi] = hh
+	for vy in range(y0, vy1):
+		for vx in range(x0, vx1):
+			var vi := vy * NV + vx
+			var d := road_d[vi]
+			if d < 6.0:
+				VH[vi] = lerpf(road_h[vi], VH[vi], sstep((d - 0.4) / 4.5))
+	# city street grid and sidewalks
+	for y in range(y0, y0 + CH):
+		for x in range(x0, x0 + CH):
+			var i := y * N + x
+			var dn := braw[i * 4 + 1]
+			var b := braw[i * 4]
+			if T[i] == WATER or (b != B_CITY and b != B_SUBURB): continue
+			var gx := posmod(x, GRID)
+			var gy := posmod(y, GRID)
+			var lim := 150 if (gx < 2 and gy < 2) else 175
+			if (gx < 2 or gy < 2) and dn > (120 if b == B_CITY else lim) and T[i] == GRASS:
+				T[i] = ROAD
+				G[i] = 0
+	for y in range(y0, y0 + CH):
+		for x in range(x0, x0 + CH):
+			var i := y * N + x
+			if T[i] != GRASS or braw[i * 4 + 1] < 90: continue
+			var gx := posmod(x, GRID)
+			var gy := posmod(y, GRID)
+			var near := (gx == 2 or gy == 2 or gx == GRID - 1 or gy == GRID - 1) and _grid_road_near(x, y)
+			if near or minf(minf(road_d[y * NV + x], road_d[y * NV + x + 1]), minf(road_d[(y + 1) * NV + x], road_d[(y + 1) * NV + x + 1])) < 0.9:
+				T[i] = SIDE
+
+func _grid_road_near(x: int, y: int) -> bool:
+	for o in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+		var xx: int = x + o.x
+		var yy: int = y + o.y
+		if xx < 0 or yy < 0 or xx >= N or yy >= N: continue
+		var gx := posmod(xx, GRID)
+		var gy := posmod(yy, GRID)
+		var i := yy * N + xx
+		if (gx < 2 or gy < 2) and T[i] == ROAD: return true
+	return false
+
+# ---------------------------------------------------------------- content
+## Items of one kind in the 3x3 chunks around p (for interaction queries).
+func near(p: Vector2, kind: String) -> Array:
+	var c := chunk_of(p)
+	var out := []
+	for oy in range(-1, 2):
+		for ox in range(-1, 2):
+			var bk = items.get(ckey(c.x + ox, c.y + oy))
+			if bk != null: out.append_array(bk[kind])
+	return out
+
+func _bucket(key: int) -> Dictionary:
+	if not items.has(key):
+		items[key] = {"buildings": [], "decor": [], "cars": [], "crates": [], "spawns": [], "critters": [], "poles": [], "posts": [], "flags": [], "ropes": [], "survivors": []}
+	return items[key]
+
+func _begin() -> void:
+	_mark = {"buildings": buildings.size(), "decor": decor.size(), "cars": cars.size(), "crates": crates.size(), "spawns": spawns.size(),
+		"critters": critters.size(), "poles": pole_lines.size(), "posts": posts.size(), "flags": raider_flags.size(), "ropes": ropes.size(), "survivors": survivors.size()}
+
+func _finish() -> void:
+	_tidy_new()
+	var lists := {"buildings": buildings, "decor": decor, "cars": cars, "crates": crates, "spawns": spawns, "critters": critters,
+		"poles": pole_lines, "posts": posts, "flags": raider_flags, "ropes": ropes, "survivors": survivors}
+	for nm in lists:
+		var arr: Array = lists[nm]
+		for i in range(_mark[nm], arr.size()):
+			var it = arr[i]
+			var p: Vector2
+			match nm:
+				"buildings": p = Vector2(it.x0 + it.w * 0.5, it.y0 + it.h * 0.5)
+				"poles": p = it[0]
+				"posts", "flags": p = it
+				"ropes": p = it.bottom
+				"spawns", "critters", "survivors": p = it.pos
+				_: p = it.pos
+			var ck := chunk_of(p)
+			var key := ckey(ck.x, ck.y)
+			_bucket(key)[nm].append(it)
+			if nm == "spawns" or nm == "critters": it["chunk"] = key
+	for b in buildings.slice(_mark.buildings):
+		if b.door_seg != null:
+			for oy in range(-1, 2):
+				for ox in range(-1, 2):
+					door_grid[(b.out.y + oy) * N + b.out.x + ox] = true
+
+func ensure_content(cx: int, cy: int) -> void:
+	if cx < 0 or cy < 0 or cx >= NC or cy >= NC: return
+	var key := ckey(cx, cy)
+	if content_done[key]: return
+	content_done[key] = 1
+	for oy in range(-1, 2):
+		for ox in range(-1, 2):
+			ensure_base(cx + ox, cy + oy)
+	var rect := Rect2(cx * CH, cy * CH, CH, CH)
+	for l in locs:
+		if not l.done and l.rect.intersects(rect):
+			_gen_location(l)
+	rng.seed = hash(key * 104729 + seed_value * 31)
+	_begin()
+	var r := chunk_rect(cx, cy)
+	var dens := density(r.position.x + 16, r.position.y + 16)
+	var dmax := 0
+	for k in 9:
+		dmax = maxi(dmax, density(r.position.x + 4 + (k % 3) * 12, r.position.y + 4 + (k / 3) * 12))
+	if dmax > 100:
+		_chunk_city(r)
+	_chunk_roadside(cx, cy, r)
+	if dmax < 60 and nearest_loc(Vector2(r.get_center()), 30.0).is_empty():
+		_chunk_poi(cx, cy, r)
+	_chunk_trees(r)
+	_chunk_cars(cx, cy, r)
+	_chunk_debris(cx, cy, r)
+	_chunk_creatures(r)
+	_finish()
+
+## Everything a chunk needs before it can be shown: content in it and all around it.
+func ensure_ready(cx: int, cy: int) -> void:
+	for oy in range(-1, 2):
+		for ox in range(-1, 2):
+			ensure_content(cx + ox, cy + oy)
+
+func is_ready(cx: int, cy: int) -> bool:
+	for oy in range(-1, 2):
+		for ox in range(-1, 2):
+			var x := cx + ox
+			var y := cy + oy
+			if x < 0 or y < 0 or x >= NC or y >= NC: continue
+			if not content_done[ckey(x, y)]: return false
+	return true
+
+func _inside(parts: Array, r: Rect2i, m: int = 1) -> bool:
+	var bb: Rect2i = parts[0]
+	for q in parts: bb = bb.merge(q)
+	return bb.position.x >= r.position.x + m and bb.position.y >= r.position.y + m and bb.end.x <= r.end.x - m - 1 and bb.end.y <= r.end.y - m - 1
+
+## Port Sterling and its suburbs: a block on every grid cell, the kind of building set by density.
+func _chunk_city(r: Rect2i) -> void:
+	var lots := []
+	for y in range(r.position.y + 2, r.end.y - 3):
+		for x in range(r.position.x + 2, r.end.x - 3):
+			var gx := posmod(x, GRID)
+			var gy := posmod(y, GRID)
+			if (gx == 3 or gx == 8) and (gy == 3 or gy == 8):
+				lots.append(Vector2i(x, y))
+	lots.shuffle()
+	for lot in lots:
+		var d := density(lot.x + 2, lot.y + 2)
+		var b := biome(lot.x + 2, lot.y + 2)
+		if d < 70 or T[idx(lot.x, lot.y)] != GRASS and T[idx(lot.x, lot.y)] != SIDE: continue
+		if b == B_WATER: continue
+		var kind := "house"
+		var q := rng.randf()
+		if d > 200:
+			kind = ["office", "office", "shop", "factory", "motel", "diner", "shop"][ri(0, 6)]
+		elif d > 150:
+			kind = ["shop", "office", "house", "garage", "diner", "factory"][ri(0, 5)]
+		elif d > 100:
+			kind = "house" if q < 0.7 else ["garage", "shop"][ri(0, 1)]
+		else:
+			if q < 0.4: continue
+			kind = "house" if q < 0.9 else "garage"
+		var parts := shape_for(kind, lot.x, lot.y)
+		if not _inside(parts, r): continue
+		place_shape(parts, kind)
+
+## Houses strung along roads where density is light, and roadside stops (gas, diner, motel) along
+## the big roads out in the wastes.
+func _chunk_roadside(cx: int, cy: int, r: Rect2i) -> void:
+	var lst = road_pts.get(ckey(cx, cy))
+	if lst == null: return
+	var tries := 0
+	for e in lst:
+		tries += 1
+		if tries % 7 != 0: continue
+		var pth: Dictionary = paths[e >> 16]
+		if pth.kind == "dirt": continue
+		var k: int = e & 65535
+		var pts: PackedVector2Array = pth.pts
+		var p: Vector2 = pts[k]
+		var d := density(int(p.x), int(p.y))
+		var chance := 0.0
+		var kind := "house"
+		if d > 25: chance = 0.25 + d / 600.0
+		elif pth.kind != "road" and rng.randf() < 0.035:
+			chance = 1.0
+			kind = ["gas", "diner", "motel", "gas", "garage"][ri(0, 4)]
+		elif rng.randf() < 0.025:
+			chance = 1.0
+			kind = "house" if rng.randf() < 0.7 else "garage"
+		if rng.randf() > chance: continue
+		var dir := (pts[mini(k + 1, pts.size() - 1)] - pts[maxi(k - 1, 0)]).normalized()
+		var side := 1.0 if rng.randf() < 0.5 else -1.0
+		var off: float = pth.w + rf(1.6, 3.2)
+		var at := p + dir.orthogonal() * side * (off + 2.5)
+		var parts := shape_for(kind, int(at.x) - 2, int(at.y) - 2)
+		if not _inside(parts, r): continue
+		place_shape(parts, kind)
+
+# ---------------------------------------------------------------- towns and sites
+const TOWN_NAMES_SMALL := ["Survivor camp", "Drifter camp", "Scav camp", "Wayfarers' fire", "Road camp"]
+
+func _flatten(c: Vector2, r: float, h0: float, clear: bool) -> void:
+	for vy in range(int(c.y - r - 4), int(c.y + r + 5)):
+		for vx in range(int(c.x - r - 4), int(c.x + r + 5)):
+			var d := Vector2(vx, vy).distance_to(c)
+			set_vh(vx, vy, lerpf(vh(vx, vy), h0, sstep(1.0 - (d - r) / 4.0)))
+	if clear:
+		for y in range(int(c.y - r), int(c.y + r + 1)):
+			for x in range(int(c.x - r), int(c.x + r + 1)):
+				if in_bounds(x, y) and Vector2(x + 0.5, y + 0.5).distance_to(c) < r:
+					CL[idx(x, y)] = 1
+
+func _gen_location(l: Dictionary) -> void:
+	l.done = true
+	var rr: Rect2 = l.rect
+	var c0 := chunk_of(rr.position)
+	var c1 := chunk_of(rr.end)
+	for cy in range(c0.y - 1, c1.y + 2):
+		for cx in range(c0.x - 1, c1.x + 2):
+			ensure_base(cx, cy)
+	rng.seed = hash(str(l.id)) + seed_value
+	_begin()
+	match l.type:
+		"town", "hub", "settlement", "camp":
+			if l.id == "rattlebone_camp" or l.faction == "Raiders":
+				_raider_town(l)
+			else:
+				_town(l)
+		"dungeon":
+			_dungeon(l)
+		"landmark":
+			_landmark(l)
+		_:
+			pass      # Port Sterling's districts are built block by block from the density map
+	_finish()
+
+## A friendly town: a yard flattened around a well or fire, shacks and a few real buildings around it,
+## a scrap fence ring with gaps for the roads, traders, settlers and livestock, and whatever the town
+## is known for (water purifiers by the lake, fields in the marsh, salt pans, glass furnaces...).
+func _town(l: Dictionary) -> void:
+	var c: Vector2 = l.pos
+	var r: float = l.r
+	var h0 := hz(c.x, c.y)
+	# don't drown the yard: lake towns sit on the shore, the centre nudged onto dry ground
+	if T[idx(int(c.x), int(c.y))] == WATER or tile(c.x, c.y) == ROAD:
+		for ring in range(1, 30):
+			var moved := false
+			for k in 16:
+				var q := c + Vector2.from_angle(k * TAU / 16.0) * ring
+				if in_bounds(int(q.x), int(q.y)) and T[idx(int(q.x), int(q.y))] == GRASS:
+					c = q; moved = true; break
+			if moved: break
+		h0 = hz(c.x, c.y)
+	l.pos = c
+	_flatten(c, r * 0.8, h0, true)
+	var st := Settlement.new()
+	st.name = l.name
+	st.pos = c
+	st.radius = r
+	st.id = l.id
+	st.hook = l.hook
+	settlements.append(st)
+	var si := settlements.size() - 1
+	for y in range(int(c.y - r), int(c.y + r + 1)):
+		for x in range(int(c.x - r), int(c.x + r + 1)):
+			if in_bounds(x, y) and Vector2(x + 0.5, y + 0.5).distance_to(c) < r * 0.75 and T[idx(x, y)] == GRASS:
+				G[idx(x, y)] = 2 if rng.randf() < 0.7 else 0
+	add_decor("campfire_decor", c, true, Vector2(0.25, 0.25))
+	st.trader = c + Vector2(1.6, 0.4)
+	add_decor("stall", st.trader + Vector2(0, -0.6), true, Vector2(0.5, 0.2))
+	critters.append({"type": "trader", "pos": st.trader, "home": st.trader, "settlement": si})
+	# rings of shacks, then proper buildings further out, doors toward the middle
+	var n_shacks := int(r * 0.55) + 2
+	var a0 := rf(0, TAU)
+	var placed := 0
+	for ring: float in [0.42, 0.68]:
+		var count := n_shacks if ring < 0.5 else int(n_shacks * 1.3)
+		for k in count:
+			var a := a0 + k * TAU / count + rf(-0.2, 0.2) + ring * 2.0
+			var p := c + Vector2.from_angle(a) * r * ring
+			var dv := c - p
+			var side := (3 if dv.x > 0 else 2) if absf(dv.x) > absf(dv.y) else (1 if dv.y > 0 else 0)
+			var kind := "shack"
+			if ring > 0.5 and rng.randf() < 0.35: kind = ["house", "garage", "shop"][ri(0, 2)]
+			var w := ri(3, 4)
+			var h := ri(3, 4)
+			var b: Bld
+			if kind == "shack":
+				b = place_building(int(round(p.x - w * 0.5)), int(round(p.y - h * 0.5)), w, h, "shack", side, true)
+			else:
+				b = place_shape(shape_for(kind, int(p.x) - 2, int(p.y) - 2), kind, side, true)
+			if b:
+				b.settlement = si
+				b.ruined = false
+				placed += 1
+	# second trader for bigger towns
+	if r > 15.0:
+		var tp := c + Vector2(-2.2, 1.8)
+		add_decor("stall", tp + Vector2(0, -0.6), true, Vector2(0.5, 0.2))
+		critters.append({"type": "trader", "pos": tp, "home": tp, "settlement": si})
+	add_decor("pump", c + Vector2(-1.5, -1.8), true, Vector2(0.15, 0.15))
+	add_decor("tower_decor", c + Vector2.from_angle(a0 + 0.7) * r * 0.85, true, Vector2(0.25, 0.25))
+	if r > 12.0: add_decor("tower_decor", c + Vector2.from_angle(a0 + 3.6) * r * 0.85, true, Vector2(0.25, 0.25))
+	for k in 6:
+		var gp := c + Vector2(-3.6 + (k % 3), 2.4 + int(k / 3))
+		add_decor("garden", Vector2(floor(gp.x), floor(gp.y)), false, Vector2.ZERO, true)
+	_town_hook(l, c, r, si)
+	# fence ring with gaps where roads come in
+	var steps := int(r * 2.4)
+	for k in steps:
+		var a := k * TAU / steps
+		var fp := c + Vector2.from_angle(a) * (r * 0.92)
+		if not in_bounds(int(fp.x), int(fp.y)): continue
+		var t := T[idx(int(fp.x), int(fp.y))]
+		if t == ROAD or t == DIRT_ROAD or t == WATER or k % 9 == 4: continue
+		add_decor("fence", fp)
+	for k in ri(4, 6) + int(r / 4):
+		critters.append({"type": "settler", "pos": c + Vector2(rf(-r, r), rf(-r, r)) * 0.4, "home": c, "settlement": si, "look": ri(1, 3)})
+	for k in ri(1, 3):
+		critters.append({"type": "cattle", "pos": c + Vector2(rf(-r, r) * 0.6, r * 0.55), "home": c + Vector2(0, r * 0.55)})
+	# guards
+	for k in 2:
+		critters.append({"type": "settler", "pos": c + Vector2.from_angle(a0 + k * PI) * r * 0.85, "home": c + Vector2.from_angle(a0 + k * PI) * r * 0.85, "settlement": si, "look": 3})
+
+func _town_hook(l: Dictionary, c: Vector2, r: float, si: int) -> void:
+	var hook: String = l.hook
+	match hook:
+		"lake", "dam":
+			# purifiers in a row at the waterline
+			var shore := Vector2.ZERO
+			var bd := 1e9
+			for k in 32:
+				var q := c + Vector2.from_angle(k * TAU / 32.0) * r * 1.2
+				for s in 8:
+					var qq := c.lerp(q, s / 7.0)
+					if in_bounds(int(qq.x), int(qq.y)) and T[idx(int(qq.x), int(qq.y))] == WATER:
+						var d := qq.distance_to(c)
+						if d < bd: bd = d; shore = c.lerp(qq, (d - 1.6) / d)
+						break
+			if shore == Vector2.ZERO: shore = c + Vector2(r * 0.5, 0)
+			var tang := (shore - c).orthogonal().normalized()
+			for k in [-2, -1, 0, 1, 2]:
+				var tier := "purifier_t3" if k == 0 else ("purifier_t2" if absi(k) == 1 else "purifier_t1")
+				_try_decor(tier, shore + tang * k * 1.6, true, Vector2(0.45, 0.45))
+			for k in 4:
+				_try_decor("barrel", shore + tang * (k - 1.5) * 1.1 - (shore - c).normalized() * 1.4, true, Vector2(0.17, 0.17))
+		"wetlands", "farm":
+			for k in 22:
+				var gp := c + Vector2(rf(-r, r), rf(-r, r)) * 0.8
+				if _free_spot(gp) and CL[idx(int(gp.x), int(gp.y))] == 1 and building_at(gp.x, gp.y) == 0:
+					add_decor("garden", Vector2(floor(gp.x), floor(gp.y)), false, Vector2.ZERO, true)
+			for k in ri(3, 5):
+				critters.append({"type": "cattle", "pos": c + Vector2(rf(-r, r), rf(-r, r)) * 0.6, "home": c})
+		"salt flat":
+			for k in 10:
+				_try_decor("rubble2", c + Vector2(rf(-r, r), rf(-r, r)) * 0.7, false)
+			for k in 4:
+				_try_decor("barrel", c + Vector2(rf(-r, r), rf(-r, r)) * 0.5, true, Vector2(0.17, 0.17))
+		"canyon", "crater rim":
+			for k in 6:
+				_try_decor("barrel_rust", c + Vector2(rf(-r, r), rf(-r, r)) * 0.6, true, Vector2(0.17, 0.17))
+			add_decor("watertower", c + Vector2.from_angle(1.0) * r * 0.55, true, Vector2(0.55, 0.55))
+		"mall", "stadium", "prison":
+			# the town lives inside one big shell: a ring of walls of a huge old building
+			var big := place_shape([Rect2i(int(c.x - 7), int(c.y - 13), 14, 6)], "factory", 1, true)
+			if big: big.settlement = si; big.ruined = false
+			add_decor("billboard_x", c + Vector2(-r * 0.6, -r * 0.6), true, Vector2(1.0, 0.2))
+		_:
+			if rng.randf() < 0.6: add_decor("watertower", c + Vector2.from_angle(2.2) * r * 0.6, true, Vector2(0.55, 0.55))
+
+func _raider_town(l: Dictionary) -> void:
+	var c: Vector2 = l.pos
+	_raider_camp(c)
+	for k in 3:
+		_raider_camp_extra(c + Vector2.from_angle(k * TAU / 3.0 + 0.4) * l.r * 0.6)
+
+func _raider_camp_extra(c: Vector2) -> void:
+	var b := place_building(int(c.x) - 2, int(c.y) - 2, ri(3, 4), ri(3, 4), "den", -1, true)
+	for k in 2:
+		spawns.append({"type": "raider", "pos": c + Vector2(rf(-2, 2), rf(-2, 2)), "home": c, "home_r": 3.0})
+	if b:
+		var cr := Crate.new()
+		cr.pos = c + Vector2(0.5, 2.6)
+		cr.kind = "cache"
+		crates.append(cr)
+
+## Hostile sites from the map: a compound of ruins full of the faction that holds it, with good loot.
+func _dungeon(l: Dictionary) -> void:
+	var c: Vector2 = l.pos
+	var r: float = l.r
+	var fac: String = l.faction
+	var enemy := "ghoul"
+	if fac.find("aider") >= 0: enemy = "raider"
+	elif fac.find("obot") >= 0 or fac.find("ecur") >= 0: enemy = "raider"
+	elif fac.find("ut") >= 0 or fac.find("east") >= 0: enemy = "shellback"
+	var kinds := ["factory", "office", "garage", "shop"]
+	for k in int(r / 3.0) + 2:
+		var p := c + Vector2.from_angle(rf(0, TAU)) * rf(2.0, r * 0.8)
+		var kind: String = kinds[ri(0, kinds.size() - 1)]
+		var b := place_shape(shape_for(kind, int(p.x) - 3, int(p.y) - 2), kind, -1, false)
+		if b:
+			for m in ri(1, 2):
+				spawns.append({"type": enemy, "pos": rand_cell(b), "home": rand_cell(b), "home_r": 3.0})
+			var cr := Crate.new()
+			cr.pos = rand_cell(b)
+			cr.kind = "cache"
+			cr.bid = b.id
+			crates.append(cr)
+	for k in int(r / 2.5) + 3:
+		var p := c + Vector2.from_angle(rf(0, TAU)) * rf(1.0, r)
+		spawns.append({"type": enemy if rng.randf() < 0.75 else ["brute", "shellback", "ghoul"][ri(0, 2)], "pos": p, "home": p, "home_r": 4.0})
+	for k in 8:
+		_try_decor(["barrel_toxic", "rubble1", "bones", "barrel_rust"][ri(0, 3)], c + Vector2(rf(-r, r), rf(-r, r)) * 0.8, k % 2 == 0, Vector2(0.17, 0.17))
+	add_decor("sign_rad", c + Vector2(r * 0.9, 0.5))
+
+## Landmarks: something to see on the road, with a little trouble and a little loot.
+func _landmark(l: Dictionary) -> void:
+	var c: Vector2 = l.pos
+	var r: float = l.r
+	var id: String = l.id
+	if id == "starlite_crossing" or id == "moonbeam_drivein" or id == "founders_bridge":
+		var kinds := ["diner", "gas", "motel", "shop"]
+		for k in 5:
+			var p := c + Vector2.from_angle(k * 1.3) * r * 0.5
+			var kind: String = kinds[k % kinds.size()]
+			place_shape(shape_for(kind, int(p.x) - 3, int(p.y) - 2), kind)
+		for k in 4:
+			spawns.append({"type": "ghoul", "pos": c + Vector2(rf(-r, r), rf(-r, r)) * 0.5, "home": c, "home_r": r * 0.6})
+		add_decor("billboard_y", c + Vector2(r * 0.7, -r * 0.4), true, Vector2(0.2, 1.0))
+	elif id in ["radio_kzap", "starwatch", "owls_perch", "lookout_station_3"]:
+		_flatten(c, 4.0, hz(c.x, c.y), true)
+		add_decor("tower_decor", c, true, Vector2(0.3, 0.3))
+		place_building(int(c.x) + 2, int(c.y) - 1, 3, 3, "shack", -1, true)
+		for k in 3: _try_decor("barrel", c + Vector2(rf(-3, 3), rf(-3, 3)), true, Vector2(0.17, 0.17))
+		spawns.append({"type": "raider", "pos": c + Vector2(2, 3), "home": c, "home_r": 3.0})
+	else:
+		# a wreck field / ruin cluster
+		for k in 6:
+			var p := c + Vector2.from_angle(rf(0, TAU)) * rf(1.0, r * 0.8)
+			var cc := Car.new()
+			cc.k = ri(0, 7); cc.ang = cc.k * PI / 4.0; cc.pos = p; cc.spr = "burned"
+			_add_car(cc)
+		for k in 3:
+			var b := place_shape(shape_for("garage", int(c.x) + ri(-8, 6), int(c.y) + ri(-8, 6)), "garage")
+			if b: b.ruined = true
+		for k in 5:
+			spawns.append({"type": ["ghoul", "rat", "shellback"][ri(0, 2)], "pos": c + Vector2(rf(-r, r), rf(-r, r)) * 0.6, "home": c, "home_r": r * 0.6})
+		add_decor("watertower", c + Vector2(r * 0.5, r * 0.3), true, Vector2(0.55, 0.55))
+
+## Wasteland chunk with no town: maybe one small site. You never quite know what's out there.
+func _chunk_poi(cx: int, cy: int, r: Rect2i) -> void:
+	var h := absi(hash(ckey(cx, cy) * 31 + seed_value * 7)) % 1000
+	if h > 300: return
+	var c := Vector2(r.position.x + rf(12, 20), r.position.y + rf(12, 20))
+	var ti := idx(int(c.x), int(c.y))
+	if T[ti] != GRASS or c.distance_to(start) < 40.0: return
+	var b := biome(int(c.x), int(c.y))
+	if b == B_WATER or b == B_GORGE or b == B_PEAK: return
+	var hs := []
+	for o in [Vector2(-4, -4), Vector2(4, -4), Vector2(-4, 4), Vector2(4, 4), Vector2.ZERO]:
+		hs.append(hz(c.x + o.x, c.y + o.y))
+	var flat: bool = hs.max() - hs.min() < 26.0
+	var near_road_pt := _road_near(c, 9.0)
+	var roll := rng.randf()
+	if near_road_pt != Vector2.ZERO and roll < 0.3:
+		_poi_raider_gas(c, r)
+	elif roll < 0.45 and flat:
+		_raider_camp(c)
+	elif roll < 0.62:
+		_poi_survivors(c)
+	elif roll < 0.72:
+		_poi_caravan(c)
+	elif roll < 0.8:
+		_poi_nest(c, b)
+	elif roll < 0.87:
+		_poi_toxic(c)
+	elif roll < 0.94:
+		_poi_scav(c, r)
+	else:
+		if _free_spot(c) and _clear_of_buildings(c, 2.0):
+			add_decor("watertower" if rng.randf() < 0.5 else "billboard_x", c, true, Vector2(0.55, 0.55))
+
+func _road_near(c: Vector2, rad: float) -> Vector2:
+	for k in 40:
+		var q := c + Vector2(rf(-rad, rad), rf(-rad, rad))
+		if in_bounds(int(q.x), int(q.y)) and T[idx(int(q.x), int(q.y))] == ROAD:
+			return q
+	return Vector2.ZERO
+
+func _poi_raider_gas(c: Vector2, r: Rect2i) -> void:
+	var x := clampi(int(c.x) - 4, r.position.x + 2, r.end.x - 11)
+	var y := clampi(int(c.y) - 4, r.position.y + 2, r.end.y - 11)
+	if not place_gas(x, y): return
+	for k in 3:
+		spawns.append({"type": "raider", "pos": Vector2(x + rf(0, 7), y + rf(4, 7)), "home": Vector2(x + 3, y + 3), "home_r": 4.0})
+	for k in 4:
+		_try_decor(["jersey_x", "barrel_rust", "tire", "jersey_y"][k], Vector2(x + rf(-1, 8), y + rf(-1, 8)), true, Vector2(0.4, 0.15))
+	var cr := Crate.new()
+	cr.pos = Vector2(x + 1.5, y + 4.2)
+	cr.kind = "cache"
+	crates.append(cr)
+	raider_flags.append(Vector2(x + 7.5, y - 0.5))
+
+func _poi_survivors(c: Vector2) -> void:
+	_flatten(c, 3.0, hz(c.x, c.y), true)
+	var st := Settlement.new()
+	st.name = TOWN_NAMES_SMALL[ri(0, TOWN_NAMES_SMALL.size() - 1)]
+	st.pos = c
+	st.radius = 4.5
+	st.small = true
+	settlements.append(st)
+	var si := settlements.size() - 1
+	add_decor("campfire_decor", c, true, Vector2(0.25, 0.25))
+	for k in ri(1, 2):
+		_try_decor("tent", c + Vector2.from_angle(k * 2.4 + 0.5) * 2.4, true, Vector2(0.45, 0.45))
+	for k in ri(2, 3):
+		var a := k * TAU / 3.0 + 0.3
+		critters.append({"type": "settler", "pos": c + Vector2.from_angle(a) * 1.3, "home": c, "settlement": si, "look": ri(1, 3), "home_r": 1.2})
+	if rng.randf() < 0.5:
+		st.trader = c + Vector2(1.2, -1.0)
+		critters.append({"type": "trader", "pos": st.trader, "home": st.trader, "settlement": si})
+	var cr := Crate.new()
+	cr.pos = c + Vector2(-1.8, 1.2)
+	cr.kind = "crate"
+	crates.append(cr)
+
+func _poi_caravan(c: Vector2) -> void:
+	for k in ri(2, 3):
+		var cc := Car.new()
+		cc.k = ri(0, 7); cc.ang = cc.k * PI / 4.0
+		cc.pos = c + Vector2.from_angle(k * 2.1) * 2.4
+		cc.spr = "burned" if rng.randf() < 0.6 else ["teal", "red", "yellow"][ri(0, 2)]
+		if _car_fits(cc): _add_car(cc)
+	for k in 3:
+		_try_decor(["bones", "barrel_rust", "trashbag", "tire"][ri(0, 3)], c + Vector2(rf(-3, 3), rf(-3, 3)), false)
+	var cr := Crate.new()
+	cr.pos = c + Vector2(0.4, 0.6)
+	cr.kind = "crate"
+	crates.append(cr)
+	for k in ri(1, 2):
+		spawns.append({"type": "brute" if rng.randf() < 0.2 else "ghoul", "pos": c + Vector2(rf(-5, 5), rf(-5, 5)), "home": c, "home_r": 6.0})
+
+func _poi_nest(c: Vector2, b: int) -> void:
+	var t := "rat"
+	if b == B_SALT or b == B_CRATER or b == B_CANYON: t = "shellback"
+	for k in ri(3, 5):
+		spawns.append({"type": t, "pos": c + Vector2(rf(-2, 2), rf(-2, 2)), "home": c, "home_r": 3.5})
+	for k in 5:
+		_try_decor(["bones", "bones", "rubble2", "deadbush"][ri(0, 3)], c + Vector2(rf(-2.5, 2.5), rf(-2.5, 2.5)), false)
+	var cr := Crate.new()
+	cr.pos = c
+	cr.kind = "cache"
+	crates.append(cr)
+
+func _poi_toxic(c: Vector2) -> void:
+	add_decor("puddle_toxic", c, false, Vector2.ZERO, true)
+	add_decor("puddle_toxic", c + Vector2(rf(-1.5, 1.5), rf(-1.5, 1.5)), false, Vector2.ZERO, true)
+	for m in 3:
+		_try_decor("barrel_toxic", c + Vector2.from_angle(rf(0, TAU)) * rf(1.0, 2.2), true, Vector2(0.17, 0.17))
+	add_decor("sign_rad", c + Vector2(2.4, 0.5))
+	spawns.append({"type": "shellback", "pos": c + Vector2(1.5, 1.5), "home": c, "home_r": 4.0})
+
+func _poi_scav(c: Vector2, r: Rect2i) -> void:
+	var b := place_building(clampi(int(c.x) - 2, r.position.x + 2, r.end.x - 7), clampi(int(c.y) - 2, r.position.y + 2, r.end.y - 7), 4, 3, "shack")
+	if b == null: return
+	var cr := Crate.new()
+	cr.pos = rand_cell(b)
+	cr.kind = "crate"
+	cr.bid = b.id
+	crates.append(cr)
+	if rng.randf() < 0.5:
+		spawns.append({"type": "raider", "pos": Vector2(b.out) + Vector2(0.5, 0.5), "home": Vector2(b.out) + Vector2(0.5, 0.5), "home_r": 3.0})
+	else:
+		var st := Settlement.new()
+		st.name = "Scavenger shack"
+		st.pos = Vector2(b.out) + Vector2(0.5, 0.5)
+		st.radius = 3.0
+		st.small = true
+		settlements.append(st)
+		st.trader = st.pos + Vector2(0.8, 0.8)
+		critters.append({"type": "trader", "pos": st.trader, "home": st.trader, "settlement": settlements.size() - 1})
+
+# ---------------------------------------------------------------- per-chunk scatter
+const TREE_P := [0.025, 0.07, 0.16, 0.03, 0.0, 0.09, 0.008, 0.0, 0.015, 0.05, 0.0, 0.004, 0.03, 0.01]
+
+func _chunk_trees(r: Rect2i) -> void:
+	for y in range(r.position.y, r.end.y):
+		for x in range(r.position.x, r.end.x):
+			var i := y * N + x
+			if T[i] != GRASS or CL[i] == 1: continue
+			var b := braw[i * 4]
+			var p: float = TREE_P[b]
+			if b == B_WOODS:
+				p *= 0.5 + 0.5 * sin(x * 0.11 + y * 0.07) * sin(y * 0.13 - x * 0.05) + 0.5
+			if rng.randf() < p and _clear_of_buildings(Vector2(x + 0.5, y + 0.5), 0.75) and not door_grid.has(i):
+				T[i] = TREE
+			elif b != B_SALT and b != B_CRATER and (G[i] == 3 or rng.randf() < (0.05 if b != B_WOODS else 0.12)):
+				add_decor("tuft%d" % ri(0, 2), Vector2(x + rf(0.2, 0.8), y + rf(0.2, 0.8)), false, Vector2.ZERO, true)
+			elif (b == B_WASTE or b == B_SALT or b == B_CANYON) and rng.randf() < 0.012:
+				add_decor(["deadbush", "bones", "rubble2", "deadbush"][ri(0, 3)], Vector2(x + rf(0.2, 0.8), y + rf(0.2, 0.8)))
+
+func _car_fits(c: Car) -> bool:
+	var fw := Vector2.from_angle(c.ang)
+	for u in [-1.4, -0.7, 0.0, 0.7, 1.4]:
+		for v in [-0.5, 0.5]:
+			var q: Vector2 = c.pos + fw * u + fw.orthogonal() * v
+			if not in_bounds(int(q.x), int(q.y)) or building_at(q.x, q.y) > 0 or T[idx(int(q.x), int(q.y))] == TREE or T[idx(int(q.x), int(q.y))] == WATER:
+				return false
+	return not car_hit(c.pos, 1.6)
+
+func _add_car(c: Car) -> void:
+	cars.append(c)
+	for yy in range(int(c.pos.y) - 2, int(c.pos.y) + 3):
+		for xx in range(int(c.pos.x) - 2, int(c.pos.x) + 3):
+			var k := yy * N + xx
+			if not car_grid.has(k): car_grid[k] = []
+			car_grid[k].append(c)
+	var cr := Crate.new()
+	var fwd := Vector2.from_angle(c.ang)
+	cr.pos = c.pos - fwd * 1.5 + fwd.orthogonal() * 0.55
+	cr.kind = "car"
+	crates.append(cr)
+
+func _remove_car(c: Car) -> void:
+	cars.erase(c)
+	for yy in range(int(c.pos.y) - 2, int(c.pos.y) + 3):
+		for xx in range(int(c.pos.x) - 2, int(c.pos.x) + 3):
+			var lst = car_grid.get(yy * N + xx)
+			if lst != null: lst.erase(c)
+
+func _chunk_cars(cx: int, cy: int, r: Rect2i) -> void:
+	var lst = road_pts.get(ckey(cx, cy))
+	if lst != null:
+		var n := 0
+		for e in lst:
+			n += 1
+			var pth: Dictionary = paths[e >> 16]
+			if pth.kind == "dirt": continue
+			var k: int = e & 65535
+			var pts: PackedVector2Array = pth.pts
+			if k < 2 or k > pts.size() - 3: continue
+			if rng.randf() > (0.018 if pth.kind == "interstate" else 0.01): continue
+			var p := pts[k]
+			if p.distance_to(start) < 9: continue
+			var dir := (pts[k + 1] - pts[k - 1]).normalized()
+			var lane: float = rf(-pth.w + 0.6, pth.w - 0.6)
+			var c := Car.new()
+			c.k = posmod(int(round(dir.angle() / (PI / 4.0))) + (4 if rng.randf() < 0.3 else 0), 8)
+			c.ang = c.k * PI / 4.0
+			c.pos = p + dir.orthogonal() * lane
+			c.spr = ["teal", "red", "yellow", "teal", "red", "burned"][ri(0, 5)]
+			if not r.has_point(Vector2i(c.pos)): continue
+			if _car_fits(c): _add_car(c)
+		# power poles along highways and interstates
+		for e in lst:
+			var pth: Dictionary = paths[e >> 16]
+			var k: int = e & 65535
+			if pth.kind != "highway" and pth.kind != "interstate": continue
+			if k % 78 != 0 or k == 0: continue
+			var pts: PackedVector2Array = pth.pts
+			var line := PackedVector2Array()
+			for j in range(k, mini(k + 78 * 3, pts.size() - 1), 78):
+				var dir := (pts[mini(j + 1, pts.size() - 1)] - pts[maxi(j - 1, 0)]).normalized()
+				var p: Vector2 = pts[j] + dir.orthogonal() * float(pth.w + 1.6)
+				if not r.grow(-1).has_point(Vector2i(p)) and line.size() > 0: break
+				if in_bounds(int(p.x), int(p.y)) and T[idx(int(p.x), int(p.y))] in [GRASS, SIDE] and _clear_of_buildings(p, 0.8) and not tree_hit(p, 0.3) and not car_hit(p, 0.4):
+					line.append(p)
+			if line.size() > 1:
+				pole_lines.append(line)
+	# parked cars on city streets
+	if density(r.position.x + 16, r.position.y + 16) > 140:
+		for t in 6:
+			var x := ri(r.position.x + 2, r.end.x - 3)
+			var y := ri(r.position.y + 2, r.end.y - 3)
+			if T[idx(x, y)] != ROAD: continue
+			var c := Car.new()
+			c.k = 0 if posmod(y, GRID) < 2 else 2
+			if rng.randf() < 0.5: c.k += 4
+			c.ang = c.k * PI / 4.0
+			c.pos = Vector2(x + 0.5, y + 0.5) if posmod(y, GRID) >= 2 and posmod(x, GRID) >= 2 else Vector2(x + 1.0, y + 1.0)
+			c.spr = ["teal", "red", "yellow", "burned", "burned"][ri(0, 4)]
+			if _car_fits(c): _add_car(c)
+
+func _chunk_debris(cx: int, cy: int, r: Rect2i) -> void:
+	var lst = road_pts.get(ckey(cx, cy))
+	if lst != null:
+		for e in lst:
+			if rng.randf() > 0.035: continue
+			var pth: Dictionary = paths[e >> 16]
+			var k: int = e & 65535
+			var pts: PackedVector2Array = pth.pts
+			if k < 1 or k > pts.size() - 2: continue
+			var dir := (pts[k + 1] - pts[k - 1]).normalized()
+			var side := 1.0 if rng.randf() < 0.5 else -1.0
+			if pth.kind != "dirt" and rng.randf() < 0.1:
+				var p: Vector2 = pts[k] + dir.orthogonal() * rf(-0.4, 0.4)
+				if r.has_point(Vector2i(p)) and _free_spot(p):
+					var along_x := absf(dir.x) > absf(dir.y)
+					add_decor("jersey_x" if along_x else "jersey_y", p, true, Vector2(0.5, 0.13) if along_x else Vector2(0.13, 0.5))
+			else:
+				var p: Vector2 = pts[k] + dir.orthogonal() * side * (pth.w + rf(0.3, 1.4))
+				if not r.has_point(Vector2i(p)) or not _free_spot(p): continue
+				var pick: String = ["trashbag", "tire", "rubble0", "papers", "barrel_rust", "tire", "rubble1"][ri(0, 6)]
+				add_decor(pick, p, pick == "barrel_rust", Vector2(0.17, 0.17), pick == "papers")
+		# street lamps in town, sparse along highways
+		for e in lst:
+			var pth: Dictionary = paths[e >> 16]
+			var k: int = e & 65535
+			if pth.kind == "dirt" or k % 66 != 0 or k == 0: continue
+			var pts: PackedVector2Array = pth.pts
+			if k > pts.size() - 2: continue
+			var p := pts[k]
+			if density(int(p.x), int(p.y)) < 60 and rng.randf() < 0.7: continue
+			var dir := (pts[k + 1] - pts[k - 1]).normalized()
+			var q: Vector2 = p + dir.orthogonal() * (1.0 if (k / 66) % 2 == 0 else -1.0) * (pth.w + 0.75)
+			if r.has_point(Vector2i(q)) and _free_spot(q) and T[idx(int(q.x), int(q.y))] != ROAD and _clear_of_buildings(q, 0.7):
+				add_decor("lamp", q, true, Vector2(0.08, 0.08))
+	var d := density(r.position.x + 16, r.position.y + 16)
+	if d > 120:
+		for k in 14:
+			var p := Vector2(rf(r.position.x + 1, r.end.x - 1), rf(r.position.y + 1, r.end.y - 1))
+			if _free_spot(p):
+				var pick: String = ["rubble0", "rubble1", "rubble2", "bricks", "papers", "trashbag", "barrel_rust", "tire"][ri(0, 7)]
+				add_decor(pick, p, pick == "barrel_rust", Vector2(0.17, 0.17), pick == "papers")
+		# grid-street lamps at corners
+		for y in range(r.position.y, r.end.y):
+			for x in range(r.position.x, r.end.x):
+				if posmod(x, GRID) == 2 and posmod(y, GRID) == 2 and T[idx(x, y)] == SIDE and rng.randf() < 0.7:
+					add_decor("lamp", Vector2(x + 0.25, y + 0.25), true, Vector2(0.08, 0.08))
+	if d < 40 and rng.randf() < 0.25:
+		var c := Vector2(rf(r.position.x + 3, r.end.x - 3), rf(r.position.y + 3, r.end.y - 3))
+		if _free_spot(c):
+			for m in ri(3, 5):
+				critters.append({"type": "crow", "pos": c + Vector2(rf(-1, 1), rf(-1, 1)), "home": c})
+
+const SURVIVOR_NAMES := ["Mara", "Dez", "Jun", "Otis", "Rosa", "Hank", "Priya", "Theo", "Wren", "Gus", "Ines", "Bo", "Lark", "Ezra", "Nell", "Kit"]
+
+## Wild things by how far you are from Patchwork: the further out, the worse.
+func _chunk_creatures(r: Rect2i) -> void:
+	var ctr := Vector2(r.get_center())
+	var far := clampf(ctr.distance_to(start) / 900.0, 0.0, 1.0)
+	var near_town := not nearest_loc(ctr, 20.0).is_empty()
+	for b in buildings.slice(_mark.buildings):
+		if b.settlement >= 0 or b.sealed or b.kind in ["den", "shack", "canopy", "kiosk"]: continue
+		if (b.ruined and rng.randf() < 0.45) or (density(b.x0, b.y0) > 170 and rng.randf() < 0.2):
+			var p := rand_cell(b)
+			if p.distance_to(start) < 30: continue
+			if not b.ruined and b.cells.size() >= 12 and rng.randf() < 0.12:
+				survivors.append({"pos": p, "name": SURVIVOR_NAMES[ri(0, SURVIVOR_NAMES.size() - 1)], "bid": b.id})
+				continue
+			spawns.append({"type": "ghoul", "pos": p, "home": p, "home_r": 3.0})
+			if rng.randf() < 0.3 + far * 0.4:
+				spawns.append({"type": "ghoul", "pos": p + Vector2(rf(-0.5, 0.5), rf(-0.5, 0.5)), "home": p, "home_r": 3.0})
+	if near_town or ctr.distance_to(start) < 50: return
+	if rng.randf() < 0.18 + far * 0.25:
+		var p := Vector2(rf(r.position.x + 4, r.end.x - 4), rf(r.position.y + 4, r.end.y - 4))
+		if not _free_spot(p): return
+		var bm := biome(int(p.x), int(p.y))
+		var pool := ["ghoul", "rat", "shellback"]
+		match bm:
+			B_WOODS, B_HILLS: pool = ["ghoul", "rat", "rat", "brute"]
+			B_SALT, B_CRATER, B_CANYON: pool = ["shellback", "shellback", "brute"]
+			B_MARSH: pool = ["shellback", "ghoul", "rat"]
+			B_CITY, B_SUBURB: pool = ["ghoul", "ghoul", "rat"]
+		var t: String = pool[ri(0, pool.size() - 1)]
+		if t == "brute" and far < 0.25: t = "ghoul"
+		for k in (ri(2, 4) if t == "rat" else ri(1, 2 + int(far * 2))):
+			spawns.append({"type": t, "pos": p + Vector2(rf(-1.5, 1.5), rf(-1.5, 1.5)), "home": p, "home_r": 5.0})
+
+## After a batch of content: nothing solid inside walls or in front of doors, no trees through props,
+## wrecks that hit props scrapped, outdoor loot out of walls, spawns and critters on standable ground.
+func _tidy_new() -> void:
+	var doors := []
+	for b in buildings.slice(_mark.buildings):
+		doors.append(Vector2(b.out.x + 0.5, b.out.y + 0.5))
+	var near_door := func(q: Vector2) -> bool:
+		for dp in doors:
+			if dp.distance_to(q) < 1.05: return true
+		return door_grid.has(int(q.y) * N + int(q.x)) and false
+	var keep := []
+	for i in range(_mark.decor, decor.size()):
+		var d: Decor = decor[i]
+		if (d.name.begins_with("fence") or d.name.begins_with("picket")) and d.bid == 0 and building_at(d.pos.x, d.pos.y) != 0:
+			_ungrid(d); continue
+		if d.bid != 0 or d.flat or not d.solid or d.name in ["pillar", "fuelpump", "mailbox"]:
+			keep.append(d); continue
+		if building_at(d.pos.x, d.pos.y) != 0 or not _clear_of_buildings(d.pos, d.half.x + 0.05) or near_door.call(d.pos):
+			_ungrid(d)
+			if d.name.begins_with("fence") or d.name.begins_with("picket"): continue
+			var moved := false
+			for ring in range(1, 9):
+				for k in 12:
+					var q: Vector2 = d.pos + Vector2.from_angle(k * TAU / 12.0) * ring * 0.25
+					if in_bounds(int(q.x), int(q.y)) and building_at(q.x, q.y) == 0 and _clear_of_buildings(q, d.half.x + 0.05) and not near_door.call(q):
+						d.pos = q; moved = true; break
+				if moved: break
+			if not moved: continue
+			_grid(d)
+		keep.append(d)
+	decor.resize(_mark.decor)
+	decor.append_array(keep)
+	for d in keep:
+		if not d.solid or d.bid != 0: continue
+		for yy in range(int(d.pos.y - d.half.y - 0.4), int(d.pos.y + d.half.y + 0.4) + 1):
+			for xx in range(int(d.pos.x - d.half.x - 0.4), int(d.pos.x + d.half.x + 0.4) + 1):
+				if in_bounds(xx, yy) and T[idx(xx, yy)] == TREE: T[idx(xx, yy)] = GRASS
+	for k in range(cars.size() - 1, _mark.cars - 1, -1):
+		var c: Car = cars[k]
+		var hit := decor_hit(c.pos, 0.9)
+		for dp in doors:
+			if dp.distance_to(c.pos) < 1.8: hit = true
+		if hit:
+			_remove_car(c)
+			for q in range(crates.size() - 1, _mark.crates - 1, -1):
+				if crates[q].kind == "car" and crates[q].pos.distance_to(c.pos) < 2.2:
+					crates.remove_at(q)
+	for i in range(_mark.crates, crates.size()):
+		var cr: Crate = crates[i]
+		if cr.bid == 0 and cr.kind != "car" and building_at(cr.pos.x, cr.pos.y) != 0:
+			for ring in range(1, 10):
+				var q: Vector2 = cr.pos + Vector2.from_angle(ring * 2.4) * ring * 0.3
+				if building_at(q.x, q.y) == 0 and can_stand(q, 0.2, 0):
+					cr.pos = q; break
+	for b in buildings.slice(_mark.buildings):
+		var o := Vector2i(b.out)
+		for yy in range(o.y - 1, o.y + 2):
+			for xx in range(o.x - 1, o.x + 2):
+				if in_bounds(xx, yy) and T[idx(xx, yy)] == TREE: T[idx(xx, yy)] = GRASS
+	_fix_spawns(_mark.spawns)
+	_fix_critters(_mark.critters)
+
+func _grid(d: Decor) -> void:
+	if not d.solid: return
+	var k := int(floor(d.pos.y)) * N + int(floor(d.pos.x))
+	if not decor_grid.has(k): decor_grid[k] = []
+	decor_grid[k].append(d)
+
+func _ungrid(d: Decor) -> void:
+	if not d.solid: return
+	var lst = decor_grid.get(int(floor(d.pos.y)) * N + int(floor(d.pos.x)))
+	if lst != null: lst.erase(d)
+
+## A road tile near p (for patrols and wanderers), or p itself if there is none close.
+func road_point_near(p: Vector2, rad: float = 30.0) -> Vector2:
+	for t in 200:
+		var q := p + Vector2(rf(-rad, rad), rf(-rad, rad))
+		var x := int(q.x)
+		var y := int(q.y)
+		if in_bounds(x, y) and base_done[ckey(x / CH, y / CH)] and T[idx(x, y)] == ROAD:
+			return Vector2(x + 0.5, y + 0.5)
+	return p
+
+func add_monster(avoid: Vector2, min_d: float, camps: Array) -> void:
+	for t in 60:
+		var p := avoid + Vector2.from_angle(rf(0, TAU)) * rf(min_d, min_d + 10.0)
+		var ck := chunk_of(p)
+		if not content_done[ckey(ck.x, ck.y)] or not _free_spot(p) or settlement_at(p, 8.0) >= 0: continue
+		var near_camp := false
+		for c in camps:
+			if p.distance_to(c) < 12.0: near_camp = true
+		if near_camp: continue
+		var far := clampf(p.distance_to(start) / 900.0, 0.0, 1.0)
+		var t2 := "ghoul" if rng.randf() < 0.65 else ("shellback" if rng.randf() < 0.7 or far < 0.3 else "brute")
+		var sp := {"type": t2, "pos": p, "home": p, "home_r": 5.0, "roam": true}
+		spawns.append(sp)
+		var key := ckey(ck.x, ck.y)
+		sp["chunk"] = key
+		_bucket(key).spawns.append(sp)
+		return
+
+## A raider patrol walking between road points near p.
+func add_patrol(p: Vector2 = start) -> void:
+	var wps := [road_point_near(p), road_point_near(p), road_point_near(p), road_point_near(p)]
+	var key := ckey(chunk_of(wps[0]).x, chunk_of(wps[0]).y)
+	for k in 2 + (1 if rng.randf() < 0.4 else 0):
+		var sp := {"type": "raider", "pos": wps[0] + Vector2(k * 0.6, 0), "patrol": wps, "roam": true, "chunk": key}
+		spawns.append(sp)
+		_bucket(key).spawns.append(sp)

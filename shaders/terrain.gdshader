@@ -15,15 +15,17 @@ uniform sampler2D dirt_map : filter_linear, repeat_disable;
 uniform sampler2D shade_map : filter_linear, repeat_disable;
 uniform sampler2D path_map : filter_linear, repeat_disable;
 uniform float shadow_strength = 1.0;
+uniform vec2 origin = vec2(0.0);     // chunk origin in tiles (UV holds tile position within the chunk)
+uniform float city = 0.0;
 
-varying vec2 wpos;
+varying vec2 lpos;
 varying float mat;
 varying float lit;
 varying vec2 pix;
 
 void vertex() {
 	mat = floor(UV.x / 1000.0 + 0.001);
-	wpos = vec2(UV.x - mat * 1000.0, UV.y);
+	lpos = vec2(UV.x - mat * 1000.0, UV.y);   // tile position within the chunk
 	lit = COLOR.a;
 	pix = VERTEX;
 }
@@ -47,10 +49,13 @@ void fragment() {
 	vec3 base = COLOR.rgb;
 	float extra = 0.0;
 	float m = mat;
-	vec2 uv = wpos / 64.0;
-	bool floor_mat = (m >= 6.5 && m <= 10.5) || m > 13.5;
-	bool city = wpos.x >= 24.0 && wpos.y >= 24.0;
-	if (!floor_mat) {
+	vec2 uv = lpos / 32.0;
+	vec2 wpos = lpos + origin;
+	float lt = lit;
+	bool floor_mat = (m >= 6.5 && m <= 10.5) || (m > 13.5 && m < 14.5);
+	bool water = m > 14.5 && m < 15.5;
+	bool is_city = city > 0.5;
+	if (!floor_mat && !water) {
 		float rough = (vnoise(wpos * 4.0) - 0.5) * 0.4 + (vnoise(wpos * 11.0) - 0.5) * 0.2;   // ragged edges
 		float rd = texture(road_map, uv).r + rough * 0.6;
 		float sd = texture(side_map, uv).r;
@@ -73,7 +78,7 @@ void fragment() {
 			if (vnoise(wpos * 0.7) > 0.72) { base = mix(base, vec3(0.42, 0.40, 0.36), 0.5); }
 			if (vnoise(wpos * 1.3 + 7.0) > 0.78 && n < 0.25) { base = vec3(0.42, 0.48, 0.28); }   // weeds pushing through
 		} else if (sd > edge) {
-			if (city) {
+			if (is_city) {
 				base = vec3(0.56, 0.54, 0.50); m = 6.0;        // concrete sidewalk slabs
 				vec2 f = fract(wpos);
 				if (f.x < 0.04 || f.y < 0.04) { extra = 1.0; }
@@ -109,7 +114,22 @@ void fragment() {
 	if (m == 9.0) { if (mod(cell.x + cell.y * 2.0, 7.0) < 1.0) { extra = -1.0; } }
 	if (m == 10.0) { vec2 f = fract(wpos * 2.0); if (f.x < 0.03 || f.y < 0.03) { extra = 1.0; } }
 	if (m == 4.0) { if (mod(floor((wpos.x + wpos.y) * 6.0), 5.0) < 1.0) { extra = 1.0; } }
-	float v = 0.5 + (lit - 0.80) * 3.0 + (n - 0.5) * 0.14;
+	if (m == 16.0) { if (abs(vnoise(wpos * 1.7) - 0.5) < 0.03) { extra = 1.0; } if (n < 0.06) { extra = -1.0; } }   // salt crust polygons
+	if (m == 17.0 || m == 24.0) { float st = fract((wpos.x + wpos.y) * 0.9 + vnoise(wpos * 0.5) * 2.0); if (st < 0.12) { extra = 1.0; } base = mix(base, vec3(0.62, 0.38, 0.26), vnoise(wpos * 0.3) * 0.3); }
+	if (m == 18.0) { float g = vnoise(wpos * 1.6); if (g > 0.66) { base = vec3(0.29, 0.36, 0.33); } if (g < 0.25) { base = mix(base, vec3(0.36, 0.42, 0.24), 0.6); } if (n < 0.08) { extra = -1.0; } }
+	if (m == 19.0) { if (n < 0.07) { extra = -2.0; } if (abs(vnoise(wpos * 2.5) - 0.5) < 0.03) { extra = 1.0; } }
+	if (m == 20.0) { float row = fract((wpos.x * 0.9 + wpos.y * 0.15) * 1.0); if (row < 0.3) { extra = 1.0; } if (vnoise(wpos * 0.4) > 0.6 && row > 0.5 && n < 0.4) { base = vec3(0.44, 0.48, 0.24); } }
+	if (m == 21.0) { if (fract(wpos.x * 0.7 + sin(wpos.y * 0.9) * 0.6) < 0.08) { extra = 1.0; } }
+	if (m == 22.0) { if (n < 0.08) { extra = -1.0; } if (vnoise(wpos * 3.0) > 0.7) { base = mix(base, vec3(0.42, 0.33, 0.2), 0.5); } }
+	if (m == 23.0) { vec2 f = fract(wpos * 0.5); if (f.x < 0.03 || f.y < 0.03) { extra = 1.0; } if (abs(vnoise(wpos * 2.0) - 0.5) < 0.025) { extra = 1.0; } if (vnoise(wpos * 1.1 + 4.0) > 0.75 && n < 0.3) { base = vec3(0.42, 0.46, 0.28); } }
+	if (water) {
+		float t = TIME * 0.6;
+		float wv = vnoise(wpos * 1.3 + vec2(t, t * 0.6)) + vnoise(wpos * 3.1 - vec2(t * 0.8, 0.0)) * 0.5;
+		base = mix(vec3(0.17, 0.30, 0.34), vec3(0.23, 0.40, 0.42), clamp(wv - 0.4, 0.0, 1.0));
+		if (wv > 1.18 && n > 0.4) { base = vec3(0.55, 0.66, 0.62); }   // glints
+		lt = 0.9;
+	}
+	float v = 0.5 + (lt - 0.80) * 3.0 + (n - 0.5) * 0.14;
 	float lv = v * 3.2;
 	float k = floor(lv) + ((fract(lv) > th) ? 1.0 : 0.0);
 	k = 3.0 - clamp(k, 0.0, 3.0);

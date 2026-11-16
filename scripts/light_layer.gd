@@ -24,8 +24,11 @@ func _ready() -> void:
 	m.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
 	material = m
 
-func add(pos: Vector2, col: Color, r: float, flicker: bool = false) -> void:
-	lights.append({"pos": pos, "col": col, "r": r, "flicker": flicker})
+func add(pos: Vector2, col: Color, r: float, flicker: bool = false, tag: int = -1) -> void:
+	lights.append({"pos": pos, "col": col, "r": r, "flicker": flicker, "tag": tag})
+
+func remove_tag(tag: int) -> void:
+	lights = lights.filter(func(l): return l.tag != tag)
 
 func _process(_d: float) -> void:
 	queue_redraw()

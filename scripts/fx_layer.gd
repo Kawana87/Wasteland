@@ -20,7 +20,7 @@ func _draw() -> void:
 		draw_rect(Rect2(p, Vector2(1, 1)), q.col)
 	var pb := g.player.building()
 	var sparkle := sin(g.time * 5.0)
-	for c in w.crates:
+	for c in w.near(g.player.wpos, "crates"):
 		if c.open or c.bid != pb or c.fl != g.player.fl:
 			continue
 		if sin(g.time * 5.0 + c.pos.x * 3.0) > 0.75:
