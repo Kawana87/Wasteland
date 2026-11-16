@@ -30,7 +30,7 @@ func _sleep(hours: float, at_camp: bool) -> void:
 	var slept := hours * (randf_range(0.3, 0.8) if ambush else 1.0)
 	travel = {"to": {"cname": "", "wpos": player.wpos}, "t": 0.0, "done": false, "text": "Sleeping…", "card": false,
 		"swap": func():
-			day_t = fmod(day_t + slept / 24.0, 1.0)
+			advance_time(slept)
 			player.hp = minf(player.max_hp, player.hp + slept * player.max_hp / 6.0)
 			if slept >= 6.0:
 				rested_t = DAY_LEN
@@ -203,10 +203,26 @@ func new_camp() -> void:
 	open_camp_menu()
 
 
+## Building at camp can use the stash and whatever you're carrying.
 func can_pay(cost: Dictionary) -> bool:
 	for k in RES:
-		if stash[k] < cost.get(k, 0): return false
+		if stash[k] + player.carry[k] < cost.get(k, 0): return false
 	return true
+
+func camp_take(cost: Dictionary) -> void:
+	for k in RES:
+		var n: int = cost.get(k, 0)
+		var a := mini(n, stash[k])
+		stash[k] -= a
+		player.carry[k] -= n - a
+
+## What's still missing for a cost, e.g. "need 2 more wood".
+func missing_str(cost: Dictionary) -> String:
+	var s := []
+	for k in RES:
+		var short: int = cost.get(k, 0) - stash[k] - player.carry[k]
+		if short > 0: s.append("%d more %s" % [short, k])
+	return ("need " + ", ".join(s)) if s.size() else ""
 
 
 func cost_str(cost: Dictionary) -> String:
@@ -250,6 +266,16 @@ func open_camp_menu() -> void:
 	var btns := []
 	if c != null:
 		btns.append(["Sleep by the fire", func(): hud.hide_menu(); open_sleep(true), false])
+		if player.carry.scrap > 0:
+			btns.append(["Deposit %d scrap in the stash" % player.carry.scrap, func():
+				stash.scrap += player.carry.scrap; player.carry.scrap = 0; open_camp_menu(), false])
+		if stash.scrap > 0:
+			var w50 := mini(50, stash.scrap)
+			btns.append(["Take %d scrap from the stash" % w50, func():
+				stash.scrap -= w50; player.carry.scrap += w50; open_camp_menu(), false])
+			if stash.scrap > 50:
+				btns.append(["Take all %d scrap" % stash.scrap, func():
+					player.carry.scrap += stash.scrap; stash.scrap = 0; open_camp_menu(), false])
 	var den = _den_near(player.wpos)
 	if den != null:
 		btns.append(["Claim this raider den as your outpost", func(): claim_den(den), false])
@@ -261,7 +287,8 @@ func open_camp_menu() -> void:
 				btns.append(["✓ %s — built" % u.n, func(): pass, true])
 			else:
 				var uu = u
-				btns.append(["%s (%s) — %s" % [u.n, cost_str(u.c), u.d], func(): _build(c, uu), not can_pay(u.c)])
+				var miss := missing_str(u.c)
+				btns.append(["%s (%s) — %s%s" % [u.n, cost_str(u.c), u.d, ("  [" + miss + "]") if miss != "" else ""], func(): _build(c, uu), not can_pay(u.c)])
 		btns.append(["Fast travel to another camp…", open_travel_menu, camps.size() < 2])
 		if not c.main:
 			btns.append(["Make this my main camp", func(): _make_main(c), false])
@@ -278,8 +305,7 @@ func open_camp_menu() -> void:
 
 func _build(c: Camp, u: Dictionary) -> void:
 	if not can_pay(u.c): return
-	for k in RES:
-		stash[k] -= u.c.get(k, 0)
+	camp_take(u.c)
 	c.build(u.k)
 	if u.k == "tent":
 		recalc_max()
@@ -336,8 +362,56 @@ func _start_travel(c: Camp) -> void:
 		hud.toast("Can't fast travel while enemies are hunting you.")
 		return
 	hud.hide_menu()
-	travel = {"to": c, "t": 0.0, "done": false}
+	_begin_trip({"cname": c.cname, "wpos": c.wpos})
+
+## Fast travel isn't free: the trip takes in-game time (an hour per 100 tiles), eats food or water
+## (one per 200 tiles), and anyone hauling trade goods risks being jumped on the road.
+func trip_cost(to: Vector2) -> Dictionary:
+	var d := player.wpos.distance_to(to)
+	var hours := maxf(0.5, d / 100.0)
+	var meals := int(ceil(d / 200.0))
+	var cargo := goods_carried()
+	var ambush := 0.0 if cargo == 0 else clampf(0.12 + cargo * 0.01 + d / 4000.0, 0.0, 0.6)
+	return {"d": d, "hours": hours, "meals": meals, "ambush": ambush}
+
+func _food_count() -> int:
+	return inv_count("food") + inv_count("water") + inv_count("produce")
+
+func _eat_for_trip(n: int) -> void:
+	for k in n:
+		for id in ["food", "produce", "water"]:
+			if inv_take(id): break
+
+func _begin_trip(to: Dictionary) -> void:
+	var tc := trip_cost(to.wpos)
+	if _food_count() < tc.meals:
+		hud.toast("That trip needs %d food or water for the road (you have %d). Walk, or stock up." % [tc.meals, _food_count()])
+		return
+	save_game()
+	var ambush: bool = randf() < tc.ambush
+	travel = {"to": to, "t": 0.0, "done": false, "cost": tc, "ambush": ambush, "from": player.wpos}
 	state = "travel"
+
+func _arrive_trip() -> void:
+	var tc: Dictionary = travel.get("cost", {})
+	if tc.is_empty(): return
+	_eat_for_trip(tc.meals)
+	if travel.ambush:
+		# jumped part-way: you're dropped on the road with company
+		advance_time(tc.hours * 0.5)
+		var p := player.wpos
+		var key := World.ckey(World.chunk_of(p).x, World.chunk_of(p).y)
+		for k in randi_range(3, 4):
+			var at := p + Vector2.from_angle(randf() * TAU) * randf_range(5.0, 7.0)
+			if not world.can_stand(at, 0.3, 0): continue
+			var sp := {"type": "raider", "pos": at, "home": p, "home_r": 7.0, "roam": true, "chunk": key}
+			world.spawns.append(sp); world._bucket(key).spawns.append(sp)
+			var e := _spawn_enemy(sp)
+			e.aw = 100.0; e.last = p
+		travel.msg = "Raiders jumped you on the road — they want your cargo! (%d food used)" % tc.meals
+	else:
+		advance_time(tc.hours)
+		travel.msg = "Arrived at %s. %d hours on the road, %d food or water eaten." % [travel.to.cname, int(round(tc.hours)), tc.meals]
 
 
 ## Fast travel to a discovered location from the map.
@@ -357,5 +431,4 @@ func travel_to_loc(l: Dictionary) -> void:
 			if world.can_stand(q, 0.3, 0) and world.building_at(q.x, q.y) == 0:
 				at = q; found = true; break
 		if found: break
-	travel = {"to": {"cname": l.name, "wpos": at - Vector2(0, 1.4)}, "t": 0.0, "done": false}
-	state = "travel"
+	_begin_trip({"cname": l.name, "wpos": at - Vector2(0, 1.4)})

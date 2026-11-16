@@ -117,19 +117,22 @@ func _buy_stock(npc: Npc, i: int, cost: int) -> void:
 
 
 func _sell(npc: Npc, id: String, val: int) -> void:
-	if inv_take(id): player.carry.scrap += val
+	if npc.settlement >= 0 and Economy.purse(econ, world, npc.settlement, now()) < val:
+		hud.toast("The trader can't afford that right now. Their purse refills by tomorrow.")
+	elif inv_take(id):
+		player.carry.scrap += val
+		if npc.settlement >= 0: Economy.spend_purse(econ, world, npc.settlement, -val, now())
 	open_trade(npc)
 
 
+## Traders only see the scrap you carry; your stash stays at camp.
 func _scrap_total() -> int:
-	return player.carry.scrap + stash.scrap
+	return player.carry.scrap
 
 
 func _pay(n: int) -> bool:
-	if _scrap_total() < n: return false
-	var from_carry := mini(n, player.carry.scrap)
-	player.carry.scrap -= from_carry
-	stash.scrap -= n - from_carry
+	if player.carry.scrap < n: return false
+	player.carry.scrap -= n
 	return true
 
 
@@ -146,7 +149,9 @@ func open_trade(npc: Npc) -> void:
 			stock.append(Items.gear_of_tier(rng.randi_range(2, 3) if fence else rng.randi_range(1, 3), rng))
 		npc.set_meta("stock", stock)
 	var stock: Array = npc.get_meta("stock")
-	var lines := ["You have %d scrap (carried %d + stash %d)." % [_scrap_total(), player.carry.scrap, stash.scrap], "Buy:"]
+	var lines := ["You carry %d scrap (your stash stays at camp)." % player.carry.scrap]
+	if npc.settlement >= 0: lines.append("The trader has %d scrap to spend." % Economy.purse(econ, world, npc.settlement, now()))
+	lines.append("Buy:")
 	var btns := []
 	for e in SHOP:
 		var id: String = e[0]
@@ -186,46 +191,86 @@ func goods_cap() -> int:
 
 
 ## Commodity trading: this town's prices, buy 1 / 5, sell 1 / all.
+## Commodity trading: this town's prices move as you trade (each unit sold here lowers the next
+## price; each unit bought raises it), the trader's purse limits what they can pay, and they only
+## have so much of what they make.
 func open_goods(npc: Npc) -> void:
-	var st: World.Settlement = world.settlements[npc.settlement]
-	var m := Economy.market(world, npc.settlement)
-	var lines := ["%s market. You have %d scrap. Hauling %d / %d trade goods." % [st.name, _scrap_total(), goods_carried(), goods_cap()]]
+	var si := npc.settlement
+	var st: World.Settlement = world.settlements[si]
+	var m := Economy.market(world, si)
+	var t := now()
+	var purse := Economy.purse(econ, world, si, t)
+	var lines := ["%s market. You carry %d scrap; the trader has %d. Hauling %d / %d goods." % [st.name, player.carry.scrap, purse, goods_carried(), goods_cap()]]
 	var pm: float = float(origin().get("buy", 1.0)) * (1.0 - 0.08 * perk("barter"))
 	var sm: float = float(origin().get("sell", 1.0)) * (1.0 + 0.08 * perk("barter"))
 	var btns := []
 	for gd in m:
 		var e: Dictionary = m[gd]
 		var have := inv_count(gd)
-		var buy := maxi(1, int(round(e.buy * pm)))
-		var sell := maxi(1, int(round(e.sell * sm)))
+		var bbase := maxi(1, int(round(e.buy * pm)))
+		var sbase := maxi(1, int(round(e.sell * sm)))
+		var buy := Economy.buy_price(econ, si, gd, bbase, t)
+		var sell := Economy.sell_price(econ, si, gd, sbase, t)
+		var stk := Economy.stock(econ, world, si, gd, t) if e.stock else 0
 		var tag := " (local, cheap)" if e.made else (" (in demand)" if e.wanted else "")
-		lines.append("%s%s — buy %d · sell %d · you have %d" % [Items.iname(gd), tag, buy, sell, have])
+		lines.append("%s%s — buy %s · sell %d · you have %d" % [Items.iname(gd), tag, ("%d (%d left)" % [buy, stk]) if e.stock else "—", sell, have])
 		var id: String = gd
 		if e.stock:
 			var room := goods_cap() - goods_carried()
-			btns.append(["Buy %s — %d" % [Items.iname(gd), buy], func(): _buy_good(npc, id, 1, buy), _scrap_total() < buy or room < 1])
-			btns.append(["Buy 5 %s — %d" % [Items.iname(gd), buy * 5], func(): _buy_good(npc, id, 5, buy), _scrap_total() < buy * 5 or room < 5])
+			var c5 := 0
+			for k in 5: c5 += Economy.buy_price(econ, si, gd, bbase, t, k)
+			btns.append(["Buy %s — %d" % [Items.iname(gd), buy], func(): _buy_good(npc, id, 1, bbase), player.carry.scrap < buy or room < 1 or stk < 1])
+			btns.append(["Buy 5 %s — %d" % [Items.iname(gd), c5], func(): _buy_good(npc, id, 5, bbase), player.carry.scrap < c5 or room < 5 or stk < 5])
 		if have > 0:
-			btns.append(["Sell %s — +%d" % [Items.iname(gd), sell], func(): _sell_good(npc, id, 1, sell), false])
-			if have > 1: btns.append(["Sell all %d %s — +%d" % [have, Items.iname(gd), sell * have], func(): _sell_good(npc, id, have, sell), false])
+			btns.append(["Sell %s — +%d" % [Items.iname(gd), sell], func(): _sell_good(npc, id, 1, sbase), purse < sell])
+			if have > 1:
+				var tot := 0
+				var n := 0
+				for k in have:
+					var pk := Economy.sell_price(econ, si, gd, sbase, t, k)
+					if tot + pk > purse: break
+					tot += pk; n += 1
+				if n > 1: btns.append(["Sell %d %s — +%d%s" % [n, Items.iname(gd), tot, "" if n == have else " (all they can pay for)"], func(): _sell_good(npc, id, n, sbase), false])
 	btns.append(["« Back", func(): open_trade(npc), false])
 	btns.append(["Leave", hud.hide_menu, false])
 	hud.show_menu("Trade goods", lines, btns)
 
 
-func _buy_good(npc: Npc, id: String, n: int, each: int) -> void:
-	if goods_carried() + n <= goods_cap() and _pay(each * n):
+func _buy_good(npc: Npc, id: String, n: int, base_each: int) -> void:
+	var si := npc.settlement
+	var t := now()
+	var cost := 0
+	for k in n: cost += Economy.buy_price(econ, si, id, base_each, t, k)
+	if goods_carried() + n <= goods_cap() and Economy.stock(econ, world, si, id, t) >= n and _pay(cost):
 		inv_add(id, n)
+		Economy.add_sat(econ, si, id, -n, t)
+		Economy.take_stock(econ, world, si, id, n, t)
+		Economy.spend_purse(econ, world, si, cost, t)
 		audio.play("coins", Vector2.INF, -6.0)
 	open_goods(npc)
 
 
-func _sell_good(npc: Npc, id: String, n: int, each: int) -> void:
-	if inv_take(id, n):
-		player.carry.scrap += each * n
-		add_text(player.wpos, "+%d scrap" % (each * n), Color("f2e27a"))
+func _sell_good(npc: Npc, id: String, n: int, base_each: int) -> void:
+	var si := npc.settlement
+	var t := now()
+	var got := 0
+	var sold := 0
+	var purse := Economy.purse(econ, world, si, t)
+	for k in n:
+		var pk := Economy.sell_price(econ, si, id, base_each, t, k)
+		if got + pk > purse: break
+		got += pk; sold += 1
+	if sold > 0 and inv_take(id, sold):
+		player.carry.scrap += got
+		Economy.add_sat(econ, si, id, sold, t)
+		Economy.spend_purse(econ, world, si, -got, t)
+		add_text(player.wpos, "+%d scrap" % got, Color("f2e27a"))
 		audio.play("coins", Vector2.INF, -6.0)
-		if each > Items.info(id).value: gain_xp(maxi(1, (each - Items.info(id).value) * n / 2), "")
+		# trade XP: once per town per day, for a profitable haul brought in from elsewhere
+		var profit: int = got - int(Items.info(id).value) * sold
+		if profit > 0 and trade_xp_day.get(si, -1) != days:
+			trade_xp_day[si] = days
+			gain_xp(clampi(profit / 3, 2, 30), "trade")
 	open_goods(npc)
 
 
@@ -247,9 +292,9 @@ func _check_cleared(loc_id: String) -> void:
 func _complete_job(j: Dictionary) -> void:
 	if j.get("done", false): return
 	j.done = true
-	stash.scrap += int(j.reward)
+	player.carry.scrap += int(j.reward)
 	audio.play("coins", Vector2.INF, -3.0)
-	hud.toast("Job done: %s. +%d scrap (in your stash), +%d XP." % [j.title, j.reward, j.xp])
+	hud.toast("Job done: %s. +%d scrap, +%d XP." % [j.title, j.reward, j.xp])
 	gain_xp(int(j.xp), "")
 	jobs.erase(j)
 

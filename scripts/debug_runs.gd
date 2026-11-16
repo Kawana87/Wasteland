@@ -731,3 +731,106 @@ func _debug_soak() -> void:
 	print("DOORS picked=%d bashed=%d sealed=%d lockpicks=%d" % [picked, bashed, sealed_n, g.inv_count("lockpick")])
 	print("SOAK DONE state=%s hp=%d kills=%d camps=%d enemies=%d" % [g.state, g.player.hp, g.player.kills, g.camps.size(), g.enemies.size()])
 	g.get_tree().quit()
+
+# ------------------------------------------------------------------ balance checks (Review 1 retest)
+var fails := 0
+
+func check(name: String, ok: bool, detail: String) -> void:
+	print("%s %s — %s" % ["PASS" if ok else "FAIL", name, detail])
+	if not ok: fails += 1
+
+func finish() -> void:
+	print("CHECKS done: %d failed" % fails)
+	g.get_tree().quit(1 if fails > 0 else 0)
+
+func _trader_for(si: int) -> Npc:
+	for n in g.npcs:
+		if n.type == "trader" and n.settlement == si: return n
+	return null
+
+func _wait_travel() -> void:
+	while g.state == "travel":
+		await g.get_tree().process_frame
+
+## The Review 1 money loop: buy where a good is made, fast travel to a town that pays more, sell,
+## come back, five times. Then sell 30 of one good in one town and compare the last price to the first.
+func _debug_econ_check() -> void:
+	await g.get_tree().create_timer(1.0).timeout
+	var home := _trader_for(g.in_settlement if g.in_settlement >= 0 else 0)
+	for n in g.npcs:
+		if n.type == "trader" and n.settlement >= 0 and not g.world.settlements[n.settlement].small: home = n; break
+	var hsi: int = home.settlement
+	var hm := Economy.market(g.world, hsi)
+	var good := ""
+	for k in hm:
+		if hm[k].made: good = k; break
+	# best nearby destination for that good, by base sell price
+	var best: Dictionary = {}
+	var bestp := 0.0
+	for l in g.world.locs:
+		if l.type not in ["town", "hub", "settlement"] or l.pos.distance_to(home.wpos) < 50 or l.pos.distance_to(home.wpos) > 450: continue
+		var d: float = Economy._maker_dist(g.world, good, l.pos)
+		if Economy.makes_at(g.world, l.hook, l.pos).has(good): continue
+		if d > bestp: bestp = d; best = l
+	print("ECON loop: buy %s at %s, sell at %s" % [good, g.world.settlements[hsi].name, best.get("name", "?")])
+	g.player.carry.scrap = 150
+	g.inventory.append({"id": "food", "n": 40})
+	var s0: int = g.player.carry.scrap
+	var lvl0: int = g.level
+	var t0: float = g.now()
+	var rt := Time.get_ticks_msec()
+	var hpos: Vector2 = home.wpos
+	for trip in 5:
+		home = _trader_for(hsi)
+		if home == null:
+			g.player.wpos = hpos; g.player.sync(); g._stream(true)
+			home = _trader_for(hsi)
+		g.player.wpos = home.wpos + Vector2(0.8, 0.8)
+		g.player.sync(); g._stream(true)
+		g.in_settlement = -1
+		for k in 30:
+			var before: int = g.inv_count(good)
+			g._buy_good(home, good, 1, hm[good].buy)
+			if g.inv_count(good) == before: break
+		g.hud.hide_menu()
+		g.world.discovered[best.id] = true
+		g.travel_to_loc(best)
+		await _wait_travel()
+		for e in g.enemies: e.queue_free()
+		g.enemies.clear()
+		var dsi := -1
+		for i in g.world.settlements.size():
+			if g.world.settlements[i].id == best.id: dsi = i
+		var tr := _trader_for(dsi)
+		if tr:
+			g.player.wpos = tr.wpos + Vector2(0.8, 0.8)
+			g.player.sync()
+			var m := Economy.market(g.world, dsi)
+			g._sell_good(tr, good, g.inv_count(good), m[good].sell)
+			g.hud.hide_menu()
+		g.world.discovered[g.world.settlements[hsi].id] = true
+		g.travel_to_loc(g.world.loc_by_id(g.world.settlements[hsi].id))
+		await _wait_travel()
+		for e in g.enemies: e.queue_free()
+		g.enemies.clear()
+		print("ECON trip %d: scrap %d, level %d, day %.2f" % [trip + 1, g.player.carry.scrap, g.level, g.now()])
+	var gain: int = g.player.carry.scrap - s0
+	check("trade loop profit", gain < 300, "+%d scrap over 5 round trips (target under +300)" % gain)
+	check("trade loop no level", g.level == lvl0, "level %d -> %d" % [lvl0, g.level])
+	check("travel advances clock", g.now() - t0 > 0.1, "clock moved %.2f days (%d real s)" % [g.now() - t0, (Time.get_ticks_msec() - rt) / 1000])
+	# saturation: sell 30 of one good in one place
+	home = _trader_for(hsi)
+	var dsi2: int = hsi
+	var g2 := "water" if good != "water" else "salt"
+	g.inv_add(g2, 30)
+	var m2 := Economy.market(g.world, dsi2)
+	var first := Economy.sell_price(g.econ, dsi2, g2, m2[g2].sell, g.now())
+	var last := Economy.sell_price(g.econ, dsi2, g2, m2[g2].sell, g.now(), 29)
+	check("selling saturates", last <= first * 0.7 and last >= first * 0.39, "30th unit %d vs first %d (%.0f%%)" % [last, first, 100.0 * last / first])
+	g.econ.purse[str(dsi2)] = [0, g.now()]
+	var sc: int = g.player.carry.scrap
+	g._sell_good(home, g2, 30, m2[g2].sell)
+	check("trader purse limits", g.player.carry.scrap - sc < first * 30, "an empty purse paid %d" % (g.player.carry.scrap - sc))
+	g.hud.hide_menu()
+	check("stash stays at camp", g._scrap_total() == g.player.carry.scrap, "traders see %d (carry %d, stash %d)" % [g._scrap_total(), g.player.carry.scrap, g.stash.scrap])
+	finish()

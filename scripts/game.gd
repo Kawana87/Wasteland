@@ -78,6 +78,8 @@ func _ready() -> void:
 			if a.begins_with("--origin="): oid = a.substr(9)
 		if "--continue" in args: load_game.call_deferred()
 		else: start_new_world.call_deferred({}, oid)
+		if "--econcheck" in args:
+			dbg._debug_econ_check.call_deferred()
 		if "--sleep" in args:
 			dbg._debug_sleep.call_deferred()
 		if "--under" in args:
@@ -217,6 +219,8 @@ func start_new_world(save: Dictionary = {}, oid: String = "drifter") -> void:
 	dog.wpos = player.wpos + Vector2(-1, 0)
 	under = ""; ow = {}
 	if save.is_empty():
+		econ = {"sat": {}, "purse": {}, "stock": {}}; days = 0; trade_xp_day = {}
+	if save.is_empty():
 		xp = 0; level = 1; perks = {}; jobs = []; notes_read = []; examined = {}; under_state = {}
 	greeted = {}
 	weather = Weather.new()
@@ -352,6 +356,16 @@ func _process(delta: float) -> void:
 			rebase()
 			_stream(true)
 			for e in enemies: e.aw = 0.0
+			if travel.get("ambush", false):
+				# the ambush happens part-way along the road
+				var mid: Vector2 = travel.get("from", player.wpos).lerp(player.wpos, randf_range(0.35, 0.65))
+				world.ensure_ready(World.chunk_of(mid).x, World.chunk_of(mid).y)
+				for t in 40:
+					if world.can_stand(mid, 0.3, 0) and world.building_at(mid.x, mid.y) == 0: break
+					mid += Vector2(randf_range(-2, 2), randf_range(-2, 2))
+				player.wpos = mid
+				player.sync(); rebase(); _stream(true)
+			_arrive_trip()
 			_discover()
 		if travel.t >= 1.0:
 			state = "play"
@@ -393,10 +407,10 @@ func _process(delta: float) -> void:
 	dog.step(delta, p)
 	var here = camp_near(p.wpos, 3.2)
 	if here != null:
-		if p.carry.scrap + p.carry.cloth + p.carry.wood > 0:
-			for k in RES: stash[k] += p.carry[k]
-			hud.toast("Stashed %d scrap, %d cloth, %d wood. Press %s to build." % [p.carry.scrap, p.carry.cloth, p.carry.wood, "CAMP" if using_touch else "B"])
-			p.carry = {"scrap": 0, "cloth": 0, "wood": 0}
+		if p.carry.cloth + p.carry.wood > 0:
+			hud.toast("Stashed %d cloth, %d wood. Scrap stays in your pocket — deposit it from the camp menu (%s)." % [p.carry.cloth, p.carry.wood, "CAMP" if using_touch else "B"])
+			stash.cloth += p.carry.cloth; stash.wood += p.carry.wood
+			p.carry.cloth = 0; p.carry.wood = 0
 		p.regen += delta
 		if p.regen > (1.0 if here.up.garden else 3.5) and p.hp < p.max_hp:
 			p.regen = 0.0

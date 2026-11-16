@@ -6,6 +6,10 @@ extends Node
 
 static var I: Game
 var dbg = null                   # DebugRuns, only with --autostart
+var econ := {"sat": {}, "purse": {}, "stock": {}}   # the player's effect on markets (see Economy)
+var days := 0                    # whole days passed
+var trade_xp_day := {}           # settlement index -> day trade XP was last given there
+var last_trade_si := -1
 
 
 const SHRINK := 2                 # game pixels -> screen: the world renders at 1/2 of the UI size
@@ -278,4 +282,6 @@ func open_camp_menu() -> void:
 func open_sleep(at_camp: bool) -> void:
 	pass
 func start_new_world(save: Dictionary = {}, oid: String = "drifter") -> void:
+	pass
+func save_game() -> void:
 	pass

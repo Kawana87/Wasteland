@@ -391,6 +391,18 @@ func _rope(r: World.Rope) -> void:
 
 
 # ------------------------------------------------------------------ helpers
+## Game time in days (for markets and anything else that recovers over time).
+func now() -> float:
+	return days + day_t
+
+## Let hours pass (sleeping, fast travel).
+func advance_time(hours: float) -> void:
+	day_t += hours / 24.0
+	while day_t >= 1.0:
+		day_t -= 1.0
+		days += 1
+	rested_t = maxf(0.0, rested_t - hours * DAY_LEN / 24.0)
+
 func sfx(_name: String) -> void:
 	pass   # sound effects come in a later milestone
 
@@ -511,7 +523,10 @@ func _discover() -> void:
 func _world_life(delta: float) -> void:
 	var p := player
 	# day / night colour grade — a full day takes 8 minutes
-	day_t = fmod(day_t + delta / DAY_LEN, 1.0)
+	day_t += delta / DAY_LEN
+	if day_t >= 1.0:
+		day_t -= 1.0
+		days += 1
 	rested_t = maxf(0.0, rested_t - delta)
 	var sun := sin(day_t * TAU)          # 0.25 = noon, 0.75 = midnight
 	var dayness := clampf(sun * 1.6 + 0.5, 0.0, 1.0)
