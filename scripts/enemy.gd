@@ -90,7 +90,14 @@ func setup(spawn: Dictionary) -> void:
 func fears_fire() -> bool:
 	return STATS[type][5]
 
+## Raiders leave a raider-origin player alone until someone in their crew gets hurt.
+var provoked := false
+
+func friendly() -> bool:
+	return type == "raider" and not provoked and Game.I.origin().get("raider", false)
+
 func hear(at: Vector2, rad: float, amt: float) -> void:
+	if friendly(): return
 	var r: float = rad * STATS[type][4]
 	var d := wpos.distance_to(at)
 	if d < r:
@@ -101,6 +108,8 @@ func damage(n: float, from: Vector2) -> void:
 	if type == "shellback" and n < 6.0:
 		n *= 0.5          # the shell shrugs off small arms; rifles and big hits get through
 	hp -= n
+	if friendly():
+		Game.I.provoke_raiders(wpos)
 	aw = 100.0
 	last = from
 	hit_t = 0.15
@@ -127,6 +136,7 @@ func think(delta: float, p: Player, p_safe: bool) -> void:
 			gain = 50.0 if d < 1.5 * k else (20.0 if d < 3.0 * k else (6.0 if d < 5.0 * k else 0.0))
 			if p.moving and gain > 0.0:
 				gain *= 1.2
+	if friendly(): gain = 0.0
 	if gain > 0.0:
 		aw = minf(100.0, aw + gain * delta)
 		last = p.wpos

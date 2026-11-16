@@ -207,7 +207,23 @@ const ORIGINS := [
 		"pro": "Food, water and produce heal twice as much. Starts with 8 produce and a jacket.",
 		"con": "Far down in the southern fens, a long walk from anywhere. Only 8 rounds.",
 		"kit": [["pipe_pistol", 1], ["ammo_pistol", 8], ["produce", 8], ["jacket", 1]], "food": 2.0, "equip": {"body": "jacket"}},
+	{"id": "raider", "name": "Port Sterling Raider", "loc": "sterling_downtown",
+		"pro": "Best gear of any start (10mm pistol, raider plates, spiked bat). Raiders leave you alone unless you start trouble, and the fence at your hideout pays 25% more for gear and stocks better guns.",
+		"con": "Town traders charge 35% more and pay 20% less; small camps and scavengers won't deal with you, and survivors won't join a raider. You start downtown among the ghouls, a long way from any friendly town.",
+		"kit": [["pistol_10mm", 1], ["ammo_pistol", 30], ["raider_plates", 1], ["spiked_bat", 1], ["medkit", 2], ["lockpick", 4]],
+		"scrap": 15, "raider": true, "buy": 1.35, "sell": 0.8, "equip": {"gun": "pistol_10mm", "melee": "spiked_bat", "body": "raider_plates"}},
 ]
+
+## A raider player hurt one of the gang: every raider nearby turns on them.
+func provoke_raiders(at: Vector2) -> void:
+	var any := false
+	for e in enemies:
+		if e.type == "raider" and not e.provoked and e.wpos.distance_to(at) < 14.0:
+			e.provoked = true
+			e.aw = 100.0
+			e.last = player.wpos
+			any = true
+	if any: hud.toast("You turned on your own. The gang won't forget it.")
 var origin_id := "drifter"
 
 func origin() -> Dictionary:
@@ -274,6 +290,15 @@ func start_new_world(save: Dictionary = {}, oid: String = "drifter") -> void:
 	player = Player.new()
 	root.add_child(player)
 	player.wpos = world.start + Vector2(0, 1.5)
+	if origin().get("raider", false):
+		c.cname = "Raider Hideout"
+		var fp := world.start + Vector2(2.2, 0.6)
+		var fn := _spawn_npc({"type": "trader", "pos": fp, "home": fp})
+		fn.set_meta("fence", true)
+		for k in 2:
+			var gp := world.start + Vector2.from_angle(k * 2.6 + 0.8) * 2.4
+			var sp := {"type": "raider", "pos": gp, "home": world.start, "home_r": 2.5}
+			_spawn_enemy(sp)
 	if save.is_empty() and origin().has("hp"):
 		player.max_hp = origin().hp
 		player.hp = player.max_hp
@@ -300,6 +325,9 @@ func start_new_world(save: Dictionary = {}, oid: String = "drifter") -> void:
 		hud.toast("Welcome back. Your camps and stash are as you left them.")
 		return
 	var sl := world.loc_by_id(origin().loc)
+	if origin().get("raider", false):
+		hud.toast("Downtown Port Sterling. The gang's hideout — the fence will buy what you take. Towns won't love you. Press M for the map.")
+		return
 	hud.toast("The Sable Wastes. %s is just over there — press M for the map, I for your inventory." % sl.get("name", "Town"))
 
 # ------------------------------------------------------------------ streaming
@@ -821,10 +849,16 @@ func _pay(n: int) -> bool:
 	return true
 
 func open_trade(npc: Npc) -> void:
+	var fence := npc.has_meta("fence")
+	if origin().get("raider", false) and not fence:
+		var small: bool = npc.settlement < 0 or (npc.settlement < world.settlements.size() and world.settlements[npc.settlement].small)
+		if small:
+			add_text(npc.wpos + Vector2(0, -0.2), ["Not trading with raiders. Move along.", "I know that look. Get lost.", "We've got nothing for your kind."][randi() % 3], Color("e8a090"), 2.6)
+			return
 	if not npc.has_meta("stock"):
 		var stock := []
-		for t in 3:
-			stock.append(Items.gear_of_tier(rng.randi_range(1, 3), rng))
+		for t in (5 if fence else 3):
+			stock.append(Items.gear_of_tier(rng.randi_range(2, 3) if fence else rng.randi_range(1, 3), rng))
 		npc.set_meta("stock", stock)
 	var stock: Array = npc.get_meta("stock")
 	var lines := ["You have %d scrap (carried %d + stash %d)." % [_scrap_total(), player.carry.scrap, stash.scrap], "Buy:"]
@@ -833,24 +867,24 @@ func open_trade(npc: Npc) -> void:
 		var id: String = e[0]
 		var n: int = e[1]
 		var cost: int = e[2]
-		cost = maxi(1, int(round(cost * float(origin().get("buy", 1.0)))))
+		cost = maxi(1, int(round(cost * (1.0 if npc.has_meta("fence") else float(origin().get("buy", 1.0))))))
 		btns.append(["Buy %s ×%d — %d scrap" % [Items.iname(id), n, cost], func(): _buy(npc, id, n, cost), _scrap_total() < cost])
 	for i in stock.size():
 		var id: String = stock[i]
 		if id == "": continue
-		var cost: int = maxi(1, int(round(Items.info(id).value * float(origin().get("buy", 1.0)))))
+		var cost: int = maxi(1, int(round(Items.info(id).value * (1.0 if npc.has_meta("fence") else float(origin().get("buy", 1.0))))))
 		var ii := i
 		btns.append(["Buy %s — %d scrap" % [Items.iname(id), cost], func(): _buy_stock(npc, ii, cost), _scrap_total() < cost])
 	for it in inventory:
 		var d := Items.info(it.id)
 		if d.get("slot", "") in ["gun", "melee", "head", "body"] and it.id != equip[d.slot]:
 			var id: String = it.id
-			var val: int = maxi(1, int(d.value / 2))
+			var val: int = maxi(1, int(d.value / 2.0 * (1.25 if npc.has_meta("fence") else float(origin().get("sell", 1.0)))))
 			btns.append(["Sell %s — +%d scrap" % [d.name, val], func(): _sell(npc, id, val), false])
 	if npc.settlement >= 0 and npc.settlement < world.settlements.size():
 		btns.insert(0, ["Trade goods (water, salt, glass…) »", func(): open_goods(npc), false])
 	btns.append(["Leave", hud.hide_menu, false])
-	hud.show_menu("Trader" if npc.type == "trader" else "Travelling merchant", lines, btns)
+	hud.show_menu("The fence" if fence else ("Trader" if npc.type == "trader" else "Travelling merchant"), lines, btns)
 
 func goods_carried() -> int:
 	var n := 0
@@ -1048,6 +1082,9 @@ func interact() -> void:
 	match t.k:
 		"survivor":
 			var s: Actor = t.o
+			if origin().get("raider", false):
+				add_text(s.wpos + Vector2(0, -0.2), "Run with raiders? I'd rather starve.", Color("e8a090"), 2.6)
+				return
 			s.set_meta("recruited", true)
 			if s.has_meta("sp"): s.get_meta("sp").recruited = true
 			hud.toast("%s joined your group and heads to your main camp." % s.get_meta("name"))
@@ -1647,7 +1684,7 @@ func _process(delta: float) -> void:
 		var td := 8.0
 		for e in enemies:
 			var d: float = e.wpos.distance_to(tp)
-			if not e.dead and e.fl == 0 and d < td: td = d; tgt = e
+			if not e.dead and e.fl == 0 and d < td and not e.friendly(): td = d; tgt = e
 		if tgt != null:
 			var dir: Vector2 = (tgt.wpos - tp).normalized()
 			bullets.append({"pos": tp, "vel": dir * 15.0, "z": world.hz(tp.x, tp.y) + 12.0, "fl": 0, "life": 1.0, "enemy": false, "tower": true})
@@ -1814,8 +1851,8 @@ func _encounters(delta: float) -> void:
 			var sp := {"type": "raider", "pos": at + Vector2(randf_range(-1.5, 1.5), randf_range(-1.5, 1.5)), "home": p, "home_r": 6.0, "roam": true, "chunk": key}
 			world.spawns.append(sp); bk.spawns.append(sp)
 			var e := _spawn_enemy(sp)
-			e.aw = 60.0
-		hud.toast("Voices on the wind — raiders, and they've seen you.")
+			if not origin().get("raider", false): e.aw = 60.0
+		hud.toast("A raider crew rolls by. They know your colours." if origin().get("raider", false) else "Voices on the wind — raiders, and they've seen you.")
 	elif r < 0.55:
 		var t: String = ["ghoul", "rat", "shellback", "brute"][mini(3, int(randf() * (2.5 + far * 2.0)))]
 		for k in (4 if t == "rat" else 2):

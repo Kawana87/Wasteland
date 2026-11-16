@@ -1247,8 +1247,9 @@ func load_data(sd: int, start_id: String = "patchwork") -> void:
 			for ox in range(-1, 2):
 				ensure_base(ck.x + ox, ck.y + oy)
 		var i := idx(int(q.x), int(q.y))
-		if T[i] != GRASS or biome(int(q.x), int(q.y)) in [B_WATER, B_GORGE, B_PEAK]: continue
+		if (T[i] != GRASS and T[i] != SIDE) or biome(int(q.x), int(q.y)) in [B_WATER, B_GORGE, B_PEAK]: continue
 		var score := -absf(hz(q.x, q.y) - hz(q.x + 3, q.y + 3)) - absf(hz(q.x, q.y) - hz(q.x - 3, q.y + 2))
+		if not _clear_of_buildings(q, 4.5): score -= 50.0
 		if _road_near(q, 8.0) != Vector2.ZERO: score += 20.0
 		if score > bs: bs = score; best = q
 	start = Vector2(floor(best.x) + 0.5, floor(best.y) + 0.5)
