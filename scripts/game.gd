@@ -134,6 +134,8 @@ func _ready() -> void:
 			if a.begins_with("--origin="): oid = a.substr(9)
 		if "--continue" in args: load_game.call_deferred()
 		else: start_new_world.call_deferred({}, oid)
+		if "--play" in args:
+			_debug_play.call_deferred()
 		if "--econ" in args:
 			_debug_econ.call_deferred()
 		if "--shots" in args:
@@ -163,13 +165,14 @@ func _ready() -> void:
 		if "--build" in args:
 			_debug_build.call_deferred()
 		return
-	hud.show_title("The Sable Wastes: one great wasteland, ten minutes edge to edge on foot — lakes, fens, salt flats, red canyons,\na glass crater and the ruins of Port Sterling. Fifty places on the map, and plenty more nobody wrote down.\nTowns trade gear, and each pays well for goods from far away: buy cheap, haul it across the wastes, sell high.\nSet up camps anywhere, build bases, claim raider dens, and fast travel to anywhere you've found.\n\nPC: WASD move · mouse aim · left click shoot · F / right click melee · Space jump · C sneak\nE use / talk / chop / climb / stairs · I inventory · H heal · B camp menu · T fast travel · V CRT filter\nGamepad: left stick move · right stick aim · RT shoot · A jump · X use · B melee · Y sneak\nTouch: left thumb move · right thumb aim and shoot · buttons on the right", choose_origin, load_game if FileAccess.file_exists(SAVE_PATH) else Callable())
+	hud.show_title("The Sable Wastes: one great wasteland, ten minutes edge to edge on foot — lakes, fens, salt flats, red canyons,\na glass crater and the ruins of Port Sterling. Fifty places on the map, and plenty more nobody wrote down.\nTowns trade gear, and each pays well for goods from far away: buy cheap, haul it across the wastes, sell high.\nSet up camps anywhere, build bases, claim raider dens, and fast travel to anywhere you've found.\n\nAiming is automatic: you lock on to the nearest enemy in range (orange brackets). Just fire.\nPC: WASD move · left click / Q fire · F melee · C sneak · E use · I inventory · M map · B camp · H heal · V CRT\nGamepad: left stick move · RT fire · B melee · X use · Y sneak\nTouch: left thumb moves · FIRE (hold) · HIT · USE · SNEAK · INV · MAP · CAMP", choose_origin, load_game if FileAccess.file_exists(SAVE_PATH) else Callable())
 
 func _setup_input() -> void:
 	var keys := {
 		"up": [KEY_W, KEY_UP], "down": [KEY_S, KEY_DOWN], "left": [KEY_A, KEY_LEFT], "right": [KEY_D, KEY_RIGHT],
 		"jump": [KEY_SPACE], "melee": [KEY_F], "use": [KEY_E], "sneak": [KEY_C], "camp": [KEY_B],
 		"travel": [KEY_T], "crt": [KEY_V], "close": [KEY_ESCAPE], "inventory": [KEY_I, KEY_TAB], "heal": [KEY_H],
+		"fire": [KEY_Q, KEY_ENTER],
 	}
 	var pads := {"jump": JOY_BUTTON_A, "use": JOY_BUTTON_X, "melee": JOY_BUTTON_B, "sneak": JOY_BUTTON_Y, "camp": JOY_BUTTON_BACK, "inventory": JOY_BUTTON_START, "heal": JOY_BUTTON_LEFT_SHOULDER}
 	for a in keys:
@@ -1002,17 +1005,42 @@ func _on_touch_action(n: String) -> void:
 		"inv": open_inventory()
 		"heal": quick_heal()
 		"map": wmap.open()
+		"fire": shoot()
 
 func _read_move() -> Vector2:
 	var v := Vector2(Input.get_action_strength("right") - Input.get_action_strength("left"), Input.get_action_strength("down") - Input.get_action_strength("up"))
 	var j := Vector2(Input.get_joy_axis(0, JOY_AXIS_LEFT_X), Input.get_joy_axis(0, JOY_AXIS_LEFT_Y))
 	if j.length() > 0.2: v += j
 	v += hud.touch.move_vec()
+	v += _bot_move
 	return v
 
+## Auto-aim: the nearest enemy you can see and hit, within your gun's range. Sticks to the current
+## target while it stays valid, so it doesn't flick between enemies mid-fight.
+var locked: Enemy = null
+
+func gun_range() -> float:
+	var g := gun_info()
+	if g.is_empty() or inv_count(g.ammo) <= 0: return 1.6
+	return g.speed * g.life * 0.92
+
+func update_lock() -> void:
+	var p := player
+	var rng_ := gun_range()
+	if locked != null and (not is_instance_valid(locked) or locked.dead or not locked.visible or locked.fl != p.fl or locked.friendly()
+			or locked.wpos.distance_to(p.wpos) > rng_ * 1.15 or not world.los(p.wpos, locked.wpos, p.fl)):
+		locked = null
+	if locked != null: return
+	var bd := rng_
+	for e in enemies:
+		if e.dead or not e.visible or e.fl != p.fl or e.friendly(): continue
+		var d: float = e.wpos.distance_to(p.wpos)
+		if d < bd and world.los(p.wpos, e.wpos, p.fl):
+			bd = d; locked = e
+
 func _read_aim() -> Vector2:
-	var t := hud.touch.aim_vec()
-	if t.length() > 0.2: return t
+	if locked != null:
+		return (locked.position + Vector2(0, -10)) - (player.position + Vector2(0, -14))
 	var j := Vector2(Input.get_joy_axis(0, JOY_AXIS_RIGHT_X), Input.get_joy_axis(0, JOY_AXIS_RIGHT_Y))
 	if j.length() > 0.3: return j
 	if not using_touch:
@@ -1025,6 +1053,7 @@ func _wants_fire() -> bool:
 	if base and base.active: return false
 	if hud.touch.firing(): return true
 	if Input.get_joy_axis(0, JOY_AXIS_TRIGGER_RIGHT) > 0.5: return true
+	if Input.is_action_pressed("fire"): return true
 	return not using_touch and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)
 
 # ------------------------------------------------------------------ actions
@@ -1648,6 +1677,7 @@ func _process(delta: float) -> void:
 		save_t = 0.0
 		save_game()
 	var mv := _read_move()
+	update_lock()
 	_update_busy(delta, mv.length() > 0.2)
 	if not busy.is_empty(): mv = Vector2.ZERO
 	p.step(delta, mv, _read_aim())
@@ -2294,6 +2324,76 @@ func _debug_tour() -> void:
 		await _snap(out + "/w_%s.png" % st[0])
 		print("TOUR %s at %s: %d ms, loaded %d chunks, %d enemies, %d npcs, %d views, %d trees" % [st[0], str(p.round()), t1 - t0, loaded.size(), enemies.size(), npcs.size(), views.size(), tree_nodes.size()])
 	get_tree().quit()
+
+## Playtest bot: walks from the home camp into town, then fights at a dungeon with auto-aim, logging
+## what happens (for tuning).
+func _debug_play() -> void:
+	await get_tree().create_timer(1.0).timeout
+	var plog := []
+	var orig_toast := hud.toast_l.text
+	var t0 := time
+	var goal: Vector2 = world.loc_by_id(origin().loc).pos
+	var steps := 0
+	var stuck := 0
+	var last := player.wpos
+	while player.wpos.distance_to(goal) > 6.0 and steps < 60 * 50:
+		steps += 1
+		var dir := (goal - player.wpos).normalized()
+		# steer around obstacles
+		var mv := dir
+		if stuck > 20: mv = dir.rotated(PI * 0.5 * (1 if (steps / 60) % 2 == 0 else -1))
+		var sd := Vector2((mv.x - mv.y), (mv.x + mv.y) * 0.5).normalized()   # world -> screen-ish stick
+		Input.action_release("fire")
+		_bot_move = sd
+		await get_tree().process_frame
+		if _wants_fire_bot(): shoot()
+		if steps % 30 == 0:
+			stuck = stuck + 1 if player.wpos.distance_to(last) < 0.3 else 0
+			last = player.wpos
+		if hud.toast_l.text != orig_toast:
+			orig_toast = hud.toast_l.text
+			plog.append("t=%.0fs toast: %s" % [time - t0, orig_toast]); print("PLAY ", plog[-1])
+	_bot_move = Vector2.ZERO
+	plog.append("walk to town: %.0f s, reached=%s, hp %d/%d, kills %d" % [time - t0, str(player.wpos.distance_to(goal) <= 6.0), player.hp, player.max_hp, player.kills])
+	await _snap("user://shots/play_town.png")
+	# open-ground fight: a few ghouls and raiders come at you; stand and shoot with auto-aim
+	var at := player.wpos + Vector2(14, 6)
+	for t in 40:
+		if world.can_stand(at, 0.3, 0) and world.settlement_at(at, 10.0) < 0: break
+		at += Vector2(6, 3)
+	player.wpos = at
+	player.sync(); rebase(); _stream(true)
+	for e in enemies: e.queue_free()
+	enemies.clear()
+	inv_add("ammo_pistol", 40); inv_add("medkit", 3)
+	for k in 6:
+		var sp := {"type": "ghoul" if k < 4 else "raider", "pos": at + Vector2.from_angle(k * 1.05) * 9.0, "home": at, "home_r": 12.0}
+		var e := _spawn_enemy(sp)
+		e.aw = 100.0; e.last = at
+	var hp0 := player.hp
+	var k0 := player.kills
+	var a0 := inv_count("ammo_pistol")
+	var locks := 0
+	var first_lock := -1.0
+	t0 = time
+	for i in 60 * 20:
+		await get_tree().process_frame
+		if locked != null:
+			locks += 1
+			if first_lock < 0: first_lock = time - t0
+			shoot()
+		if player.hp < player.max_hp * 0.4 and inv_count("medkit") > 0: use_item("medkit")
+		if state != "play": plog.append("went down at t=%.0f" % (time - t0)); break
+		if i == 200: await _snap("user://shots/play_fight.png")
+		if enemies.filter(func(e): return not e.dead).is_empty():
+			plog.append("all dead at t=%.1f s" % (time - t0)); break
+	plog.append("fight: kills %d/6, ammo used %d, hp %d -> %d, first lock %.1f s, frames locked %d, medkits used %d" % [player.kills - k0, a0 - inv_count("ammo_pistol"), hp0, player.hp, first_lock, locks, 3 + 0 - inv_count("medkit") + (2 if origin_id == "drifter" else 0)])
+	for l in plog: print("PLAY ", l)
+	get_tree().quit()
+
+var _bot_move := Vector2.ZERO
+func _wants_fire_bot() -> bool:
+	return locked != null
 
 ## Trade + save round trip: buy goods at the start town, save, reload, check they're still there.
 func _debug_econ() -> void:

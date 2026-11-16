@@ -1,7 +1,8 @@
 class_name TouchControls
 extends Control
-## Twin-stick touch controls: left thumb moves, right thumb aims (and fires when pushed far),
-## plus round action buttons. Only shown once the screen is touched.
+## Touch controls: left thumb moves; aiming is automatic (the game locks on to the nearest enemy in
+## range) and the big FIRE button shoots while held. Round action buttons on the right.
+## Only shown once the screen is touched.
 
 signal action(name: String)
 
@@ -12,12 +13,13 @@ var build_touch := -1
 var sticks := {"L": {}, "R": {}}      # side -> {id, origin, vec}
 var held := {}                        # touch index -> button name
 var buttons := [
-	{"name": "use", "label": "USE", "pos": Vector2(-90, -250)},
-	{"name": "melee", "label": "HIT", "pos": Vector2(-200, -300)},
-	{"name": "sneak", "label": "SNEAK", "pos": Vector2(-200, -180)},
-	{"name": "camp", "label": "CAMP", "pos": Vector2(-90, -370)},
-	{"name": "inv", "label": "INV", "pos": Vector2(-200, -420)},
-	{"name": "map", "label": "MAP", "pos": Vector2(-310, -300)},
+	{"name": "fire", "label": "FIRE", "pos": Vector2(-130, -150), "r": 66.0},
+	{"name": "melee", "label": "HIT", "pos": Vector2(-275, -105)},
+	{"name": "use", "label": "USE", "pos": Vector2(-75, -295)},
+	{"name": "sneak", "label": "SNEAK", "pos": Vector2(-290, -235)},
+	{"name": "camp", "label": "CAMP", "pos": Vector2(-190, -335)},
+	{"name": "inv", "label": "INV", "pos": Vector2(-75, -415)},
+	{"name": "map", "label": "MAP", "pos": Vector2(-305, -365)},
 ]
 const BTN_R := 44.0
 
@@ -28,7 +30,7 @@ func aim_vec() -> Vector2:
 	return sticks.R.get("vec", Vector2.ZERO)
 
 func firing() -> bool:
-	return aim_vec().length() > 0.55
+	return "fire" in held.values()
 
 func _btn_center(b: Dictionary) -> Vector2:
 	var s := size
@@ -36,7 +38,7 @@ func _btn_center(b: Dictionary) -> Vector2:
 
 func _btn_at(p: Vector2) -> String:
 	for b in buttons:
-		if p.distance_to(_btn_center(b)) < BTN_R:
+		if p.distance_to(_btn_center(b)) < b.get("r", BTN_R):
 			return b.name
 	return ""
 
@@ -64,10 +66,11 @@ func _input(ev: InputEvent) -> void:
 				action.emit(bn)
 			else:
 				var side := "L" if p.x < size.x * 0.5 else "R"
-				if sticks[side].is_empty():
+				if side == "L" and sticks[side].is_empty():
 					sticks[side] = {"id": ev.index, "origin": p, "vec": Vector2.ZERO, "pos": p}
 		else:
 			held.erase(ev.index)
+			queue_redraw()
 			for side in sticks:
 				if not sticks[side].is_empty() and sticks[side].id == ev.index:
 					sticks[side] = {}
@@ -93,10 +96,13 @@ func _draw() -> void:
 	var font := get_theme_default_font()
 	for b in ([] if build_mode else buttons):
 		var c := _btn_center(b)
-		draw_circle(c, BTN_R, Color(0.1, 0.5, 0.2, 0.22))
-		draw_arc(c, BTN_R, 0, TAU, 32, Color(0.55, 1.0, 0.63, 0.85), 2.0)
-		var ts := font.get_string_size(b.label, HORIZONTAL_ALIGNMENT_CENTER, -1, 16)
-		draw_string(font, c + Vector2(-ts.x * 0.5, 6), b.label, HORIZONTAL_ALIGNMENT_CENTER, -1, 16, Color("8dffa0"))
+		var r: float = b.get("r", BTN_R)
+		var down: bool = b.name in held.values()
+		var fs := 22 if b.name == "fire" else 16
+		draw_circle(c, r, Color(0.1, 0.5, 0.2, 0.45 if down else 0.22) if b.name != "fire" else Color(0.55, 0.15, 0.1, 0.5 if down else 0.28))
+		draw_arc(c, r, 0, TAU, 40, Color(0.55, 1.0, 0.63, 0.85) if b.name != "fire" else Color(1.0, 0.6, 0.45, 0.9), 2.5 if b.name == "fire" else 2.0)
+		var ts := font.get_string_size(b.label, HORIZONTAL_ALIGNMENT_CENTER, -1, fs)
+		draw_string(font, c + Vector2(-ts.x * 0.5, fs * 0.38), b.label, HORIZONTAL_ALIGNMENT_CENTER, -1, fs, Color("8dffa0") if b.name != "fire" else Color("ffc0a8"))
 	for side in sticks:
 		var st: Dictionary = sticks[side]
 		if st.is_empty():

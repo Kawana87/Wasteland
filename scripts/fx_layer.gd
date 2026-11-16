@@ -12,6 +12,16 @@ func _draw() -> void:
 	if g == null or g.world == null:
 		return
 	var w := g.world
+	# lock-on brackets around the auto-aim target
+	if g.locked != null and is_instance_valid(g.locked) and not g.locked.dead:
+		var c: Vector2 = (g.locked.position + Vector2(0, -20)).round()
+		var s := 12.0 + sin(g.time * 8.0) * 1.0
+		var col := Color(1.0, 0.45, 0.3, 0.9)
+		for sx in [-1.0, 1.0]:
+			for sy in [-1.0, 1.0]:
+				var k := c + Vector2(sx * s * 0.8, sy * s * 1.5)
+				draw_line(k, k - Vector2(sx * 5, 0), col, 1.0)
+				draw_line(k, k - Vector2(0, sy * 5), col, 1.0)
 	for b in g.bullets:
 		var p := Iso.to_screen(b.pos.x, b.pos.y, b.z).round()
 		draw_rect(Rect2(p, Vector2(2, 2)), Color("ff7a4a") if b.enemy else Color("f2e27a"))

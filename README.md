@@ -24,8 +24,8 @@ The first open takes a moment while Godot imports the sprites.
 | | PC | Gamepad | Touch |
 |---|---|---|---|
 | Move | WASD / arrows | Left stick | Left thumb anywhere on the left half |
-| Aim | Mouse | Right stick | Right thumb on the right half |
-| Shoot | Left click | RT | Push the right thumb far |
+| Aim | Automatic: locks on to the nearest enemy in range | | |
+| Shoot | Left click / Q | RT | FIRE (hold) |
 | Melee | F / right click | B | HIT |
 | Jump | Space | A | — |
 | Sneak (toggle) | C | Y | SNEAK |
