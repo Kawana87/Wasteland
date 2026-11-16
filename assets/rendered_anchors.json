@@ -67,6 +67,390 @@
 24,
 0
 ],
+"bff_concrete_x12": [
+2,
+12
+],
+"bff_concrete_x16": [
+2,
+12
+],
+"bff_concrete_x20": [
+2,
+12
+],
+"bff_concrete_x24": [
+2,
+12
+],
+"bff_concrete_x28": [
+2,
+12
+],
+"bff_concrete_x32": [
+2,
+12
+],
+"bff_concrete_x36": [
+2,
+12
+],
+"bff_concrete_x4": [
+2,
+12
+],
+"bff_concrete_x40": [
+2,
+12
+],
+"bff_concrete_x44": [
+2,
+12
+],
+"bff_concrete_x48": [
+2,
+12
+],
+"bff_concrete_x8": [
+2,
+12
+],
+"bff_concrete_y12": [
+26,
+12
+],
+"bff_concrete_y16": [
+26,
+12
+],
+"bff_concrete_y20": [
+26,
+12
+],
+"bff_concrete_y24": [
+26,
+12
+],
+"bff_concrete_y28": [
+26,
+12
+],
+"bff_concrete_y32": [
+26,
+12
+],
+"bff_concrete_y36": [
+26,
+12
+],
+"bff_concrete_y4": [
+26,
+12
+],
+"bff_concrete_y40": [
+26,
+12
+],
+"bff_concrete_y44": [
+26,
+12
+],
+"bff_concrete_y48": [
+26,
+12
+],
+"bff_concrete_y8": [
+26,
+12
+],
+"bff_scrap_x12": [
+2,
+12
+],
+"bff_scrap_x16": [
+2,
+12
+],
+"bff_scrap_x20": [
+2,
+12
+],
+"bff_scrap_x24": [
+2,
+12
+],
+"bff_scrap_x28": [
+2,
+12
+],
+"bff_scrap_x32": [
+2,
+12
+],
+"bff_scrap_x36": [
+2,
+12
+],
+"bff_scrap_x4": [
+2,
+12
+],
+"bff_scrap_x40": [
+2,
+12
+],
+"bff_scrap_x44": [
+2,
+12
+],
+"bff_scrap_x48": [
+2,
+12
+],
+"bff_scrap_x8": [
+2,
+12
+],
+"bff_scrap_y12": [
+26,
+12
+],
+"bff_scrap_y16": [
+26,
+12
+],
+"bff_scrap_y20": [
+26,
+12
+],
+"bff_scrap_y24": [
+26,
+12
+],
+"bff_scrap_y28": [
+26,
+12
+],
+"bff_scrap_y32": [
+26,
+12
+],
+"bff_scrap_y36": [
+26,
+12
+],
+"bff_scrap_y4": [
+26,
+12
+],
+"bff_scrap_y40": [
+26,
+12
+],
+"bff_scrap_y44": [
+26,
+12
+],
+"bff_scrap_y48": [
+26,
+12
+],
+"bff_scrap_y8": [
+26,
+12
+],
+"bff_stone_x12": [
+2,
+12
+],
+"bff_stone_x16": [
+2,
+12
+],
+"bff_stone_x20": [
+2,
+12
+],
+"bff_stone_x24": [
+2,
+12
+],
+"bff_stone_x28": [
+2,
+12
+],
+"bff_stone_x32": [
+2,
+12
+],
+"bff_stone_x36": [
+2,
+12
+],
+"bff_stone_x4": [
+2,
+12
+],
+"bff_stone_x40": [
+2,
+12
+],
+"bff_stone_x44": [
+2,
+12
+],
+"bff_stone_x48": [
+2,
+12
+],
+"bff_stone_x8": [
+2,
+12
+],
+"bff_stone_y12": [
+26,
+12
+],
+"bff_stone_y16": [
+26,
+12
+],
+"bff_stone_y20": [
+26,
+12
+],
+"bff_stone_y24": [
+26,
+12
+],
+"bff_stone_y28": [
+26,
+12
+],
+"bff_stone_y32": [
+26,
+12
+],
+"bff_stone_y36": [
+26,
+12
+],
+"bff_stone_y4": [
+26,
+12
+],
+"bff_stone_y40": [
+26,
+12
+],
+"bff_stone_y44": [
+26,
+12
+],
+"bff_stone_y48": [
+26,
+12
+],
+"bff_stone_y8": [
+26,
+12
+],
+"bff_wood_x12": [
+2,
+12
+],
+"bff_wood_x16": [
+2,
+12
+],
+"bff_wood_x20": [
+2,
+12
+],
+"bff_wood_x24": [
+2,
+12
+],
+"bff_wood_x28": [
+2,
+12
+],
+"bff_wood_x32": [
+2,
+12
+],
+"bff_wood_x36": [
+2,
+12
+],
+"bff_wood_x4": [
+2,
+12
+],
+"bff_wood_x40": [
+2,
+12
+],
+"bff_wood_x44": [
+2,
+12
+],
+"bff_wood_x48": [
+2,
+12
+],
+"bff_wood_x8": [
+2,
+12
+],
+"bff_wood_y12": [
+26,
+12
+],
+"bff_wood_y16": [
+26,
+12
+],
+"bff_wood_y20": [
+26,
+12
+],
+"bff_wood_y24": [
+26,
+12
+],
+"bff_wood_y28": [
+26,
+12
+],
+"bff_wood_y32": [
+26,
+12
+],
+"bff_wood_y36": [
+26,
+12
+],
+"bff_wood_y4": [
+26,
+12
+],
+"bff_wood_y40": [
+26,
+12
+],
+"bff_wood_y44": [
+26,
+12
+],
+"bff_wood_y48": [
+26,
+12
+],
+"bff_wood_y8": [
+26,
+12
+],
 "billboard_x": [
 66,
 110

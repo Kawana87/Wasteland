@@ -6,7 +6,8 @@ for the y axis, origin at the segment start, one tile long. Rotating a piece = s
 
 Names:  bw_<mat>_<piece>_<axis>   mat in scrap|wood|stone|concrete|fence
         piece in wall|window|doorway|door|half|gate|gateopen (fence: wall|gate|gateopen)
-        bf_<mat>                  floors: scrap|wood|stone|concrete
+        bf_<mat>                  floors: scrap|wood|stone|concrete (also the top of a foundation)
+        bff_<mat>_<axis><h>       a foundation's visible side, h game px tall (4..48), anchor at its top start
 python3 port_build.py [mat ...]"""
 import sys, os, math, random, zlib
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -283,6 +284,51 @@ def floor(tier):
     return b.done()
 
 
+# ------------------------------------------------------------------ foundations
+FACE_HS = list(range(4, 52, 4))           # face heights in game px (z), drawn below the foundation top
+
+def face(tier, axis, hpx):
+    """One visible side of a foundation block: from the top edge (z=0) down hpx game px."""
+    W = Wall(axis)
+    rng = random.Random(zlib.crc32((tier + axis).encode()))
+    h = gz(hpx)
+    if tier == "concrete":
+        W.box(0, 1, -0.02, 0.02, -h, 0, mat("conc", "#9a968a", 0.95))
+        W.box(-0.01, 1.01, -0.03, 0.03, -gz(1.5), 0, mat("conc_cap", "#a8a498", 0.95))
+        z = -gz(9)
+        while z > -h + gz(1):
+            W.box(0, 1, 0.02, 0.023, z - gz(0.2), z + gz(0.2), mat("conc_seam", "#4a4842", 1.0)); z -= gz(9)
+    elif tier == "stone":
+        tones = ["#8a8272", "#7a7262", "#9a9080", "#6e685c"]
+        W.box(0, 1, -0.02, 0.02, -h, 0, mat("stone_mortar", "#5a544a", 1.0))
+        z = 0.0; row = 0
+        while z > -h + 1e-4:
+            ch = min(gz(4.2), h + z)
+            u = -(0.08 if row % 2 else 0.0)
+            while u < 0.999:
+                w_ = rng.uniform(0.14, 0.24); a, b = max(u, 0), min(u + w_, 1)
+                if b - a > 0.02:
+                    W.box(a + 0.006, b - 0.006, -0.03, 0.03, z - ch + gz(0.35), z - gz(0.35), mat("stone_%d" % rng.randrange(4), rng.choice(tones), 0.95))
+                u += w_
+            z -= gz(4.2); row += 1
+    elif tier == "wood":
+        tones = ["#7a5636", "#6a4a2e", "#86603c", "#5e4228"]
+        z = 0.0; row = 0
+        while z > -h + 1e-4:
+            ch = min(gz(3.4), h + z)
+            W.box(-0.004, 1.004, -0.015, 0.015, z - ch + gz(0.25), z, mat("wood_%d" % (row % 4), tones[row % 4], 0.9)); z -= gz(3.4); row += 1
+        for uu in (0.03, 0.97):
+            W.box(uu - 0.03, uu + 0.03, -0.02, 0.03, -h, 0, mat("wood_post", "#4e3622", 0.9))
+    else:   # scrap: riveted plates
+        cols = ["#7a7468", "#8a6a4e", "#6e7a74"]
+        u = 0.0
+        while u < 0.999:
+            w_ = min(1 - u, rng.uniform(0.3, 0.5))
+            W.box(u + 0.004, u + w_ - 0.004, -0.015, 0.015, -h, 0, mat("fs_%d" % rng.randrange(3), rng.choice(cols), 0.55, 0.45)); u += w_
+        W.box(-0.01, 1.01, -0.025, 0.025, -gz(1.2), 0, mat("rivet", "#a8a49a", 0.4, 0.6))
+    return W.done()
+
+
 def main(tiers):
     reset()
     lights()
@@ -300,6 +346,14 @@ def main(tiers):
                 PC.set_anchor(name, 2 if axis == "x" else 26, 45)
                 PC.clear([ob])
         if tier != "fence":
+            for axis in "xy":
+                for hpx in FACE_HS:
+                    ob = face(tier, axis, hpx)
+                    name = "bff_%s_%s%d" % (tier, axis, hpx)
+                    ax = 2 if axis == "x" else 26
+                    PC.sprite(name, 28, 92, ax, 12, samples=12, bright=1.02 * (1.08 if axis == "x" else 1.0), sat=1.05)
+                    PC.set_anchor(name, ax, 12)
+                    PC.clear([ob])
             ob = floor(tier)
             PC.sprite("bf_" + tier, 48, 24, 24, 0, samples=16, bright=1.12, alpha_cut=100)
             PC.set_anchor("bf_" + tier, 24, 0)

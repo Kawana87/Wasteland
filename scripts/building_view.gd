@@ -218,6 +218,16 @@ func refresh_seg(s: World.Seg) -> void:
 			wn.full.texture = Assets.tex(tex)
 			return
 
+## A wall was knocked out (claimed building): drop its sprites.
+func remove_seg(s: World.Seg) -> void:
+	for i in range(walls.size() - 1, -1, -1):
+		var wn: Dictionary = walls[i]
+		if wn.seg == s:
+			wn.full.queue_free(); wn.low.queue_free()
+			for x in wn.extras: x.queue_free()
+			walls.remove_at(i)
+	_state = ""
+
 func set_faded(f: bool) -> void:
 	if f == _faded:
 		return

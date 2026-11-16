@@ -1106,13 +1106,38 @@ func cost_str(cost: Dictionary) -> String:
 		if cost.get(k, 0) > 0: s.append("%d %s" % [cost[k], k])
 	return ", ".join(s)
 
+## A cleared raider den you're standing at, not yet yours.
+func _den_near(p: Vector2):
+	for rc in world.rcamps:
+		if rc.cleared and not rc.claimed and rc.pos.distance_to(p) < 7.0: return rc
+	return null
+
+## Take over a cleared den: it becomes a camp, and its building is yours to knock through and extend.
+func claim_den(rc) -> void:
+	rc.claimed = true
+	var at: Vector2 = rc.pos + Vector2(0, 3.4)
+	for k in 16:
+		var c: Vector2 = rc.pos + Vector2.from_angle(k * TAU / 16.0) * 3.6
+		if world.can_stand(c, 0.4, 0) and world.building_at(c.x, c.y) == 0: at = c; break
+	var cp := Camp.new()
+	root.add_child(cp)
+	cp.setup(at, "Den Outpost", false)
+	_light_for("campfire_decor", cp.wpos, world.hz(cp.wpos.x, cp.wpos.y))
+	camps.append(cp)
+	base.claim_building(rc.bid)
+	hud.hide_menu()
+	hud.toast("The den is yours. Open Build to knock out its walls (Remove) and extend it.")
+
 func open_camp_menu() -> void:
 	if state != "play": return
 	var c = camp_near(player.wpos, 3.2)
 	var line := "Shared stash: %d scrap · %d cloth · %d wood" % [stash.scrap, stash.cloth, stash.wood]
 	var btns := []
+	var den = _den_near(player.wpos)
+	if den != null:
+		btns.append(["Claim this raider den as your outpost", func(): claim_den(den), false])
 	if base.can_build_here() == "":
-		btns.append(["Build: walls, doors, floors…", base.enter, false])
+		btns.append(["Build: walls, foundations, floors…", base.enter, false])
 	if c != null:
 		for u in UPG:
 			if c.up[u.k]:
@@ -1799,6 +1824,78 @@ func _debug_build() -> void:
 	var rk := Vector3i(int(o.x) + 2, int(o.y), 0)
 	base.remove(rk)
 	print("BUILD removed=%s stash %s" % [str(not base.pieces.has(rk)), str(stash)])
+	# foundations on a slope: find a sloped patch near camp, lay a 3x3 concrete foundation, wall it
+	var best := Vector2i(-1, -1); var bslope := 0.0
+	for y in range(int(world.start.y) - 9, int(world.start.y) + 10):
+		for x in range(int(world.start.x) - 9, int(world.start.x) + 10):
+			var okp := true; var lo := INF; var hi := -INF
+			for yy in 3:
+				for xx in 3:
+					var t := Vector2i(x + xx, y + yy)
+					if not world.in_bounds(t.x, t.y) or world.building_at(t.x + 0.5, t.y + 0.5) != 0 or world.T[world.idx(t.x, t.y)] == World.TREE or base.founds.has(t) or base.floors.has(t): okp = false
+					for v in BaseBuild.tile_verts(t):
+						lo = minf(lo, world.vh(v.x, v.y)); hi = maxf(hi, world.vh(v.x, v.y))
+					for vv in BaseBuild.tile_verts(t):
+						if base.vgroup.has(vv): okp = false
+			if okp and x > 3 and y > 3 and hi - lo > bslope and hi - lo < 30.0 and base.in_base(Vector2(x + 1.5, y + 1.5)):
+				bslope = hi - lo; best = Vector2i(x, y)
+	print("BUILD slope patch %s drop %.1f px" % [str(best), bslope])
+	if best.x >= 0:
+		base.select("concrete", "foundation")
+		base.drag_a = Vector2(best.x + 0.5, best.y + 0.5); base.drag_b = Vector2(best.x + 2.5, best.y + 2.5)
+		base._commit()
+		base.select("wood", "wall")
+		base.drag_a = Vector2(best.x + 0.2, best.y + 0.0); base.drag_b = Vector2(best.x + 2.8, best.y + 0.0); base._commit()
+		base.drag_a = Vector2(best.x + 0.0, best.y + 0.2); base.drag_b = Vector2(best.x + 0.0, best.y + 2.8); base._commit()
+		base.select("wood", "door")
+		base.drag_a = Vector2(best.x + 3.0, best.y + 1.5); base.drag_b = base.drag_a; base.axis = 1; base._commit()
+		var mid := Vector2(best.x + 1.5, best.y + 1.5)
+		for t in base.founds: print("BUILD found %s top %.1f faces %d" % [str(t), base.founds[t].top, base.founds[t].faces.size()])
+		print("BUILD foundations %d top %.1f stand_z %.1f ground %.1f walls %d" % [base.founds.size(), base.founds[best].top if base.founds.has(best) else -1.0, world.stand_z(mid.x, mid.y, 0), world.hz(mid.x, mid.y), base.pieces.size()])
+		player.wpos = mid + Vector2(2.2, 2.2)
+		for v in views: v.visible = false            # debug framing only: nothing in front of the patch
+		await get_tree().create_timer(0.4).timeout
+		await _snap(out + "/build_foundation.png")
+		for v in views: v.visible = true
+		player.wpos = mid
+		await get_tree().create_timer(0.4).timeout
+		print("BUILD player z on foundation %.1f" % player.ground_z())
+	# claim a raider den, knock out a wall, extend it
+	if not world.rcamps.is_empty():
+		var rc = world.rcamps[0]
+		for e in enemies:
+			if e.camp == 0: e.dead = true; e.visible = false
+		rc.cleared = true
+		player.wpos = rc.pos + Vector2(0, 4.0)
+		claim_den(rc)
+		var bb: World.Bld = world.buildings[rc.bid - 1]
+		var wall: World.Seg = null
+		for s in bb.segs:
+			if s.fl == 0 and s.side == "s" and not s.is_door: wall = s; break
+		var n0 := bb.segs.size()
+		if wall: base.remove(wall)
+		print("BUILD den b%d h0 %.1f segs %d -> %d, edge free=%s" % [bb.id, bb.h0, n0, bb.segs.size(), str(wall != null and not world.edge_taken(int(wall.a.x), int(wall.a.y), wall.axis))])
+		if wall:
+			# a foundation patch south of the gap, snapped to the den floor, walled on its sides
+			var t0 := Vector2i(int(wall.a.x), int(wall.a.y))
+			base.select("stone", "foundation")
+			base.drag_a = Vector2(t0.x + 0.5, t0.y + 0.5); base.drag_b = Vector2(t0.x + 0.5, t0.y + 1.5); base._commit()
+			base.select("scrap", "wall")
+			base.drag_a = Vector2(t0.x, t0.y + 0.2); base.drag_b = Vector2(t0.x, t0.y + 1.8); base._commit()
+			base.drag_a = Vector2(t0.x + 1, t0.y + 0.2); base.drag_b = Vector2(t0.x + 1, t0.y + 1.8); base._commit()
+			base.drag_a = Vector2(t0.x + 0.5, t0.y + 2); base.drag_b = base.drag_a; base.axis = 0; base._commit()
+			print("BUILD den extension founds top %s" % str(base.founds.get(t0, {}).get("top", -1)))
+			for kk in [Vector3i(t0.x, t0.y, 1), Vector3i(t0.x, t0.y + 1, 1), Vector3i(t0.x + 1, t0.y, 1), Vector3i(t0.x, t0.y + 2, 0)]:
+				print("BUILD den edge %s built=%s why=%s" % [str(kk), str(base.pieces.has(kk)), base.edge_problem(kk)])
+		player.wpos = Vector2(bb.x0 + bb.w * 0.5 + 1.0, bb.y0 + bb.h + 3.0)
+		for t in base.founds:
+			if t.y >= bb.y0 + bb.h: print("BUILD den found %s top %.1f spr %s vis %s faces %d" % [str(t), base.founds[t].top, str(base.founds[t].spr.position), str(base.founds[t].spr.visible), base.founds[t].faces.size()])
+		for v in views:
+			v.visible = v.b.id == rc.bid
+			if v.visible: print("BUILD den view at x0 %d y0 %d w %d h %d kind %s walls %d faded %s; player %s" % [bb.x0, bb.y0, bb.w, bb.h, bb.kind, v.walls.size(), str(v._faded), str(player.wpos)])
+		await get_tree().create_timer(0.5).timeout
+		await _snap(out + "/build_den.png")
+		for v in views: v.visible = true
 	get_tree().quit()
 
 func _snap(path: String) -> void:

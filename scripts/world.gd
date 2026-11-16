@@ -117,6 +117,7 @@ class RaiderCamp:
 	var ang: float
 	var bid := 0
 	var cleared := false
+	var claimed := false
 
 var rng := RandomNumberGenerator.new()
 var seed_value := 0
@@ -144,6 +145,8 @@ var pole_lines: Array = []       # Array of PackedVector2Array (power poles alon
 var critters: Array = []         # {type, pos, home}
 var road_d := PackedFloat32Array()
 var start := Vector2(10.5, 10.5)
+var plat := {}                   # Vector2i -> top height of a player-built foundation on that tile
+const STEP := 10.0               # you can walk up a ledge this high (px) onto or off a foundation
 
 func idx(x: int, y: int) -> int:
 	return y * N + x
@@ -195,6 +198,9 @@ func stand_z(x: float, y: float, fl: int) -> float:
 	var id0 := building_at(x, y)
 	if id0 > 0:
 		return buildings[id0 - 1].h0
+	if not plat.is_empty():
+		var t := Vector2i(int(floor(x)), int(floor(y)))
+		if plat.has(t): return plat[t]
 	return hz(x, y)
 
 func in_city(x: float, y: float) -> bool:
@@ -281,6 +287,8 @@ func slope_ok(a: Vector2, b: Vector2, fl: int, lift: float = 0.0) -> bool:
 		return true
 	var dh := stand_z(b.x, b.y, 0) - stand_z(a.x, a.y, 0)
 	if dh <= 0.0:
+		return true
+	if not plat.is_empty() and dh <= STEP and (plat.has(Vector2i(int(floor(a.x)), int(floor(a.y)))) or plat.has(Vector2i(int(floor(b.x)), int(floor(b.y))))):
 		return true
 	if lift > 0.0 and dh <= lift + 4.0:
 		return true
