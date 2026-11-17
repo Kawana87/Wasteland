@@ -278,7 +278,7 @@ func _shift_z(n: Node, dz: int, under: bool) -> void:
 func _spawn_npc(d: Dictionary) -> Npc:
 	# last check before anyone appears: never inside a stall, tree, car or wall
 	if world != null and d.has("pos"):
-		var q := world.settle_pos(d.pos, 0.3 if d.type == "cattle" else 0.25, 0, d.type in ["cattle", "crow"], 5.0)
+		var q := world.settle_pos(d.pos, 0.3 if d.type == "cattle" else (0.36 if d.type == "trader" else 0.25), 0, d.type in ["cattle", "crow"], 5.0)
 		if q != Vector2.INF:
 			if d.get("home", d.pos) == d.pos: d.home = q
 			d.pos = q

@@ -39,13 +39,13 @@ func _debug_shots() -> void:
 	DirAccess.make_dir_recursive_absolute(out)
 	await g.get_tree().create_timer(1.0).timeout
 	for e in g.enemies: e.aw = 0.0
-	_snap(out + "/1_start.png")
+	await _snap(out + "/1_start.png", true)
 	await g.get_tree().create_timer(0.3).timeout
 	var home: Dictionary = g.world.loc_by_id(g.origin().loc)
 	if not home.is_empty():
 		g.player.wpos = home.pos + Vector2(2.5, 2.5)
 		await g.get_tree().create_timer(0.8).timeout
-		_snap(out + "/2_settlement.png")
+		await _snap(out + "/2_settlement.png")
 	var done_in := false
 	for b in g.world.buildings:
 		if b.floors == 2 and not b.raider and not done_in:
@@ -53,28 +53,28 @@ func _debug_shots() -> void:
 			g.player.fl = 0
 			g.player.wpos = Vector2(b.out) + Vector2(0.5, 2.5)
 			await g.get_tree().create_timer(0.6).timeout
-			_snap(out + "/3_outside_2floor.png")
+			await _snap(out + "/3_outside_2floor.png")
 			g.player.wpos = Vector2(b.stairs) + Vector2(0.5, 0.5)
 			await g.get_tree().create_timer(0.6).timeout
-			_snap(out + "/4_inside_ground.png")
+			await _snap(out + "/4_inside_ground.png")
 			g.interact()
 			await g.get_tree().create_timer(0.6).timeout
-			_snap(out + "/5_upstairs.png")
+			await _snap(out + "/5_upstairs.png")
 			g.player.fl = 0
 			g.player.wpos = Vector2(b.x0 + b.w * 0.5, b.y0 - 1.2)
 			await g.get_tree().create_timer(0.6).timeout
-			_snap(out + "/6_behind_building.png")
+			await _snap(out + "/6_behind_building.png")
 	for e in g.enemies:
 		if e.type in ["brute", "ghoul"]:
 			g.player.wpos = e.wpos + Vector2(2.5, 2.5)
 			g.player.fl = e.fl
 			await g.get_tree().create_timer(0.5).timeout
-			_snap(out + "/7_%s.png" % e.type)
+			await _snap(out + "/7_%s.png" % e.type)
 			break
 	g.player.fl = 0
 	g.player.wpos = _city_spot()
 	await g.get_tree().create_timer(0.6).timeout
-	_snap(out + "/8_city.png")
+	await _snap(out + "/8_city.png")
 	for kind in ["diner", "canopy", "motel", "factory", "office", "house"]:
 		for b in g.world.buildings:
 			if b.kind == kind:
@@ -82,7 +82,7 @@ func _debug_shots() -> void:
 				g.player.fl = 0
 				for e in g.enemies: e.aw = 0.0
 				await g.get_tree().create_timer(0.5).timeout
-				_snap(out + "/k_%s.png" % kind)
+				await _snap(out + "/k_%s.png" % kind)
 				break
 	var seen := {}
 	for b in g.world.buildings:
@@ -92,22 +92,22 @@ func _debug_shots() -> void:
 		g.player.fl = 0
 		g.player.wpos = Vector2(b.out) + Vector2(0.5, 0.5) + Vector2(World.DIRS[b.door_side]) * 1.2
 		await g.get_tree().create_timer(0.4).timeout
-		_snap(out + "/door_%s.png" % sg.door)
+		await _snap(out + "/door_%s.png" % sg.door)
 	g.inv_add("shotgun"); g.inv_add("road_helmet"); g.inv_add("ammo_shell", 8)
 	g.open_inventory()
 	await g.get_tree().create_timer(0.4).timeout
-	_snap(out + "/9_inventory.png")
+	await _snap(out + "/9_inventory.png")
 	g.hud.hide_menu()
 	if g.invs.visible: g.invs.close_screen()
 	g.day_t = 0.7
 	g.player.wpos = _city_spot()
 	await g.get_tree().create_timer(0.6).timeout
-	_snap(out + "/10_night_city.png")
+	await _snap(out + "/10_night_city.png")
 	for b in g.world.buildings:
 		if b.kind == "canopy" or b.kind == "diner" or b.kind == "motel":
 			g.player.wpos = Vector2(b.x0 + b.w + 1.5, b.y0 + b.h + 1.5)
 			await g.get_tree().create_timer(0.5).timeout
-			_snap(out + "/11_night_%s.png" % b.kind)
+			await _snap(out + "/11_night_%s.png" % b.kind)
 			break
 	print("SHOTS DONE ", ProjectSettings.globalize_path(out))
 	g.get_tree().quit()
@@ -400,6 +400,7 @@ func _debug_under() -> void:
 	for kind in ["cave", "mine", "sewer", "vault"]:
 		var t0 := Time.get_ticks_msec()
 		var portal := "%s:%d_%d" % [kind, 500 + kind.length(), 700]
+		g.hud.clear_toasts()   # what the real way down (enter_under) does
 		g._swap_under(portal, g.player.wpos)
 		var t1 := Time.get_ticks_msec()
 		await g.get_tree().create_timer(0.5).timeout
@@ -416,6 +417,7 @@ func _debug_under() -> void:
 		await g.get_tree().create_timer(0.6).timeout
 		await _snap("user://shots/under_%s_boss.png" % kind)
 		print("UNDER %s: %s, built in %d ms, %d spawns, %d crates, %d decor, start %s, boss %s at %s, enemies active %d" % [kind, Underground.info(portal).name, t1 - t0, g.world.spawns.size(), g.world.crates.size(), g.world.decor.size(), str(g.world.start), boss.boss, str(boss.pos), g.enemies.size()])
+		g.hud.clear_toasts()
 		g._swap_out()
 		await g.get_tree().create_timer(0.3).timeout
 	print("UNDER back on surface at ", g.player.wpos, " world interior=", g.world.interior, " loaded ", g.loaded.size())
@@ -701,7 +703,14 @@ func _debug_map() -> void:
 	g.get_tree().quit()
 
 
-func _snap(path: String) -> void:
+## Screenshot after the world around the player has streamed in (so shots never show an unloaded
+## edge that real play wouldn't).
+func _snap(path: String, keep_msgs: bool = false) -> void:
+	# debug teleports skip the real travel, which clears old messages; do the same here
+	if not keep_msgs: g.hud.clear_toasts()
+	if g.state == "play" and g.player != null:
+		g.player.sync(); g.rebase(); g._stream(true)
+		for i in 6: await g.get_tree().process_frame
 	await RenderingServer.frame_post_draw
 	g.get_viewport().get_texture().get_image().save_png(path)
 
@@ -766,6 +775,16 @@ func _debug_soak() -> void:
 	var picked := 0
 	var bashed := 0
 	var sealed_n := 0
+	# random worlds don't always have a locked door nearby: lock the nearest plain door if needed
+	var any_locked := false
+	for b in g.world.buildings:
+		if b.door_seg != null and b.door_seg.door == "locked": any_locked = true; break
+	if not any_locked:
+		var best: World.Bld = null
+		for b in g.world.buildings:
+			if b.door_seg != null and b.door_seg.door == "closed" and not b.sealed:
+				if best == null or Vector2(b.out).distance_to(g.player.wpos) < Vector2(best.out).distance_to(g.player.wpos): best = b
+		if best: best.door_seg.door = "locked"; best.door_seg.solid = true
 	for b in g.world.buildings:
 		if b.sealed: sealed_n += 1
 		var sg: World.Seg = b.door_seg
@@ -826,7 +845,18 @@ func finish() -> void:
 
 func _trader_for(si: int) -> Npc:
 	for n in g.npcs:
-		if n.type == "trader" and n.settlement == si: return n
+		if is_instance_valid(n) and n.type == "trader" and n.settlement == si: return n
+	return null
+
+## The trader of settlement si, waiting up to 3 s for the town to stream back in (after a trip
+## its NPCs are spawned a few frames after you arrive). Review 3: the check crashed here.
+func _find_trader(si: int, at: Vector2) -> Npc:
+	for i in 180:
+		var n := _trader_for(si)
+		if n != null: return n
+		if i == 0 or i % 30 == 0:
+			g.player.wpos = at; g.player.sync(); g.rebase(); g._stream(true)
+		await g.get_tree().process_frame
 	return null
 
 func _wait_travel() -> void:
@@ -862,10 +892,10 @@ func _debug_econ_check() -> void:
 	var rt := Time.get_ticks_msec()
 	var hpos: Vector2 = home.wpos
 	for trip in 5:
-		home = _trader_for(hsi)
+		home = await _find_trader(hsi, hpos)
 		if home == null:
-			g.player.wpos = hpos; g.player.sync(); g._stream(true)
-			home = _trader_for(hsi)
+			check("home trader found after trip %d" % (trip + 1), false, "no trader at %s" % g.world.settlements[hsi].name)
+			finish(); return
 		g.player.wpos = home.wpos + Vector2(0.8, 0.8)
 		g.player.sync(); g._stream(true)
 		g.in_settlement = -1
@@ -875,14 +905,18 @@ func _debug_econ_check() -> void:
 			if g.inv_count(good) == before: break
 		g.hud.hide_menu()
 		g.world.discovered[best.id] = true
+		g.inv_add("food", 6)   # road meals, so travel never asks to eat the cargo
+		var d0 := g.now()
 		g.travel_to_loc(best)
 		await _wait_travel()
+		if g.now() - d0 < 0.01: print("ECON trip %d: didn't travel (%s)" % [trip + 1, g.hud.toast_l.text])
 		for e in g.enemies: e.queue_free()
 		g.enemies.clear()
 		var dsi := -1
 		for i in g.world.settlements.size():
 			if g.world.settlements[i].id == best.id: dsi = i
-		var tr := _trader_for(dsi)
+		var tr: Npc = await _find_trader(dsi, best.pos) if dsi >= 0 else null
+		check("trader at %s found (trip %d)" % [best.name, trip + 1], tr != null, "") if tr == null else null
 		if tr:
 			g.player.wpos = tr.wpos + Vector2(0.8, 0.8)
 			g.player.sync()
@@ -900,7 +934,7 @@ func _debug_econ_check() -> void:
 	check("trade loop no level", g.level == lvl0, "level %d -> %d" % [lvl0, g.level])
 	check("travel advances clock", g.now() - t0 > 0.1, "clock moved %.2f days (%d real s)" % [g.now() - t0, (Time.get_ticks_msec() - rt) / 1000])
 	# saturation: sell 30 of one good in one place
-	home = _trader_for(hsi)
+	home = await _find_trader(hsi, hpos)
 	var dsi2: int = hsi
 	var g2 := "water" if good != "water" else "salt"
 	g.inv_add(g2, 30)
@@ -908,10 +942,6 @@ func _debug_econ_check() -> void:
 	var first := Economy.sell_price(g.econ, g.world.settlements[dsi2].id, g2, m2[g2].sell, g.now())
 	var last := Economy.sell_price(g.econ, g.world.settlements[dsi2].id, g2, m2[g2].sell, g.now(), 29)
 	check("selling saturates", last <= first * 0.7 and last >= first * 0.39, "30th unit %d vs first %d (%.0f%%)" % [last, first, 100.0 * last / first])
-	if home == null:
-		g.player.wpos = hpos; g.player.sync(); g._stream(true)
-		for i in 10: await g.get_tree().process_frame
-		home = _trader_for(hsi)
 	check("home trader found", home != null, "trader at %s" % g.world.settlements[hsi].name)
 	if home:
 		var cap := Economy.purse(g.econ, g.world, hsi, g.now())
@@ -1060,16 +1090,16 @@ func _debug_save_check() -> void:
 	g.load_game()
 	await g.get_tree().create_timer(0.3).timeout
 	check("broken saves ask first", g.hud.menu_open() and FileAccess.get_file_as_string(g.SAVE_PATH) == "{garbage", "menu open %s, save untouched %s" % [str(g.hud.menu_open()), str(FileAccess.get_file_as_string(g.SAVE_PATH) == "{garbage")])
-	await _snap("user://shots/save_broken.png")
+	await _snap("user://shots/save_broken.png", true)
 	g.hud.hide_menu()
 	g.new_game_flow()
 	await g.get_tree().create_timer(0.3).timeout
 	check("start over asks", g.hud.menu_open(), "confirmation shown with a save present")
-	await _snap("user://shots/save_confirm.png")
+	await _snap("user://shots/save_confirm.png", true)
 	g.hud.hide_menu()
 	g.choose_origin()
 	await g.get_tree().create_timer(0.4).timeout
-	await _snap("user://shots/origin_cards.png")
+	await _snap("user://shots/origin_cards.png", true)
 	g.hud.hide_menu()
 	var m := g.migrate({"v": 1, "seed": 3})
 	check("old saves migrate", int(m.v) == g.SAVE_VERSION and m.has("econ") and m.has("days"), "v1 -> v%d" % int(m.v))
@@ -1132,7 +1162,7 @@ func _debug_ui_check() -> void:
 	var cr2: Rect2 = g.hud.card_l.get_global_rect()
 	cr2 = Rect2(cr2.position.x, cr2.position.y + 10, cr2.size.x, 70)   # the two text lines, not the label's padding
 	check("card clear of message and prompt", not cr2.intersects(g.hud.toast_box.get_global_rect()) and not cr2.intersects(g.hud.prompt_l.get_global_rect()), "card %s toast %s" % [str(g.hud.card_l.get_global_rect()), str(g.hud.toast_box.get_global_rect())])
-	await _snap("user://shots/ui_card.png")
+	await _snap("user://shots/ui_card.png", true)
 	g.using_touch = true
 	g.hud.touch.enabled = true
 	g.hud.touch.visible = true
@@ -1321,6 +1351,15 @@ func _debug_collide() -> void:
 	for c in w.critters:
 		var q := w.settle_pos(c.pos, 0.3 if c.type == "cattle" else 0.25, 0, c.type in ["cattle", "crow"], 5.0)
 		if q == Vector2.INF: cr_bad += 1; ex["npc"] = "%s at %s" % [c.type, str(c.pos)]
+	var wet := 0
+	for c in w.crates:
+		if w.building_at(c.pos.x, c.pos.y) == 0 and w.nearest_free(c.pos, World.PR, 0, 1.0, false) == Vector2.INF:
+			wet += 1; ex["cache"] = str(c.pos)
+	check("caches reachable (none in water)", wet == 0, "%d outdoor caches with nowhere to stand within reach" % wet)
+	var tw := 0
+	for c in w.critters:
+		if c.type == "trader" and not w.can_stand(c.pos, 0.36, 0): tw += 1; ex["trader"] = str(c.pos)
+	check("traders clear of walls", tw == 0, "%d traders overlap a wall or stall" % tw)
 	print("COLLIDE %d buildings, %d spawns, %d npcs/critters; examples %s" % [w.buildings.size(), w.spawns.size(), w.critters.size(), str(ex)])
 	check("buildings fully reachable", cnt.tile == 0 and cnt.entrance == 0, "%d of %d buildings have a problem: %d ground tiles, %d blocked entrances" % [bad_b, w.buildings.size(), cnt.tile, cnt.entrance])
 	check("upper floors reachable", cnt.tile_up == 0, "%d upper-floor tiles" % cnt.tile_up)
@@ -1363,3 +1402,42 @@ func _debug_wall_check() -> void:
 				print("WALL through: %s at %s from %s, door %s (%s), now %s" % [b.kind, str(c), str(start), str(b.door_in), b.door_seg.mode if b.door_seg else "none", str(g.player.wpos)])
 	check("walls hold with 0.3 s frames", through == 0 and tests > 100, "%d of %d runs went through a wall" % [through, tests])
 	finish()
+
+## Plain start screenshots (day and 20:00) for whatever --origin is given.
+func _debug_snapstart() -> void:
+	await g.get_tree().create_timer(2.0).timeout
+	print("SNAP state %s, errors so far %d %s" % [g.state, errlog.n, errlog.first])
+	await _snap("user://shots/start_day.png", true)
+	g.day_t = 20.0 / 24.0
+	await g.get_tree().create_timer(1.0).timeout
+	await _snap("user://shots/start_night.png")
+	g.set_crt(true)
+	g.using_touch = true
+	g.hud.touch.enabled = true
+	g.hud.touch.visible = true
+	await g.get_tree().create_timer(1.0).timeout
+	if "--testerr" in OS.get_cmdline_user_args():
+		var nothing = null
+		push_error("Test error for the overlay")
+		await g.get_tree().create_timer(0.3).timeout
+	await _snap("user://shots/start_night_crt.png")
+	print("SNAP player at %s fl %d, building %d, visible %s, body %s" % [str(g.player.wpos), g.player.fl, g.world.building_at(g.player.wpos.x, g.player.wpos.y), str(g.player.visible), str(g.player.body.visible if g.player.body else null)])
+	g.get_tree().quit()
+
+## Look at the spots Review 3 flagged: raider dens, caches in water, traders against walls.
+func _debug_r3spots() -> void:
+	await g.get_tree().create_timer(0.5).timeout
+	var w := World.new()
+	w.load_data(185393, "patchwork")
+	for p in [Vector2(1104, 755), Vector2(592, 83), Vector2(593, 1588), Vector2(1263, 846), Vector2(1647, 1584), Vector2(1301, 175)]:
+		var ck := World.chunk_of(p)
+		w.ensure_ready(ck.x, ck.y)
+		var l := w.nearest_loc(p, 40.0)
+		print("SPOT %s: loc %s (%s) at %s" % [str(p), l.get("name", "-"), l.get("type", ""), str(l.get("pos", ""))])
+		for b in w.buildings:
+			if Vector2(b.x0, b.y0).distance_to(p) < 25 and b.kind in ["den", "raider_den", "shack", "bunker"] or (Vector2(b.x0, b.y0).distance_to(p) < 12):
+				print("   bld %s @%d,%d %dx%d door_in %s out %s sealed %s probs %s" % [b.kind, b.x0, b.y0, b.w, b.h, str(b.door_in), str(b.out), str(b.sealed), str(w.reach_problems(b).map(func(x): return x.what))])
+		for c in w.crates:
+			if c.pos.distance_to(p) < 10:
+				print("   crate %s at %s tile %d stand %s" % [c.kind, str(c.pos), w.tile(c.pos.x, c.pos.y), str(w.can_stand(c.pos, 0.2, 0))])
+	g.get_tree().quit()

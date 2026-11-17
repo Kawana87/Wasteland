@@ -8,6 +8,7 @@ extends "res://scripts/game_save.gd"
 func _ready() -> void:
 	I = self
 	_setup_input()
+	_error_overlay.call_deferred()
 	vpc = SubViewportContainer.new()
 	vpc.stretch = true
 	vpc.stretch_shrink = SHRINK
@@ -80,7 +81,11 @@ func _ready() -> void:
 		for a in args:
 			if a.begins_with("--origin="): oid = a.substr(9)
 		if "--continue" in args: load_game.call_deferred()
+		if "--r3spots" in args:
+			dbg._debug_r3spots.call_deferred()
 		else: start_new_world.call_deferred({}, oid)
+		if "--snapstart" in args:
+			dbg._debug_snapstart.call_deferred()
 		if "--wallcheck" in args:
 			dbg._debug_wall_check.call_deferred()
 		if "--collide" in args:
@@ -687,3 +692,24 @@ func _touch_case(msg: String) -> String:
 				msg = msg.substr(0, j) + msg[j].to_lower() + msg.substr(j + 1)
 			i = msg.find(b, j)
 	return msg
+
+
+## Red line at the bottom of the screen with the first script error (any build, incl. phones).
+func _error_overlay() -> void:
+	var cl := CanvasLayer.new()
+	cl.layer = 100
+	add_child(cl)
+	var l := Label.new()
+	l.visible = false
+	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	l.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+	l.offset_top = -64
+	l.offset_left = 12
+	l.offset_right = -12
+	l.add_theme_font_size_override("font_size", 15)
+	l.add_theme_color_override("font_color", Color(1, 0.45, 0.4))
+	l.add_theme_color_override("font_outline_color", Color.BLACK)
+	l.add_theme_constant_override("outline_size", 4)
+	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cl.add_child(l)
+	OS.add_logger(ErrorOverlay.new(l))

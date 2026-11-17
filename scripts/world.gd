@@ -433,12 +433,23 @@ func settle_pos(p: Vector2, r: float, fl: int = 0, outdoor_only: bool = false, m
 		ring += 0.25
 	return Vector2.INF
 
+## Outdoor caches must be reachable: one in water or rock, with nowhere to stand within reach,
+## moves to the nearest dry ground (up to 6 tiles), or is dropped if there's none.
+func _fix_crates(from: int) -> void:
+	for i in range(crates.size() - 1, from - 1, -1):
+		var c: Crate = crates[i]
+		if building_at(c.pos.x, c.pos.y) != 0: continue
+		if nearest_free(c.pos, PR, 0, 1.0, false) != Vector2.INF: continue
+		var q := settle_pos(c.pos, 0.35, 0, true, 6.0)
+		if q == Vector2.INF: crates.remove_at(i)
+		else: c.pos = q
+
 ## Livestock and crows start (and keep their home) outdoors on open ground; settlers on standable ground.
 func _fix_critters(from: int = 0) -> void:
 	for i in range(critters.size() - 1, from - 1, -1):
 		var cr: Dictionary = critters[i]
 		var outdoor: bool = cr.type in ["cattle", "crow"]
-		var rr := 0.3 if cr.type == "cattle" else 0.25
+		var rr := 0.3 if cr.type == "cattle" else (0.36 if cr.type == "trader" else 0.25)   # a trader's sprite is wide
 		var sq := settle_pos(cr.pos, rr, 0, outdoor, 5.0)
 		if sq == Vector2.INF and cr.has("home"): sq = settle_pos(cr.home, rr, 0, outdoor, 5.0)   # e.g. a guard post out on the water
 		if sq == Vector2.INF:
@@ -1155,7 +1166,7 @@ func reach_map(b: Bld, fl: int) -> Dictionary:
 	var ok := func(q: Vector2) -> bool:
 		var c := Vector2i(int(floor(q.x)), int(floor(q.y)))
 		if not b.cells.has(c) or b.cells[c] <= fl or (fl > 0 and b.holes.has(c)): return false
-		return not wall_hit(q, PR, fl) and not furn_hit(q, PR, fl)
+		return not wall_hit(q, PR, fl) and not furn_hit(q, PR, fl) and (fl > 0 or not decor_hit(q, PR))
 	var seen := {}
 	var q0: Vector2 = start
 	if not ok.call(q0):
@@ -1194,7 +1205,7 @@ func reach_problems(b: Bld) -> Array:
 			var room := false
 			for o in [Vector2(0.5, 0.5), Vector2(0.3, 0.3), Vector2(0.7, 0.7), Vector2(0.3, 0.7), Vector2(0.7, 0.3)]:
 				var q: Vector2 = Vector2(c) + o
-				if not wall_hit(q, PR, fl) and not furn_hit(q, PR, fl): room = true; break
+				if not wall_hit(q, PR, fl) and not furn_hit(q, PR, fl) and (fl > 0 or not decor_hit(q, PR)): room = true; break
 			if room: out.append({"what": "tile", "fl": fl, "at": Vector2(c) + Vector2(0.5, 0.5)})
 		if fl == 0 and b.stairs.x >= 0 and b.floors > 1:
 			var sc := Vector2(b.stairs) + Vector2(0.5, 0.5)
@@ -1223,6 +1234,7 @@ func _fix_reach(b: Bld) -> void:
 		# the piece between the reachable area and the problem: closest to the problem among those
 		# touching the reachable area (or anything at all if nothing is reachable yet)
 		var best: Furn = null
+		var bdec: Decor = null
 		var bd := 1e9
 		for f in b.furn:
 			if f.fl != pr.fl or f == pr.get("furn"): continue
@@ -1233,6 +1245,19 @@ func _fix_reach(b: Bld) -> void:
 			if not touches: continue
 			var d: float = f.pos.distance_to(pr.at)
 			if d < bd: bd = d; best = f
+		if pr.fl == 0:
+			# props dropped into the building later (barricades, crates in raider dens) count too
+			for d in _decor_in(b):
+				var touches := seen.is_empty()
+				if not touches:
+					for k in seen:
+						if seen[k].distance_to(d.pos) < maxf(d.half.x, d.half.y) + PR + 0.55: touches = true; break
+				if not touches: continue
+				var dd: float = d.pos.distance_to(pr.at)
+				if dd < bd: bd = dd; best = null; bdec = d
+		if bdec != null:
+			_ungrid(bdec); decor.erase(bdec); bdec = null
+			continue
 		if best == null:
 			if pr.has("furn"): _drop_furn(b, pr.furn)   # loot nobody can reach: take it away
 			elif pr.what == "tile" and pr.fl > 0:
@@ -1260,6 +1285,15 @@ func _patch_hole(b: Bld, pr: Dictionary, seen: Dictionary) -> bool:
 	if best.x < 0 or bd > 6.0: return false
 	b.holes.erase(best)
 	return true
+
+## Solid props standing inside building b.
+func _decor_in(b: Bld) -> Array:
+	var out := []
+	for c in b.cells:
+		var lst = decor_grid.get(c.y * N + c.x)
+		if lst != null:
+			for d in lst: out.append(d)
+	return out
 
 func _drop_furn(b: Bld, f: Furn) -> void:
 	b.furn.erase(f)
@@ -1690,6 +1724,7 @@ func _finish() -> void:
 			for i in range(arr.size() - 1, _mark[nm] - 1, -1):
 				if not gr.has_point(arr[i].pos): arr.remove_at(i)
 	_tidy_new()
+	_fix_crates(_mark.crates)
 	var lists := {"buildings": buildings, "decor": decor, "cars": cars, "crates": crates, "spawns": spawns, "critters": critters,
 		"poles": pole_lines, "posts": posts, "flags": raider_flags, "ropes": ropes, "survivors": survivors}
 	for nm in lists:
@@ -1713,6 +1748,8 @@ func _finish() -> void:
 				if killed.has(it.key): it["dead"] = true
 			elif nm == "crates" and opened.has(pkey(it.pos)):
 				it.open = true
+	for b in buildings.slice(_mark.buildings):
+		if not skip_reach: _fix_reach(b)     # again: props placed after the building can block it too
 	for b in buildings.slice(_mark.buildings):
 		if b.door_seg != null:
 			for oy in range(-1, 2):
