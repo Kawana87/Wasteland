@@ -219,6 +219,8 @@ func _apply_save(d: Dictionary) -> void:
 		if j.has("target") and typeof(j.target) == TYPE_STRING: j.target = str_to_var("Vector2" + j.target) if not j.target.begins_with("Vector2") else str_to_var(j.target)
 		for k in ["reward", "xp", "n"]:
 			if j.has(k): j[k] = int(j[k])
+		if j.get("kind", "") == "bounty" and j.target is Vector2:
+			j.target = (j.target as Vector2).clamp(Vector2(120, 120), Vector2(World.N - 120, World.N - 120))   # old bounties could sit off the map's edge
 		jobs.append(j)
 	var main: Camp = camps[0] if camps.size() > 0 else null
 	for c in camps:

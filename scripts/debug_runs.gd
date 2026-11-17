@@ -1441,3 +1441,38 @@ func _debug_r3spots() -> void:
 			if c.pos.distance_to(p) < 10:
 				print("   crate %s at %s tile %d stand %s" % [c.kind, str(c.pos), w.tile(c.pos.x, c.pos.y), str(w.can_stand(c.pos, 0.2, 0))])
 	g.get_tree().quit()
+
+## World map: pinch to zoom, drag to pan, markers line up at the edge.
+func _debug_map_check() -> void:
+	await g.get_tree().create_timer(1.0).timeout
+	g.jobs.append({"kind": "bounty", "title": "Bounty: test", "target": Vector2(1000, World.N - 125), "boss": "Test", "spawned": false, "reward": 1, "xp": 1, "from": "x", "desc": ""})
+	g.wmap.open()
+	await g.get_tree().process_frame
+	var r: Rect2 = g.wmap.clip.get_global_rect()
+	var c := r.get_center()
+	var z0: float = g.wmap.zoom
+	var send := func(e: InputEvent): Input.parse_input_event(e); await g.get_tree().process_frame
+	var t := InputEventScreenTouch.new(); t.index = 0; t.position = c - Vector2(40, 0); t.pressed = true; await send.call(t)
+	t = InputEventScreenTouch.new(); t.index = 1; t.position = c + Vector2(40, 0); t.pressed = true; await send.call(t)
+	for i in 10:
+		var d0 := InputEventScreenDrag.new(); d0.index = 0; d0.position = c - Vector2(40 + i * 12, 0); d0.relative = Vector2(-12, 0); await send.call(d0)
+		var d1 := InputEventScreenDrag.new(); d1.index = 1; d1.position = c + Vector2(40 + i * 12, 0); d1.relative = Vector2(12, 0); await send.call(d1)
+	for k in 2:
+		t = InputEventScreenTouch.new(); t.index = k; t.position = c; t.pressed = false; await send.call(t)
+	var z1: float = g.wmap.zoom
+	check("pinch zooms the map", z1 > z0 * 2.0, "zoom %.1f -> %.1f" % [z0, z1])
+	var c0: Vector2 = g.wmap.center
+	t = InputEventScreenTouch.new(); t.index = 0; t.position = c; t.pressed = true; await send.call(t)
+	for i in 10:
+		var d := InputEventScreenDrag.new(); d.index = 0; d.position = c + Vector2(0, -(i + 1) * 15); d.relative = Vector2(0, -15); await send.call(d)
+	t = InputEventScreenTouch.new(); t.index = 0; t.position = c + Vector2(0, -150); t.pressed = false; await send.call(t)
+	check("drag pans the map", g.wmap.center.y > c0.y + 5.0 or g.wmap.center.y >= World.N - World.N * 0.5 / g.wmap.zoom - 1.0, "centre %s -> %s" % [str(c0), str(g.wmap.center)])
+	# the bottom edge: view the south edge zoomed in, the bounty marker must sit inside the map image
+	g.wmap.zoom = 4.0; g.wmap.center = Vector2(1000, World.N); g.wmap._place()
+	await g.get_tree().process_frame
+	var mr: Rect2 = g.wmap.map_rect.get_global_rect()
+	check("map fills the view at the edge", mr.encloses(r.grow(-1.0)), "map %s view %s" % [str(mr), str(r)])
+	await _snap("user://shots/map_edge.png", true)
+	g.wmap.zoom = 1.0; g.wmap._place()
+	await _snap("user://shots/map_full.png", true)
+	finish()

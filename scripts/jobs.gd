@@ -31,9 +31,14 @@ static func offer(g, si: int) -> Dictionary:
 		return {"kind": "clear", "title": "Clear out %s" % l.name, "target": l.pos, "loc": l.id,
 			"reward": 60 + int(l.danger) * 20, "xp": 90 + int(l.danger) * 30, "from": st.name, "desc": "Whatever holds %s has been raiding our caravans. Make it stop." % l.name}
 	elif r < 0.85:
-		var a := randf() * TAU
-		var tp: Vector2 = here + Vector2.from_angle(a) * randf_range(120.0, 260.0)
-		tp = tp.clamp(Vector2(60, 60), Vector2(World.N - 60, World.N - 60))
+		# somewhere dry and well inside the map (Review: a bounty near Greenmarsh landed off the edge)
+		var tp: Vector2 = here
+		for tries in 30:
+			var a := randf() * TAU
+			var q: Vector2 = (here + Vector2.from_angle(a) * randf_range(120.0, 260.0)).clamp(Vector2(120, 120), Vector2(World.N - 120, World.N - 120))
+			if w.biome(int(q.x), int(q.y)) != World.B_WATER and q.distance_to(here) > 90.0:
+				tp = q
+				break
 		var nm: String = "%s %s" % [BOSS_FIRST[randi() % BOSS_FIRST.size()], BOSS_LAST[randi() % BOSS_LAST.size()]]
 		return {"kind": "bounty", "title": "Bounty: %s" % nm, "target": tp, "boss": nm, "spawned": false,
 			"reward": 70, "xp": 110, "from": st.name, "desc": "%s and their crew hit our traders. Last seen out in the wilds — it's marked on your map." % nm}

@@ -81,6 +81,8 @@ func _ready() -> void:
 		for a in args:
 			if a.begins_with("--origin="): oid = a.substr(9)
 		if "--continue" in args: load_game.call_deferred()
+		if "--mapcheck" in args:
+			dbg._debug_map_check.call_deferred()
 		if "--r3spots" in args:
 			dbg._debug_r3spots.call_deferred()
 		else: start_new_world.call_deferred({}, oid)

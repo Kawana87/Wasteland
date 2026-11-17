@@ -45,8 +45,16 @@ func setup(g: Game) -> void:
 
 var clip: Control
 var zoom := 1.0
+var center := Vector2.ZERO        # world position at the middle of the map view
 var marker: Control
 var _blink := 0.0
+const ZMIN := 1.0
+const ZMAX := 12.0
+var _touches := {}                # finger index -> screen position
+var _pinch0 := 0.0                # finger distance when the pinch started
+var _zoom0 := 1.0
+var _moved := 0.0                 # how far the current touch has dragged (to tell a tap from a pan)
+var _built := false
 
 func open() -> void:
 	if game.under != "":
@@ -54,6 +62,9 @@ func open() -> void:
 		return
 	visible = true
 	game.audio.play("pipboy", Vector2.INF, -6.0, 0.0)
+	center = game.player.wpos
+	_touches.clear()
+	_built = false
 	_layout()
 	var near := game.world.nearest_loc(game.player.wpos, 20.0)
 	_show_card(_loc(near.id) if not near.is_empty() else {})
@@ -74,10 +85,15 @@ func _loc(id: String) -> Dictionary:
 func _known(id: String) -> bool:
 	return game.world.discovered.has(id)
 
+func _side() -> float:
+	var vs := root.size
+	return minf(vs.y - 24.0, vs.x * 0.62)
+
+## Build the map view and its markers (once per opening), then place them for the current zoom.
 func _layout() -> void:
 	if not visible: return
 	var vs := root.size
-	var side := minf(vs.y - 24.0, vs.x * 0.62)
+	var side := _side()
 	if clip == null:
 		clip = Control.new()
 		clip.clip_contents = true
@@ -85,13 +101,18 @@ func _layout() -> void:
 		map_rect.reparent(clip)
 	clip.position = Vector2(16, (vs.y - side) * 0.5)
 	clip.size = Vector2(side, side)
-	var big := side * zoom
-	var pp: Vector2 = game.player.wpos / float(World.N) * big
-	var off := Vector2.ZERO
-	if zoom > 1.0:
-		off = (Vector2(side, side) * 0.5 - pp).clamp(Vector2(side - big, side - big), Vector2.ZERO)
-	map_rect.position = off
-	map_rect.size = Vector2(big, big)
+	card.position = Vector2(clip.position.x + side + 16, clip.position.y)
+	card.custom_minimum_size = Vector2(vs.x - card.position.x - 16, 0)
+	if not _built:
+		_build_markers()
+		_built = true
+	_place()
+
+func _mark(c: Control, w: Vector2) -> void:
+	c.set_meta("w", w)
+	map_rect.add_child(c)
+
+func _build_markers() -> void:
 	for c in map_rect.get_children(): c.queue_free()
 	for l in locs:
 		var known := _known(l.id)
@@ -99,10 +120,10 @@ func _layout() -> void:
 		var b := Button.new()
 		b.flat = true
 		b.focus_mode = Control.FOCUS_NONE
+		b.mouse_filter = Control.MOUSE_FILTER_PASS     # let drags through to pan the map
 		var hub: bool = l.type in ["hub", "city"]
-		var r := (9.0 if hub else 6.0) * (1.0 if zoom == 1.0 else 1.3)
-		b.size = Vector2(r * 2 + 10, r * 2 + 10)
-		b.position = Vector2(l.pos[0], l.pos[1]) * big - b.size * 0.5
+		var r := 9.0 if hub else 6.0
+		b.size = Vector2(r * 2 + 14, r * 2 + 14)
 		b.draw.connect(func():
 			var col := GREEN if known else DIM * Color(1, 1, 1, 0.55)
 			if known:
@@ -114,44 +135,112 @@ func _layout() -> void:
 					b.draw_line(c2 + Vector2(-r, r) * 0.7, c2 + Vector2(r, -r) * 0.7, col, 2.0)
 			else:
 				b.draw_arc(b.size * 0.5, r * 0.6, 0, TAU, 12, col, 1.0))
-		b.pressed.connect(func(): _show_card(_loc(lid)))
-		map_rect.add_child(b)
+		b.pressed.connect(func():
+			if _moved < 12.0: _show_card(_loc(lid)))
+		_mark(b, Vector2(l.pos[0], l.pos[1]) * World.N)
 	for c in game.camps:
 		var cm := Control.new()
 		cm.size = Vector2(14, 14)
-		cm.position = c.wpos / float(World.N) * big - cm.size * 0.5
 		cm.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		cm.draw.connect(func():
 			cm.draw_rect(Rect2(2, 2, 10, 10), Color(1, 0.85, 0.4), false, 2.0))
-		map_rect.add_child(cm)
+		_mark(cm, c.wpos)
 	for j in game.jobs:
-		var tgt: Vector2 = j.target
 		var jm := Control.new()
 		jm.size = Vector2(18, 18)
-		jm.position = tgt / float(World.N) * big - jm.size * 0.5
 		jm.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		jm.draw.connect(func():
 			jm.draw_colored_polygon(PackedVector2Array([Vector2(2, 2), Vector2(16, 2), Vector2(9, 16)]), Color(1.0, 0.75, 0.25)))
-		map_rect.add_child(jm)
+		_mark(jm, j.target)
 	if not game.recovery.is_empty() and game.recovery.get("under", "") == "":
 		var bm := Control.new()
 		bm.size = Vector2(16, 16)
-		bm.position = game.recovery.pos / float(World.N) * big - bm.size * 0.5
 		bm.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		bm.draw.connect(func(): bm.draw_circle(Vector2(8, 8), 5.0, Color(1.0, 0.55, 0.3)))
-		map_rect.add_child(bm)
+		_mark(bm, game.recovery.pos)
 	marker = Control.new()
 	marker.size = Vector2(20, 20)
-	marker.position = pp - marker.size * 0.5
 	marker.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	marker.draw.connect(func():
 		var on := fmod(_blink, 0.8) < 0.55
 		var col := Color(1, 1, 0.7) if on else Color(0.6, 1, 0.6)
 		marker.draw_circle(Vector2(10, 10), 4.0, col)
 		marker.draw_arc(Vector2(10, 10), 8.0, 0, TAU, 16, col, 1.5))
-	map_rect.add_child(marker)
-	card.position = Vector2(clip.position.x + side + 16, clip.position.y)
-	card.custom_minimum_size = Vector2(vs.x - card.position.x - 16, 0)
+	_mark(marker, game.player.wpos)
+
+## Position the map and every marker for the current zoom and centre (cheap: runs every pinch step).
+func _place() -> void:
+	var side := _side()
+	zoom = clampf(zoom, ZMIN, ZMAX)
+	var big := side * zoom
+	var half := float(World.N) * 0.5 / zoom
+	center = center.clamp(Vector2(half, half), Vector2(World.N - half, World.N - half))
+	map_rect.size = Vector2(big, big)
+	map_rect.position = Vector2(side, side) * 0.5 - center / float(World.N) * big
+	for c in map_rect.get_children():
+		if c.has_meta("w"):
+			c.position = (c.get_meta("w") as Vector2) / float(World.N) * big - c.size * 0.5
+
+## Zoom by factor f keeping the world point under screen point `at` (local to the map view) still.
+func _zoom_at(f: float, at: Vector2) -> void:
+	var side := _side()
+	var before := _screen_to_world(at, side)
+	zoom = clampf(zoom * f, ZMIN, ZMAX)
+	center = before - (at - Vector2(side, side) * 0.5) / (side * zoom) * World.N
+	_place()
+
+func _screen_to_world(at: Vector2, side: float) -> Vector2:
+	return center + (at - Vector2(side, side) * 0.5) / (side * zoom) * World.N
+
+func _pan(screen_d: Vector2) -> void:
+	center -= screen_d / (_side() * zoom) * World.N
+	_place()
+
+## Pinch with two fingers to zoom, drag with one to pan; mouse wheel and drag on desktop.
+func _input(ev: InputEvent) -> void:
+	if not visible or clip == null: return
+	var r := clip.get_global_rect()
+	if ev is InputEventScreenTouch:
+		if ev.pressed:
+			if not r.has_point(ev.position) and _touches.is_empty(): return
+			_touches[ev.index] = ev.position
+			if _touches.size() == 1: _moved = 0.0
+			if _touches.size() == 2:
+				var ps: Array = _touches.values()
+				_pinch0 = maxf(1.0, (ps[0] as Vector2).distance_to(ps[1]))
+				_zoom0 = zoom
+				_moved = 99.0   # a pinch is never a tap
+		else:
+			_touches.erase(ev.index)
+			if _touches.size() < 2: _pinch0 = 0.0
+	elif ev is InputEventScreenDrag and _touches.has(ev.index):
+		var prev: Vector2 = _touches[ev.index]
+		_touches[ev.index] = ev.position
+		if _touches.size() >= 2 and _pinch0 > 0.0:
+			var ps: Array = _touches.values()
+			var a: Vector2 = ps[0]
+			var b: Vector2 = ps[1]
+			var mid := (a + b) * 0.5 - r.position
+			var want := clampf(_zoom0 * a.distance_to(b) / _pinch0, ZMIN, ZMAX)
+			_zoom_at(want / zoom, mid)
+			_pan((ev.position - prev) * 0.5)    # moving the pinch pans too
+			get_viewport().set_input_as_handled()
+		elif _touches.size() == 1:
+			_moved += (ev.position - prev).length()
+			if _moved > 12.0:
+				_pan(ev.position - prev)
+				get_viewport().set_input_as_handled()
+	elif ev is InputEventMagnifyGesture and r.has_point(ev.position):
+		_zoom_at(ev.factor, ev.position - r.position)
+		get_viewport().set_input_as_handled()
+	elif ev is InputEventMouseButton and ev.pressed and r.has_point(ev.position) and ev.button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN]:
+		_zoom_at(1.25 if ev.button_index == MOUSE_BUTTON_WHEEL_UP else 0.8, ev.position - r.position)
+		get_viewport().set_input_as_handled()
+	elif ev is InputEventMouseButton and ev.button_index == MOUSE_BUTTON_LEFT and ev.pressed and r.has_point(ev.position) and not game.using_touch:
+		_moved = 0.0
+	elif ev is InputEventMouseMotion and (ev.button_mask & MOUSE_BUTTON_MASK_LEFT) and not game.using_touch and r.has_point(ev.position):
+		_moved += ev.relative.length()
+		if _moved > 12.0: _pan(ev.relative)
 
 func _show_card(l: Dictionary) -> void:
 	for c in card_box.get_children(): c.queue_free()
@@ -188,7 +277,13 @@ func _show_card(l: Dictionary) -> void:
 		var cc = c
 		if c.wpos.distance_to(p) > 8.0:
 			_btn("Fast travel: " + c.cname, func(): close(); game.travel_to(cc), false)
-	_btn("Zoom out" if zoom > 1.0 else "Zoom in on me", func(): zoom = 1.0 if zoom > 1.0 else 4.0; _layout(), false)
+	_btn("Zoom in on me  (or pinch the map)", func():
+		zoom = maxf(zoom, 4.0)
+		center = game.player.wpos
+		_place(), false)
+	_btn("Whole map", func():
+		zoom = 1.0
+		_place(), false)
 	_btn("Close map  [M]", close, false)
 
 func _btn(text: String, cb: Callable, off: bool) -> void:
